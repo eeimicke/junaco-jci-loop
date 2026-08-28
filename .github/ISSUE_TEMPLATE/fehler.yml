@@ -1,0 +1,34 @@
+name: Dokumentationsfehler
+description: Einen Fehler oder Widerspruch in der bestehenden Dokumentation melden
+title: "[Fehler]: "
+labels: ["dokumentation"]
+body:
+  - type: input
+    id: fundstelle
+    attributes:
+      label: Fundstelle
+      description: Datei, Kapitel oder Tabellenzeile
+    validations:
+      required: true
+  - type: textarea
+    id: fehler
+    attributes:
+      label: Beobachteter Fehler
+      description: Was ist falsch, unklar oder widersprüchlich?
+    validations:
+      required: true
+  - type: textarea
+    id: erwartung
+    attributes:
+      label: Erwartete Aussage
+      description: Wie sollte die Aussage nach deinem Verständnis lauten?
+    validations:
+      required: true
+  - type: textarea
+    id: quellen
+    attributes:
+      label: Begründung oder Quellen
+      description: Welche Modellstelle oder externe Quelle stützt die Meldung?
+    validations:
+      required: false
+

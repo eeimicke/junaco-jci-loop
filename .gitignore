@@ -1,0 +1,34 @@
+# Zugangsdaten und lokale Konfiguration
+.env
+.env.*
+!.env.example
+.vscode/settings.json
+
+# Protokolle
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Node.js
+node_modules/
+
+# Erzeugte Ausgaben
+dist/
+build/
+coverage/
+
+# Betriebssystem
+.DS_Store
+Thumbs.db
+
+# Temporäre Dateien
+*.tmp
+*.temp
+*.swp
+*~

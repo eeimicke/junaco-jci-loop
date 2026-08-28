@@ -1,0 +1,45 @@
+name: Modellvorschlag
+description: Eine fachliche Ergänzung oder Änderung des JCI-Modells vorschlagen
+title: "[Modellvorschlag]: "
+labels: ["modellvorschlag"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ein Vorschlag verändert die kanonische Spezifikation noch nicht. Bitte beschreibe ihn so, dass seine Auswirkungen geprüft werden können.
+  - type: textarea
+    id: anlass
+    attributes:
+      label: Anlass und Problem
+      description: Welches fachliche Problem soll gelöst werden?
+    validations:
+      required: true
+  - type: textarea
+    id: vorschlag
+    attributes:
+      label: Vorgeschlagene Änderung
+      description: Wie soll das Modell geändert oder präzisiert werden?
+    validations:
+      required: true
+  - type: textarea
+    id: elemente
+    attributes:
+      label: Betroffene Elemente und Beziehungen
+      description: Welche JCI-Elemente, Graphobjekte, Beziehungen oder Kardinalitäten sind betroffen?
+    validations:
+      required: true
+  - type: textarea
+    id: auswirkungen
+    attributes:
+      label: Auswirkungen und Konflikte
+      description: Welche Folgen bestehen für RaN, RoF, ERoF, SYNC, PiH oder die Rückverfolgbarkeit zu CiV?
+    validations:
+      required: true
+  - type: textarea
+    id: quellen
+    attributes:
+      label: Quellen und Rechte
+      description: Nenne Quellen, Urheber und bekannte Nutzungsrechte. Schreibe „keine“, wenn keine fremden Inhalte verwendet wurden.
+    validations:
+      required: true
+

@@ -1,0 +1,10 @@
+# Vorläufiger Code Owner im Einzelbetrieb.
+* @eeimicke
+
+# Besonders schützenswerte Bereiche.
+/docs/JCI_CONTEXT.md @eeimicke
+/LICENSE.md @eeimicke
+/NOTICE.md @eeimicke
+/GOVERNANCE.md @eeimicke
+/.github/ @eeimicke
+
