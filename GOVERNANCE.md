@@ -12,12 +12,12 @@ Eine zweite menschliche Freigabe ist im Einzelbetrieb nicht verpflichtend. Ein a
 
 ## 3. Änderungsklassen
 
-| Klasse | Bedeutung | Erforderliche Prüfung |
-| --- | --- | --- |
-| Redaktionell | Rechtschreibung, Formatierung oder Links ohne Bedeutungsänderung | formale Prüfung und Selbstkontrolle |
-| Präzisierung | verständlichere Beschreibung bei unveränderter Semantik | Abgleich mit der gesamten Spezifikation |
-| Semantische Änderung | Änderung von Elementen, Beziehungen, Kardinalitäten oder Regeln | vollständige Modell- und Abhängigkeitsprüfung |
-| Rechteänderung | Änderung an Lizenz, Quellen oder Rechtezuordnung | gesonderte Rechteprüfung |
+| Klasse               | Bedeutung                                                       | Erforderliche Prüfung                         |
+| -------------------- | --------------------------------------------------------------- | --------------------------------------------- |
+| Redaktionell         | Rechtschreibung, Formatierung oder Links ohne Bedeutungsänderung | Formale Prüfung und Selbstkontrolle           |
+| Präzisierung         | Verständlichere Beschreibung bei unveränderter Semantik          | Abgleich mit der gesamten Spezifikation       |
+| Semantische Änderung | Änderung von Elementen, Beziehungen, Kardinalitäten oder Regeln  | Vollständige Modell- und Abhängigkeitsprüfung |
+| Rechteänderung       | Änderung an Lizenz, Quellen oder Rechtezuordnung                 | Gesonderte Rechteprüfung                      |
 
 Neue JCI-Kernelemente und Änderungen an der Historisierungs-, Synchronisations- oder Rechtearchitektur gelten immer als semantische Änderungen.
 
@@ -50,4 +50,3 @@ Sobald mindestens zwei dauerhaft freigabeberechtigte Personen vorhanden sind, so
 - gesonderte Freigabe für Lizenz- und Rechteänderungen.
 
 Die Aktivierung dieser Regeln ist als eigene Governance-Änderung zu dokumentieren.
-
