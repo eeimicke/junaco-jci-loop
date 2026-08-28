@@ -3,6 +3,8 @@
 .env.*
 !.env.example
 .vscode/settings.json
+.idea/
+.vs/
 
 # Protokolle
 *.log
@@ -12,11 +14,18 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 .venv/
 venv/
 
 # Node.js
 node_modules/
+.next/
+out/
+.npm/
+.pnpm-store/
 
 # Erzeugte Ausgaben
 dist/
@@ -32,3 +41,9 @@ Thumbs.db
 *.temp
 *.swp
 *~
+
+# Lokale Zertifikate und Schlüssel
+*.pem
+*.key
+*.p12
+*.pfx
