@@ -1,4 +1,4 @@
-﻿# JCI-Kontext
+﻿# JUNACO Continuous Integration for Organisations
 ## 1. JUNACO Continuous Integration for Organisations
 
 ### 1.1 Herkunft und Zweck

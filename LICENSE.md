@@ -63,7 +63,7 @@ Für diese Inhalte gelten die jeweiligen gesetzlichen Bestimmungen, Rechtehinwei
 
 ## 6. Wissenschaftliche Grundlage
 
-Die Masterarbeit von Ernst Eimicke, veröffentlicht unter seinem früheren Namen Ernst Rother, ist ein eigenständiges wissenschaftliches Werk und eine historische Grundlage der Modellentwicklung. Sie wird durch dieses Repository weder vollständig übernommen noch unter CC BY-NC-SA 4.0 neu lizenziert. Rechte Dritter innerhalb der Masterarbeit bleiben unberührt.
+Die [Masterarbeit von Ernst Eimicke, veröffentlicht unter seinem früheren Namen Ernst Rother](https://monami.hs-mittweida.de/frontdoor/deliver/index/docId/6494/file/Masterarbeit_komplett.pdf), ist ein eigenständiges wissenschaftliches Werk und eine historische Grundlage der Modellentwicklung. Sie wird durch dieses Repository weder vollständig übernommen noch unter CC BY-NC-SA 4.0 neu lizenziert. Rechte Dritter innerhalb der Masterarbeit bleiben unberührt.
 
 ## 7. Software und zukünftige Inhalte
 
