@@ -83,23 +83,61 @@ PiF2, PiF1s, PiF1t und PiF1o
 
 Für die konkrete Anwendung und Speicherung im Graphen werden zusätzliche Graphobjekte benötigt. Sie machen die Kernelemente ausführbar, prüfbar und nachvollziehbar, sind aber keine weiteren JCI-Kernelemente.
 
-| Bereich              | Graphobjekt        | Bedeutung                                   |
-| -------------------- | ------------------ | ------------------------------------------- |
-| Organisation         | `RoFOrg`           | Organisation der operativen Arbeit          |
-| Organisation         | `RoFTeam`          | organisatorische oder funktionale Gruppe    |
-| Organisation         | `RoFTeamMember`    | menschlicher oder technischer Akteur         |
-| Rollen               | `RoFRole`          | Rolle, Funktion und Verantwortung            |
-| Rollen               | `RoleAssignment`   | aktive Rolle eines Mitglieds in einem Team   |
-| Operative Umsetzung  | `Task`             | Tätigkeit zur Realisierung eines `PiF1o`    |
-| Erfolg und Prüfung  | `SuccessCriterion` | erwartetes Erfolgskriterium                  |
-| Erfolg und Prüfung  | `Result`           | durch einen Task erzeugtes Ergebnis          |
-| Erfolg und Prüfung  | `Verification`     | Prüfung eines Ergebnisses                  |
-| Erfolg und Prüfung  | `Evidence`         | eigenständiger prüfbarer Nachweis        |
-| Umwelt               | `ERoFObject`       | konkretes Objekt der relevanten Umwelt       |
-| Veränderung         | `ChangeEvent`      | dokumentierter Auslöser einer Änderung   |
-| Veränderung         | `SyncEvent`        | dokumentierter Synchronisationslauf          |
+| Bereich                   | Graphobjekt             | Bedeutung                                                        |
+| ------------------------- | ----------------------- | ---------------------------------------------------------------- |
+| Organisation              | `RoFOrg`                | eigenständig handlungsfähige Organisation                         |
+| Organisationsbeziehungen  | `RoFOrgRelationship`    | typisierte Beziehung zwischen zwei eigenständigen Organisationen  |
+| Organisation              | `RoFTeam`               | organisatorische oder funktionale Gruppe                          |
+| Organisation              | `RoFTeamMember`         | menschlicher oder technischer Akteur                              |
+| Rollen                    | `RoFRole`               | Rolle, Funktion und Verantwortung                                 |
+| Rollen                    | `RoleAssignment`        | aktive Rolle eines Mitglieds in einem Team                        |
+| Operative Umsetzung       | `Task`                  | Tätigkeit zur Realisierung eines `PiF1o`                          |
+| Erfolg und Prüfung        | `SuccessCriterion`      | erwartetes Erfolgskriterium                                       |
+| Erfolg und Prüfung        | `Result`                | durch einen Task erzeugtes Ergebnis                               |
+| Erfolg und Prüfung        | `Verification`          | Prüfung eines Ergebnisses                                         |
+| Erfolg und Prüfung        | `Evidence`              | eigenständiger prüfbarer Nachweis                                 |
+| Umwelt                    | `ERoFObject`            | konkretes Objekt der relevanten Umwelt                            |
+| Veränderung               | `ChangeEvent`           | dokumentierter Auslöser einer Änderung                            |
+| Veränderung               | `SyncEvent`             | dokumentierter Synchronisationslauf                               |
 
 Die Kernelemente beschreiben die grundlegende fachliche Struktur des JCI. Die zusätzlichen Graphobjekte bilden konkrete Organisationen, Personen, Rollen, Tätigkeiten, Umweltobjekte, Ergebnisse, Prüfungen und Veränderungen innerhalb dieser Struktur ab.
+
+#### 2.2.1 JCIEntity als gemeinsamer Oberbegriff
+
+`JCIEntity` ist der abstrakte Oberbegriff für jede eindeutig identifizierbare Instanz, die im JCI-Graphen als Knoten gespeichert wird. Eine `JCIEntity` ist entweder die Instanz eines der zehn fachlichen Kernelemente (`JCIElement`) oder ein unterstützendes `GraphObject`. `JCIEntity` ist kein elftes Kernelement und wird nicht als zusätzlicher fachlicher Knoten neben der konkreten Instanz gespeichert.
+
+```text
+JCIEntity
+├── JCIElement
+│   ├── PiH
+│   ├── CiV
+│   ├── RaN
+│   ├── RoF
+│   ├── ERoF
+│   ├── SYNC
+│   ├── PiF2
+│   ├── PiF1s
+│   ├── PiF1t
+│   └── PiF1o
+│
+└── GraphObject
+    ├── RoFOrg
+    ├── RoFOrgRelationship
+    ├── RoFTeam
+    ├── RoFTeamMember
+    ├── RoFRole
+    ├── RoleAssignment
+    ├── Task
+    ├── SuccessCriterion
+    ├── Result
+    ├── Verification
+    ├── Evidence
+    ├── ERoFObject
+    ├── ChangeEvent
+    └── SyncEvent
+```
+
+Grundsätzlich ist jede bereits vorhandene `JCIEntity` historisierbar. Ausgenommen sind `PiH`, `ChangeEvent` und `SyncEvent`: Ein `PiH` ist nach seiner Erzeugung unveränderlich und wird nicht erneut historisiert; Ereignisobjekte dokumentieren einen abgeschlossenen Vorgang und werden ebenfalls nicht nachträglich verändert. Das erstmalige Anlegen einer `JCIEntity` erzeugt noch kein `PiH`, weil kein vorheriger Zustand existiert.
 
 ### 2.3 Grundstruktur
 
@@ -114,16 +152,16 @@ PiH → CiV → PiF2 → PiF1s → PiF1t → PiF1o → Task → Result ← Verif
                                                 ├── wird durch RoleAssignments ausgeführt
                                                 └── interagiert mit ERoFObjects (ERoF)
 
-JCI-Element → ChangeEvent → SYNC → betroffene JCI-Elemente
-      │
-      └── bisheriger Zustand → PiH
+JCIEntity → ChangeEvent → SYNC → betroffene JCIEntity-Instanzen
+     │
+     └── bisheriger Zustand → PiH
 ```
 
 **Kurzes Beispiel:** Eine Organisation möchte ihren Kundenservice verbessern. Aus ihren Werten (`CiV`) entsteht ein langfristiges Zukunftsbild (`PiF2`), das über strategische (`PiF1s`) und taktische Zukunftszustände (`PiF1t`) zu einem konkreten operativen Zielzustand (`PiF1o`) führt. Ein verantwortliches Teammitglied setzt diesen durch Tasks um. Dabei arbeitet es in seiner Rolle (`RoF`) mit Systemen und Informationen aus der Umwelt (`ERoF`). Regeln und Normen (`RaN`) geben den zulässigen Rahmen vor. Die erzeugten Ergebnisse werden anhand festgelegter Erfolgskriterien geprüft. Bei einer relevanten Änderung verfolgt `SYNC` die Auswirkungen. Der durch die Änderung abgelöste Zustand wird als eigener `PiH` festgehalten; danach gilt der neue Zustand als aktuell. Bei weiteren Änderungen entstehen weitere `PiH`, sodass die früheren Zustände in ihrer zeitlichen Reihenfolge nachvollziehbar bleiben.
 
 Die Darstellung beschreibt eine Orientierung und keinen einzigen linearen Ablauf. `RaN`, `ERoF` und `SYNC` sind deshalb nicht als aufeinanderfolgende Stationen in die Zukunftskette eingefügt. Die tatsächlichen Beziehungen zwischen den JCI-Elementen bilden einen Graphen und können Verzweigungen sowie Rückbezüge enthalten.
 
-### 2.4 Beziehungen zwischen JCI-Elementen
+### 2.4 Beziehungen zwischen JCI-Entitäten
 
 Die folgenden Tabellen zeigen die gespeicherten Beziehungen entlang der JCI-Kette und die daraus eindeutig abgeleiteten ERoF-Zuordnungen. Abgeleitete Beziehungen sind ausdrücklich gekennzeichnet und werden nicht als zusätzliche Kanten gespeichert.
 
@@ -153,7 +191,19 @@ Lesebeispiel für `RoleAssignment ── USES ──► ERoFObject`: **Ziele je 
 | `Task`             | `USES`                    | `ERoFObject`         | `0..n`             | `0..n`             |
 | `RoleAssignment`   | `USES`                    | `ERoFObject`         | `0..n`             | `1..n`             |
 
-#### 2.4.3 Abgeleitete ERoF-Zuordnungen
+#### 2.4.3 Beziehungen zwischen eigenständigen Organisationen
+
+Mutterunternehmen, Tochterunternehmen und Partnerunternehmen werden jeweils als eigenständige `RoFOrg` gespeichert. Ihre unterschiedliche Bedeutung entsteht durch eine `RoFOrgRelationship`, nicht durch unterschiedliche Organisationstypen oder eine zusätzliche Speicherung als `ERoFObject`.
+
+| Quelle                   | Beziehung         | Ziel              | Ziele je<br>Quelle | Quellen je<br>Ziel |
+| ------------------------ | ----------------- | ----------------- | -----------------: | -----------------: |
+| `RoFOrgRelationship`     | `SOURCE_ORG`      | `RoFOrg`          | `1`                | `0..n`             |
+| `RoFOrgRelationship`     | `TARGET_ORG`      | `RoFOrg`          | `1`                | `0..n`             |
+| `RoFOrgRelationship`     | `REPRESENTED_BY`  | `RoleAssignment`  | `2..n`             | `0..n`             |
+
+`type = SUBSIDIARY` beschreibt eine gerichtete Mutter-Tochter-Beziehung von `SOURCE_ORG` zu `TARGET_ORG`. Eine Tochterorganisation kann selbst Quelle weiterer `SUBSIDIARY`-Beziehungen sein. `type = PARTNERSHIP` beschreibt eine fachlich wechselseitige Beziehung zwischen unabhängigen Organisationen; `SOURCE_ORG` und `TARGET_ORG` dienen dabei nur der eindeutigen Speicherung. `2..n` bedeutet, dass eine aktive Organisationsbeziehung insgesamt mindestens zwei vertretende `RoleAssignments` benötigt: mindestens eines aus jeder beteiligten Organisation.
+
+#### 2.4.4 Abgeleitete ERoF-Zuordnungen
 
 Lesebeispiel für die Ableitung `RoFOrg ── über Teams, Mitglieder und RoleAssignments ──► ERoFObject`: **Ziele je Quelle `0..n`** bedeutet, dass für eine `RoFOrg` kein, ein oder mehrere `ERoFObjects` aus den personengebundenen Umweltbeziehungen abgeleitet werden können. **Quellen je Ziel `1..n`** bedeutet, dass jedes aktive `ERoFObject` dadurch mindestens einer oder mehreren `RoFOrgs` zugeordnet werden kann, ohne eine direkte Beziehung zur Organisation zu speichern.
 
@@ -163,7 +213,7 @@ Lesebeispiel für die Ableitung `RoFOrg ── über Teams, Mitglieder und RoleA
 | `RoFTeam`         | über Mitglieder;<br>dann über `RoleAssignments`           | `ERoFObject`   | `0..n`             | `1..n`             |
 | `RoFOrg`          | über Teams und Mitglieder;<br>dann über `RoleAssignments` | `ERoFObject`   | `0..n`             | `1..n`             |
 
-#### 2.4.4 Ergebnisse und Prüfung
+#### 2.4.5 Ergebnisse und Prüfung
 
 Lesebeispiel für `Verification ── EVALUATES ──► Result`: **Ziele je Quelle `1`** bedeutet, dass jede `Verification` genau ein `Result` bewertet. **Quellen je Ziel `0..n`** bedeutet, dass ein `Result` noch durch keine, durch eine oder durch mehrere `Verifications` bewertet werden kann.
 
@@ -174,28 +224,27 @@ Lesebeispiel für `Verification ── EVALUATES ──► Result`: **Ziele je Q
 | `Verification`   | `CHECKS`           | `SuccessCriterion`   | `1`                | `0..n`             |
 | `Verification`   | `USES_EVIDENCE`    | `Evidence`           | `0..n`             | `0..n`             |
 
-#### 2.4.5 Veränderung
+#### 2.4.6 Veränderung
 
 Lesebeispiel für `ChangeEvent ── TRIGGERS ──► SyncEvent`: **Ziele je Quelle `1..n`** bedeutet, dass jedes `ChangeEvent` mindestens einen und möglicherweise mehrere Synchronisationsläufe auslöst. **Quellen je Ziel `1`** bedeutet, dass jedes `SyncEvent` genau durch ein `ChangeEvent` ausgelöst wird.
 
 | Quelle          | Beziehung      | Ziel          | Ziele je<br>Quelle | Quellen je<br>Ziel |
 | --------------- | -------------- | ------------- | -----------------: | -----------------: |
 | `ChangeEvent`   | `TRIGGERS`     | `SyncEvent`   | `1..n`             | `1`                |
-| `SyncEvent`     | `AFFECTS`      | JCI-Element   | `1..n`             | `0..n`             |
+| `SyncEvent`     | `AFFECTS`      | `JCIEntity`   | `1..n`             | `0..n`             |
 
-#### 2.4.6 Historisierung
+#### 2.4.7 Historisierung
 
-Lesebeispiel für `JCI-Element ── HAS_HISTORICAL_STATE ──► PiH`: **Ziele je Quelle `0..n`** bedeutet, dass ein aktuelles JCI-Element noch keinen, einen oder mehrere frühere Zustände als `PiH` besitzen kann. **Quellen je Ziel `1`** bedeutet, dass jedes `PiH` den abgelösten Zustand genau eines JCI-Elements festhält.
+Lesebeispiel für `JCIEntity ── HAS_HISTORICAL_STATE ──► PiH`: **Ziele je Quelle `0..n`** bedeutet, dass eine historisierbare `JCIEntity` noch keinen, einen oder mehrere frühere Zustände als `PiH` besitzen kann. **Quellen je Ziel `1`** bedeutet, dass jedes `PiH` den abgelösten Zustand genau einer `JCIEntity` festhält.
 
-| Quelle          | Beziehung                  | Ziel    | Ziele je<br>Quelle | Quellen je<br>Ziel |
-| --------------- | -------------------------- | ------- | -----------------: | -----------------: |
-| JCI-Element     | `HAS_HISTORICAL_STATE`     | `PiH`   | `0..n`             | `1`                |
-| `ChangeEvent`   | `RECORDED_IN`              | `PiH`   | `1`                | `0..n`             |
-| `SyncEvent`     | `RECORDED_IN`              | `PiH`   | `1`                | `0..n`             |
+| Quelle                      | Beziehung                  | Ziel    | Ziele je<br>Quelle | Quellen je<br>Ziel |
+| --------------------------- | -------------------------- | ------- | -----------------: | -----------------: |
+| historisierbare `JCIEntity` | `HAS_HISTORICAL_STATE`     | `PiH`   | `0..n`             | `1`                |
+| `SyncEvent`                 | `CREATES_HISTORY`          | `PiH`   | `0..n`             | `1`                |
 
-##### 2.4.6.1 Ablauf von Veränderung und Historisierung
+##### 2.4.7.1 Ablauf von Veränderung und Historisierung
 
-Die Änderung eines JCI-Elements wird als `ChangeEvent` erkannt und dokumentiert. Jedes `ChangeEvent` löst mindestens ein `SyncEvent` aus. `SYNC` ermittelt die betroffenen JCI-Elemente und prüft, welcher bestehende Zustand durch die Änderung abgelöst wird.
+Die Änderung einer historisierbaren `JCIEntity` wird als `ChangeEvent` erkannt und dokumentiert. Jedes `ChangeEvent` löst mindestens ein `SyncEvent` aus. `SYNC` ermittelt die betroffenen `JCIEntity`-Instanzen und prüft, welcher bestehende Zustand durch die Änderung abgelöst wird.
 
 Bevor der neue Zustand übernommen wird, hält `SYNC` den bisherigen Zustand des betroffenen Elements einschließlich seiner zu diesem Zeitpunkt gültigen Beziehungen als eigenes `PiH` fest. Anschließend gilt der geänderte Zustand als aktueller Zustand. Ein zusätzlicher `HistoricalSnapshot` ist nicht erforderlich.
 
@@ -207,16 +256,16 @@ aktueller Zustand → ChangeEvent → SYNC → neuer aktueller Zustand
                     └──► PiH
 ```
 
-Beim erstmaligen Anlegen eines Elements existiert noch kein vorheriger Zustand. Deshalb erzeugt `ANGELEGT` noch kein `PiH` dieses Elements. Das Anlegen wird dennoch als `ChangeEvent` dokumentiert und durch `SYNC` verarbeitet.
+Beim erstmaligen Anlegen einer `JCIEntity` existiert noch kein vorheriger Zustand. Deshalb erzeugt `ANGELEGT` noch kein `PiH` dieser Entität. Das Anlegen wird dennoch als `ChangeEvent` dokumentiert und durch `SYNC` verarbeitet.
 
 
 ## 3. Point in Historie - PiH
 
 ### 3.1 Bedeutung
 
-`PiH` steht für **Point in Historie**. Ein `PiH` bewahrt den bisherigen Zustand eines JCI-Elements, wenn dieser durch eine Änderung abgelöst wird.
+`PiH` steht für **Point in Historie**. Ein `PiH` bewahrt den bisherigen Zustand einer historisierbaren `JCIEntity`, wenn dieser durch eine Änderung abgelöst wird.
 
-Das aktuelle JCI-Element wird nicht selbst zu `PiH`. `SYNC` hält unmittelbar vor der Übernahme einer Änderung ein eigenständiges historisches Abbild des bisherigen Zustands fest. Dieses bewahrt:
+Die aktuelle `JCIEntity` wird nicht selbst zu `PiH`. `SYNC` hält unmittelbar vor der Übernahme einer Änderung ein eigenständiges historisches Abbild des bisherigen Zustands fest. Dieses bewahrt:
 
 - Identität und Typ des ursprünglichen Elements,
 - die bisherigen Eigenschaften,
@@ -235,11 +284,11 @@ Das aktuelle JCI-Element wird nicht selbst zu `PiH`. `SYNC` hält unmittelbar vo
 7. Das `SyncEvent` dokumentiert die Auswirkungen des Synchronisationslaufs.
 
 ```text
-JCI-Element ── Änderung ──► ChangeEvent ── TRIGGERS ──► SyncEvent
-      │                                                   │
-      └── bisheriger Zustand ── durch SYNC ───────────────┘
-                              │
-                              └──► PiH
+JCIEntity ── Änderung ──► ChangeEvent ── TRIGGERS ──► SyncEvent
+    │                                                   │
+    └── bisheriger Zustand ── durch SYNC ───────────────┘
+                            │
+                            └──► PiH
 ```
 
 ### 3.3 Objekte und Beziehungen
@@ -254,22 +303,24 @@ JCI-Element ── Änderung ──► ChangeEvent ── TRIGGERS ──► Syn
 
 Ein `SyncEvent` ist kein `PiH`. Es kann jedoch mehrere `PiH` erzeugen, wenn ein Synchronisationslauf mehrere bestehende Zustände ablöst.
 
-| Quelle        | Beziehung              | Ziel          | Ziele je Quelle | Quellen je Ziel |
-| ------------- | ---------------------- | ------------- | ---------------:| ---------------:|
-| JCI-Element   | `CHANGED_BY`           | `ChangeEvent` | `0..n`          | `1`             |
-| `ChangeEvent` | `TRIGGERS`             | `SyncEvent`   | `1..n`          | `1`             |
-| `SyncEvent`   | `AFFECTS`              | JCI-Element   | `1..n`          | `0..n`          |
-| JCI-Element   | `HAS_HISTORICAL_STATE` | `PiH`         | `0..n`          | `1`             |
-| `SyncEvent`   | `CREATES_HISTORY`      | `PiH`         | `0..n`          | `1`             |
+| Quelle                      | Beziehung              | Ziel          | Ziele je Quelle | Quellen je Ziel |
+| --------------------------- | ---------------------- | ------------- | ---------------:| ---------------:|
+| historisierbare `JCIEntity` | `CHANGED_BY`           | `ChangeEvent` | `0..n`          | `1`             |
+| `ChangeEvent`               | `TRIGGERS`             | `SyncEvent`   | `1..n`          | `1`             |
+| `SyncEvent`                 | `AFFECTS`              | `JCIEntity`   | `1..n`          | `0..n`          |
+| historisierbare `JCIEntity` | `HAS_HISTORICAL_STATE` | `PiH`         | `0..n`          | `1`             |
+| `SyncEvent`                 | `CREATES_HISTORY`      | `PiH`         | `0..n`          | `1`             |
 
 ### 3.4 Regeln und Ausnahme
 
-1. Ein `PiH` entsteht nur aus einem bereits vorhandenen Zustand.
-2. Jeder durch eine Änderung abgelöste Zustand wird als eigenes `PiH` festgehalten.
-3. Jedes `PiH` gehört zu genau einem ursprünglichen JCI-Element.
-4. Ein JCI-Element kann mehrere zeitlich über `recordedAt` geordnete `PiH` besitzen.
-5. `PiH` wird nicht erneut historisiert.
-6. Bei `ANGELEGT` entsteht noch kein `PiH`, weil kein vorheriger Zustand existiert. Das `ChangeEvent` und mindestens ein `SyncEvent` entstehen trotzdem.
+1. Ein `PiH` entsteht nur aus dem bereits vorhandenen Zustand einer historisierbaren `JCIEntity`.
+2. Jeder durch eine tatsächliche Änderung abgelöste Zustand wird als eigenes `PiH` festgehalten.
+3. Jedes `PiH` gehört zu genau einer ursprünglichen `JCIEntity`.
+4. Eine historisierbare `JCIEntity` kann mehrere zeitlich über `recordedAt` geordnete `PiH` besitzen.
+5. Ein `PiH` ist nach seiner Erzeugung unveränderlich, wird nicht ergänzt und nicht erneut historisiert.
+6. `ChangeEvent` und `SyncEvent` werden nach ihrer Erzeugung ebenfalls nicht verändert oder historisiert.
+7. Bei `ANGELEGT` entsteht noch kein `PiH`, weil kein vorheriger Zustand existiert. Das `ChangeEvent` und mindestens ein `SyncEvent` entstehen trotzdem.
+8. Eine spätere Erläuterung oder Korrektur darf ein bestehendes `PiH` nicht überschreiben. Ihre konkrete Modellierung ist gesondert festzulegen.
 
 ### 3.5 Beispiel
 
@@ -431,13 +482,14 @@ Ein Entwurf darf zunächst ohne Ziel bestehen. Bevor ein `RaN` aktiv wird, muss 
 
 ### 6.3 Objekte und Beziehungen
 
-| Bereich       | Mögliche Ziele                         |
-| ------------- | -------------------------------------- |
-| Zukunft       | `PiF2`, `PiF1s`, `PiF1t`, `PiF1o`      |
-| Arbeit        | `Task`                                 |
-| Organisation  | `RoFOrg`, `RoFTeam`, `RoFTeamMember`   |
-| Rollen        | `RoFRole`, `RoleAssignment`            |
-| Umwelt        | `ERoFObject`                           |
+| Bereich                  | Mögliche Ziele                                                   |
+| ------------------------ | ---------------------------------------------------------------- |
+| Zukunft                  | `PiF2`, `PiF1s`, `PiF1t`, `PiF1o`                                |
+| Arbeit                   | `Task`                                                           |
+| Organisation             | `RoFOrg`, `RoFTeam`, `RoFTeamMember`                             |
+| Organisationsbeziehung   | `RoFOrgRelationship`                                             |
+| Rollen                   | `RoFRole`, `RoleAssignment`                                      |
+| Umwelt                   | `ERoFObject`                                                     |
 
 Für alle Zielbereiche wird dieselbe gespeicherte Beziehung verwendet:
 
@@ -671,7 +723,9 @@ Die `Verification` speichert `PASSED`, `FAILED` oder `PARTIAL`. Ein separater `E
 
 ### 10.1 Bedeutung
 
-`RoF` steht für **Roles and Functions** und beschreibt die organisatorische Handlungsfähigkeit im JCI-Modell. Es ordnet Organisationen, Teams, Mitglieder, Rollen und die konkrete Aktivierung einer Rolle in einem Team.
+`RoF` steht für **Roles and Functions** und beschreibt die organisatorische Handlungsfähigkeit im JCI-Modell. Es ordnet eigenständige Organisationen, ihre Beziehungen, Teams, Mitglieder, Rollen und die konkrete Aktivierung einer Rolle in einem Team.
+
+Eine `RoFOrg` ist immer eine eigenständig handlungsfähige Organisation. Mutterunternehmen, Tochterunternehmen und Partnerunternehmen werden daher jeweils als eigene `RoFOrg` modelliert. Ihre Stellung zueinander wird durch eine typisierte `RoFOrgRelationship` beschrieben.
 
 `RoF` beantwortet insbesondere:
 
@@ -680,36 +734,52 @@ Die `Verification` speichert `PASSED`, `FAILED` oder `PARTIAL`. Ein separater `E
 - Welches Mitglied ist für einen Zukunftszustand verantwortlich?
 - Welche Rollen besitzt das Mitglied?
 - Welche Rolle ist für das Mitglied in einem bestimmten Team aktiv?
+- Welche eigenständigen Organisationen stehen als Mutter, Tochter oder Partner miteinander in Beziehung?
 
 ### 10.2 Entstehung
 
 Eine `RoFOrg` bildet den organisatorischen Rahmen der operativen Arbeit. Ihr werden ein oder mehrere `RoFTeams` zugeordnet. Ein Team besitzt mindestens ein `RoFTeamMember`; ein Mitglied kann mehreren Teams angehören.
 
+Eine `RoFOrgRelationship` entsteht, wenn zwei eigenständige `RoFOrg` in einer fachlich relevanten Organisationsbeziehung stehen. `SUBSIDIARY` beschreibt eine gerichtete Mutter-Tochter-Beziehung. `PARTNERSHIP` beschreibt eine wechselseitige Partnerschaft zwischen unabhängigen Organisationen. Eine Tochterorganisation kann selbst weitere Tochterorganisationen besitzen und eigene Partnerschaften eingehen.
+
+Jede aktive Organisationsbeziehung wird durch mindestens ein `RoleAssignment` aus jeder beteiligten Organisation personengebunden getragen. Teams, Mitglieder und Rollen werden über diese `RoleAssignments` abgeleitet und nicht zusätzlich direkt an der Organisationsbeziehung gespeichert.
+
 Die Rollen eines Mitglieds werden unabhängig vom Teamkontext einmalig über `HAS_ROLE` gespeichert. Soll das Mitglied eine seiner Rollen in einem bestimmten Team ausüben, wird dafür ein eigenes `RoleAssignment` angelegt. Dieses verbindet das Mitglied mit genau einem Team und aktiviert genau eine Rolle aus seinem Rollenbestand.
 
-Wird ein RoF-Element oder eine organisatorische Zuordnung geändert, prüft `SYNC` die betroffenen Zukunftszustände, Tasks, Rollenaktivierungen und Umweltbeziehungen. Tatsächlich abgelöste Zustände werden als eigene `PiH` festgehalten.
+Wird ein RoF-Element, eine organisatorische Zuordnung oder eine `RoFOrgRelationship` geändert, prüft `SYNC` beide beteiligten Organisationen, ihre vertretenden Rollenaktivierungen, betroffene Zukunftszustände, Tasks, Regeln und Umweltbeziehungen. Tatsächlich abgelöste Zustände werden als eigene `PiH` festgehalten.
 
 ### 10.3 Objekte und Beziehungen
 
-| Objekt           | Bedeutung                                                   |
-| ---------------- | ----------------------------------------------------------- |
-| `RoFOrg`         | Organisation, in der die operative Arbeit stattfindet.     |
-| `RoFTeam`        | Organisatorische oder funktionale Gruppe.                   |
-| `RoFTeamMember`  | Handlungsfähiger menschlicher oder technischer Akteur.      |
-| `RoFRole`        | Rolle, Funktion und Verantwortungsbereich eines Mitglieds. |
-| `RoleAssignment` | Aktivierung einer Rolle eines Mitglieds in einem Team.      |
+| Objekt                 | Bedeutung                                                                  |
+| ---------------------- | -------------------------------------------------------------------------- |
+| `RoFOrg`               | Eigenständig handlungsfähige Organisation.                                 |
+| `RoFOrgRelationship`   | Typisierte und personengebundene Beziehung zwischen zwei `RoFOrg`.         |
+| `RoFTeam`              | Organisatorische oder funktionale Gruppe.                                  |
+| `RoFTeamMember`        | Handlungsfähiger menschlicher oder technischer Akteur.                     |
+| `RoFRole`              | Rolle, Funktion und Verantwortungsbereich eines Mitglieds.                 |
+| `RoleAssignment`       | Aktivierung einer Rolle eines Mitglieds in einem Team.                     |
 
-| Quelle          | Beziehung            | Ziel             | Ziele je Quelle | Quellen je Ziel |
-| --------------- | -------------------- | ---------------- | ---------------:| ---------------:|
-| `RoFOrg`        | `HAS_TEAM`           | `RoFTeam`        | `1..n`          | `1`             |
-| `RoFTeam`       | `HAS_MEMBER`         | `RoFTeamMember`  | `1..n`          | `1..n`          |
-| `RoFTeamMember` | `HAS_ROLE`           | `RoFRole`        | `1..n`          | `0..n`          |
-| `RoFTeamMember` | `HAS_ASSIGNMENT`     | `RoleAssignment` | `0..n`          | `1`             |
-| `RoleAssignment`| `IN_TEAM`            | `RoFTeam`        | `1`             | `0..n`          |
-| `RoleAssignment`| `ACTIVATES_ROLE`     | `RoFRole`        | `1`             | `0..n`          |
-| `PiF1o`         | `ACCOUNTABLE_MEMBER` | `RoFTeamMember`  | `1`             | `0..n`          |
-| `Task`          | `RESPONSIBLE_TEAM`   | `RoFTeam`        | `1`             | `0..n`          |
-| `Task`          | `EXECUTED_BY`        | `RoleAssignment` | `1..n`          | `0..n`          |
+Lesebeispiel für `RoFOrg ── HAS_TEAM ──► RoFTeam`: **Ziele je Quelle `1..n`** bedeutet, dass jede `RoFOrg` mindestens ein Team besitzt; **Quellen je Ziel `1`** bedeutet, dass jedes `RoFTeam` genau einer `RoFOrg` zugeordnet ist.
+
+| Quelle           | Beziehung            | Ziel             | Ziele je Quelle | Quellen je Ziel |
+| ---------------- | -------------------- | ---------------- | --------------: | --------------: |
+| `RoFOrg`         | `HAS_TEAM`           | `RoFTeam`        |          `1..n` |             `1` |
+| `RoFTeam`        | `HAS_MEMBER`         | `RoFTeamMember`  |          `1..n` |          `1..n` |
+| `RoFTeamMember`  | `HAS_ROLE`           | `RoFRole`        |          `1..n` |          `0..n` |
+| `RoFTeamMember`  | `HAS_ASSIGNMENT`     | `RoleAssignment` |          `0..n` |             `1` |
+| `RoleAssignment` | `IN_TEAM`            | `RoFTeam`        |             `1` |          `0..n` |
+| `RoleAssignment` | `ACTIVATES_ROLE`     | `RoFRole`        |             `1` |          `0..n` |
+| `PiF1o`          | `ACCOUNTABLE_MEMBER` | `RoFTeamMember`  |             `1` |          `0..n` |
+| `Task`           | `RESPONSIBLE_TEAM`   | `RoFTeam`        |             `1` |          `0..n` |
+| `Task`           | `EXECUTED_BY`        | `RoleAssignment` |          `1..n` |          `0..n` |
+
+Lesebeispiel für `RoFOrgRelationship ── SOURCE_ORG ──► RoFOrg`: **Ziele je Quelle `1`** bedeutet, dass jede Organisationsbeziehung genau eine Quellorganisation besitzt; **Quellen je Ziel `0..n`** bedeutet, dass eine `RoFOrg` Quelle keiner, einer oder mehrerer Organisationsbeziehungen sein kann.
+
+| Quelle               | Beziehung        | Ziel             | Ziele je Quelle | Quellen je Ziel |
+| -------------------- | ---------------- | ---------------- | --------------: | --------------: |
+| `RoFOrgRelationship` | `SOURCE_ORG`     | `RoFOrg`         |             `1` |          `0..n` |
+| `RoFOrgRelationship` | `TARGET_ORG`     | `RoFOrg`         |             `1` |          `0..n` |
+| `RoFOrgRelationship` | `REPRESENTED_BY` | `RoleAssignment` |          `2..n` |          `0..n` |
 
 ```text
 RoFOrg ── HAS_TEAM ──► RoFTeam ── HAS_MEMBER ──► RoFTeamMember
@@ -717,20 +787,31 @@ RoFOrg ── HAS_TEAM ──► RoFTeam ── HAS_MEMBER ──► RoFTeamMemb
                                                         └── HAS_ASSIGNMENT ──► RoleAssignment
                                                                                   ├── IN_TEAM ──► RoFTeam
                                                                                   └── ACTIVATES_ROLE ──► RoFRole
+
+RoFOrg ◄── SOURCE_ORG ── RoFOrgRelationship ── TARGET_ORG ──► RoFOrg
+                              └── REPRESENTED_BY ──► RoleAssignment
 ```
 
 ### 10.4 Regeln und Ausnahme
 
 1. Operative Arbeit findet innerhalb einer `RoFOrg` statt.
-2. Eine `RoFOrg` erreicht Mitglieder und Rollen ausschließlich über `RoFTeam → RoFTeamMember → RoFRole`; direkte Beziehungen von der Organisation zu Mitgliedern oder Rollen werden nicht gespeichert.
-3. Jedes `RoFTeam` gehört genau zu einer `RoFOrg` und besitzt mindestens ein Mitglied.
-4. Ein `RoFTeamMember` kann Mitglied in mehreren Teams sein.
-5. Ein Mitglied besitzt mindestens eine `RoFRole`; dieselbe Rolle wird im Rollenbestand eines Mitglieds nur einmal gespeichert.
-6. Ein `RoleAssignment` gehört genau zu einem Mitglied, genau einem Team und aktiviert genau eine Rolle.
-7. Ein `RoleAssignment` darf nur eine Rolle aktivieren, die das zugehörige Mitglied über `HAS_ROLE` besitzt.
-8. Das Mitglied eines `RoleAssignment` muss über `HAS_MEMBER` dem darin referenzierten Team angehören.
-9. Dieselbe Rolle kann für ein Mitglied in mehreren Teams aktiv sein; dafür wird je Team ein eigenes `RoleAssignment` verwendet.
-10. Jeder `PiF1o` besitzt genau ein verantwortliches `RoFTeamMember`. Seine Tasks werden durch `RoleAssignments` dieses Mitglieds ausgeführt.
+2. Mutterunternehmen, Tochterunternehmen und Partnerunternehmen sind jeweils eigenständige `RoFOrg`.
+3. Eine `RoFOrg` erreicht Mitglieder und Rollen ausschließlich über `RoFTeam → RoFTeamMember → RoFRole`; direkte Beziehungen von der Organisation zu Mitgliedern oder Rollen werden nicht gespeichert.
+4. Jedes `RoFTeam` gehört genau zu einer `RoFOrg` und besitzt mindestens ein Mitglied.
+5. Ein `RoFTeamMember` kann Mitglied in mehreren Teams sein.
+6. Ein Mitglied besitzt mindestens eine `RoFRole`; dieselbe Rolle wird im Rollenbestand eines Mitglieds nur einmal gespeichert.
+7. Ein `RoleAssignment` gehört genau zu einem Mitglied, genau einem Team und aktiviert genau eine Rolle.
+8. Ein `RoleAssignment` darf nur eine Rolle aktivieren, die das zugehörige Mitglied über `HAS_ROLE` besitzt.
+9. Das Mitglied eines `RoleAssignment` muss über `HAS_MEMBER` dem darin referenzierten Team angehören.
+10. Dieselbe Rolle kann für ein Mitglied in mehreren Teams aktiv sein; dafür wird je Team ein eigenes `RoleAssignment` verwendet.
+11. Jede `RoFOrgRelationship` verbindet über `SOURCE_ORG` und `TARGET_ORG` genau zwei unterschiedliche `RoFOrg`.
+12. `SUBSIDIARY` ist von der Mutterorganisation zur Tochterorganisation gerichtet. Eine Tochterorganisation darf selbst Quelle weiterer `SUBSIDIARY`-Beziehungen sein.
+13. Aktive `SUBSIDIARY`-Beziehungen dürfen keine Zyklen bilden. Eine `RoFOrg` darf im aktuellen Modell höchstens eine unmittelbare Mutterorganisation besitzen.
+14. `PARTNERSHIP` verbindet unabhängige Organisationen fachlich wechselseitig. Die gespeicherte Quell- und Zielrichtung begründet keine organisatorische Unterordnung.
+15. Jede aktive `RoFOrgRelationship` wird durch mindestens ein gültiges `RoleAssignment` aus jeder beteiligten Organisation vertreten.
+16. Das Team jedes vertretenden `RoleAssignment` muss zur jeweils vertretenen `RoFOrg` gehören.
+17. Eine beteiligte Organisation wird nicht zusätzlich als `ERoFObject` dupliziert.
+18. Jeder `PiF1o` besitzt genau ein verantwortliches `RoFTeamMember`. Seine Tasks werden durch `RoleAssignments` dieses Mitglieds ausgeführt.
 
 ### 10.5 Beispiel
 
@@ -749,15 +830,50 @@ RoFTeamMember: Anna
 
 Die Rolle `Developer` wird nicht doppelt am Mitglied gespeichert. Nur ihre teambezogene Aktivierung wird für jedes Team getrennt modelliert. Dadurch bleibt eindeutig, in welchem Team Anna welche Tasks in welcher Rolle ausführt.
 
+Ein Konzern A besitzt ein eigenständiges Tochterunternehmen B. B besitzt wiederum das eigenständige Tochterunternehmen C und unterhält eine Partnerschaft mit dem unabhängigen Unternehmen D:
+
+```text
+RoFOrgRelationship: A zu B
+  ├── type = SUBSIDIARY
+  ├── SOURCE_ORG ──► RoFOrg A
+  ├── TARGET_ORG ──► RoFOrg B
+  └── REPRESENTED_BY ──► RoleAssignments aus A und B
+
+RoFOrgRelationship: B zu C
+  ├── type = SUBSIDIARY
+  ├── SOURCE_ORG ──► RoFOrg B
+  ├── TARGET_ORG ──► RoFOrg C
+  └── REPRESENTED_BY ──► RoleAssignments aus B und C
+
+RoFOrgRelationship: B und D
+  ├── type = PARTNERSHIP
+  ├── SOURCE_ORG ──► RoFOrg B
+  ├── TARGET_ORG ──► RoFOrg D
+  └── REPRESENTED_BY ──► RoleAssignments aus B und D
+```
+
+Alle vier Unternehmen bleiben eigenständig handlungsfähig und behalten ihre jeweils eigenen Teams, Mitglieder und Rollen. Die Organisationsbeziehungen führen nicht dazu, dass ihre weiteren Modellkontexte automatisch zusammengeführt werden; die Beziehungstypen beschreiben ausschließlich ihre Stellung zueinander.
+
 ---
 
 ## 11. Environment of Roles or Functions – ERoF
 
 ### 11.1 Bedeutung
 
-`ERoF` steht für **Environment of Roles or Functions** und bezeichnet den fachlichen Modellraum der relevanten Umwelt. Er umfasst die Systeme, Werkzeuge, Dokumente, Daten, Infrastrukturen, Standards, Regelwerke, Partner und weiteren Umweltbestandteile, mit denen Rollen bei ihrer Arbeit interagieren.
+`ERoF` steht für **Environment of Roles or Functions** und bezeichnet den fachlichen Modellraum der relevanten Umwelt. Er umfasst die Systeme, Werkzeuge, Dokumente, Daten, Infrastrukturen, Standards, Regelwerke, Organisationsbeziehungen und weiteren Umweltbestandteile, mit denen Rollen bei ihrer Arbeit interagieren.
 
-`ERoF` ist die konzeptionelle Kategorie. Im Graphen werden konkrete Umweltbestandteile als `ERoFObject` gespeichert.
+`ERoF` ist die konzeptionelle Kategorie. Im Graphen werden konkrete Umweltbestandteile als `ERoFObject` gespeichert. Eine andere Organisation bleibt dagegen eine eigenständige `RoFOrg`. Ihre Bedeutung als relevante Umwelt entsteht durch eine `RoFOrgRelationship`; die Organisation wird nicht zusätzlich als `ERoFObject` gespeichert.
+
+Aus Sicht einer Mutterorganisation ist ihre Tochterorganisation über eine aktive `RoFOrgRelationship` mit `type = SUBSIDIARY` als Bestandteil der relevanten `ERoF` erkennbar. Die Zuordnung wird aus der Mutter als `SOURCE_ORG` und der Tochter als `TARGET_ORG` abgeleitet:
+
+```text
+ERoF der RoFOrg: Mutter
+  └── umfasst ──► RoFOrgRelationship: SUBSIDIARY
+                       ├── SOURCE_ORG ──► RoFOrg: Mutter
+                       └── TARGET_ORG ──► RoFOrg: Tochter
+```
+
+Die Tochterorganisation bleibt dabei ausschließlich eine eigenständige `RoFOrg`. Sie wird nicht zusätzlich als `ERoFObject` gespeichert. Nur konkrete Gegenstände der Mutter-Tochter-Beziehung, beispielsweise ein Vertrag, ein gemeinsames System oder ein Datenraum, können als eigene `ERoFObjects` modelliert werden.
 
 ### 11.2 Entstehung
 
@@ -768,7 +884,7 @@ Beispiele für mögliche Typen sind:
 ```text
 API, Documentation, System, Tool, Database,
 Infrastructure, Standard, Regulation,
-Partner, Customer, Knowledge
+Contract, CustomerData, Knowledge
 ```
 
 Der Geltungsbereich wird beschrieben als:
@@ -779,6 +895,8 @@ scope = INTERNAL | EXTERNAL
 
 Ein aktives `ERoFObject` wird mindestens einem `RoleAssignment` zugeordnet. Dadurch ist jede Umweltinteraktion mit einem Mitglied, einem Team und einer dort aktivierten Rolle verbunden.
 
+Eine `RoFOrgRelationship` vom Typ `PARTNERSHIP` gehört zur ERoF-Perspektive beider beteiligter Organisationen. Eine `SUBSIDIARY`-Beziehung beschreibt strukturell ihre RoF-Einordnung und zugleich die für Mutter und Tochter relevante Umweltbeziehung. Die konkrete Interaktion wird in beiden Fällen über `REPRESENTED_BY` an `RoleAssignments` der beteiligten Organisationen gebunden.
+
 Wird ein `ERoFObject` oder seine Verwendung geändert, prüft `SYNC` die betroffenen `RoleAssignments`, Tasks, Teams, Regeln und abhängigen Elemente. Tatsächlich abgelöste Zustände werden als eigene `PiH` festgehalten.
 
 ### 11.3 Objekte und Beziehungen
@@ -787,6 +905,7 @@ Wird ein `ERoFObject` oder seine Verwendung geändert, prüft `SYNC` die betroff
 | ------------------ | ------------------------------------------------------------- |
 | `ERoF`             | Fachlicher Modellraum der relevanten Umwelt.                  |
 | `ERoFObject`       | Konkret gespeichertes Umweltobjekt.                           |
+| `RoFOrgRelationship` | Umweltbezogene oder strukturelle Beziehung zwischen zwei eigenständigen Organisationen. |
 | `RoleAssignment`   | Aktive Rolle eines Mitglieds in einem Team.                   |
 | `Task`             | Tätigkeit, die ein Umweltobjekt unmittelbar verwenden kann.  |
 | `RoFTeamMember`    | Mitglied, dessen Umwelt über Rollenaktivierungen ableitbar ist.|
@@ -799,6 +918,12 @@ Wird ein `ERoFObject` oder seine Verwendung geändert, prüft `SYNC` die betroff
 | ---------------- | --------- | ------------ | ---------------:| ---------------:|
 | `RoleAssignment` | `USES`    | `ERoFObject` | `0..n`          | `1..n`          |
 | `Task`           | `USES`    | `ERoFObject` | `0..n`          | `0..n`          |
+
+| Quelle                   | Beziehung         | Ziel              | Ziele je Quelle | Quellen je Ziel |
+| ------------------------ | ----------------- | ----------------- | ---------------:| ---------------:|
+| `RoFOrgRelationship`     | `SOURCE_ORG`      | `RoFOrg`          | `1`             | `0..n`          |
+| `RoFOrgRelationship`     | `TARGET_ORG`      | `RoFOrg`          | `1`             | `0..n`          |
+| `RoFOrgRelationship`     | `REPRESENTED_BY`  | `RoleAssignment`  | `2..n`          | `0..n`          |
 
 ```text
 Task ── EXECUTED_BY ──► RoleAssignment ── USES ──► ERoFObject
@@ -822,11 +947,12 @@ ERoF(RoFTeam)
 
 ERoF(RoFOrg)
 = Vereinigung der ERoFObjects aller Mitglieder aller Teams der Organisation
+  sowie ihrer aktiven RoFOrgRelationships
 ```
 
 ### 11.4 Regeln und Ausnahme
 
-1. `ERoF` ist die fachliche Kategorie; konkrete Graphknoten werden als `ERoFObject` gespeichert.
+1. `ERoF` ist die fachliche Kategorie; konkrete Umweltobjekte werden als `ERoFObject` gespeichert.
 2. Jedes aktive `ERoFObject` muss von mindestens einem `RoleAssignment` verwendet werden.
 3. Ein `RoleAssignment` kann kein, ein oder mehrere `ERoFObjects` verwenden.
 4. Ein `ERoFObject` kann von mehreren `RoleAssignments` gemeinsam verwendet werden.
@@ -836,6 +962,9 @@ ERoF(RoFOrg)
 8. Eine direkte Task-Beziehung präzisiert den arbeitsbezogenen Umweltkontext, ersetzt aber niemals die Zuordnung zu einer handelnden Person.
 9. Auch ein organisationsweit relevantes Umweltobjekt benötigt mindestens ein zuständiges Mitglied mit einem passenden `RoleAssignment`.
 10. `RaN` kann die Verwendung eines `ERoFObject` regeln. Bei Regelkonflikten meldet `SYNC` den Konflikt, ohne ihn stillschweigend aufzulösen.
+11. Eine Mutter-, Tochter- oder Partnerorganisation bleibt ausschließlich eine eigenständige `RoFOrg` und wird nicht als `ERoFObject` dupliziert.
+12. Eine aktive `RoFOrgRelationship` gehört zur ERoF-Perspektive beider beteiligter Organisationen und wird durch mindestens ein `RoleAssignment` jeder Seite getragen.
+13. Verträge, gemeinsame Systeme, Datenräume, Richtlinien oder andere Gegenstände einer Organisationsbeziehung können zusätzlich als eigene `ERoFObjects` modelliert werden.
 
 ### 11.5 Beispiel
 
@@ -855,6 +984,8 @@ Task: Schnittstelle erweitern
 
 Die Umwelt von Anna enthält Repository und API. Die Umwelt von Team A und der zugehörigen `RoFOrg` enthält diese Objekte ebenfalls, weil sie über Annas teambezogenes `RoleAssignment` ableitbar sind. Dafür werden keine zusätzlichen direkten Umweltbeziehungen zum Team oder zur Organisation gespeichert.
 
+Steht Annas `RoFOrg` in einer Partnerschaft mit einer anderen `RoFOrg`, gehört die `RoFOrgRelationship` zur relevanten Umwelt beider Organisationen. Die Partnerorganisation bleibt eine `RoFOrg`. Ein gemeinsamer Vertrag, ein Datenaustauschsystem oder eine gemeinsam verwendete Plattform werden dagegen als `ERoFObjects` gespeichert und über die beteiligten `RoleAssignments` verwendet.
+
 ---
 
 ## 12. Synchronisation – SYNC
@@ -869,7 +1000,7 @@ Die Umwelt von Anna enthält Repository und API. Die Umwelt von Team A und der z
 
 Ein Synchronisationslauf entsteht durch ein `ChangeEvent`:
 
-1. Eine Änderung an einem JCI-Element oder Graphobjekt wird als `ChangeEvent` erfasst.
+1. Eine Änderung an einer historisierbaren `JCIEntity` wird als `ChangeEvent` erfasst.
 2. Das `ChangeEvent` löst mindestens ein `SyncEvent` aus.
 3. `SYNC` ermittelt alle direkt und indirekt betroffenen Elemente und Beziehungen.
 4. `SYNC` prüft `RaN`, Kardinalitäten und weitere Modellbedingungen.
@@ -879,10 +1010,10 @@ Ein Synchronisationslauf entsteht durch ein `ChangeEvent`:
 8. Das `SyncEvent` dokumentiert geprüfte Elemente, erzeugte `PiH`, Änderungen, Konflikte und das Ergebnis des Synchronisationslaufs.
 
 ```text
-JCI-Element ── CHANGED_BY ──► ChangeEvent ── TRIGGERS ──► SyncEvent
-                                                            │
-                                                            ├── AFFECTS ──► JCI-Element
-                                                            └── CREATES_HISTORY ──► PiH
+JCIEntity ── CHANGED_BY ──► ChangeEvent ── TRIGGERS ──► SyncEvent
+                                                          │
+                                                          ├── AFFECTS ──► JCIEntity
+                                                          └── CREATES_HISTORY ──► PiH
 ```
 
 ### 12.3 Objekte und Beziehungen
@@ -893,14 +1024,14 @@ JCI-Element ── CHANGED_BY ──► ChangeEvent ── TRIGGERS ──► Sy
 | `SyncEvent`   | Dokumentiert einen konkreten Synchronisationslauf.          |
 | `PiH`         | Bewahrt einen durch die Änderung abgelösten Zustand.        |
 | `RaN`         | Liefert Regeln, Normen und Grenzen für die Prüfung.          |
-| JCI-Element   | Kann Ausgangspunkt, betroffenes oder geändertes Element sein.|
+| `JCIEntity`   | Kann Ausgangspunkt, betroffene oder geänderte Entität sein. |
 
-| Quelle        | Beziehung          | Ziel          | Ziele je Quelle | Quellen je Ziel |
-| ------------- | ------------------ | ------------- | ---------------:| ---------------:|
-| JCI-Element   | `CHANGED_BY`       | `ChangeEvent` | `0..n`          | `1`             |
-| `ChangeEvent` | `TRIGGERS`         | `SyncEvent`   | `1..n`          | `1`             |
-| `SyncEvent`   | `AFFECTS`          | JCI-Element   | `1..n`          | `0..n`          |
-| `SyncEvent`   | `CREATES_HISTORY`  | `PiH`         | `0..n`          | `1`             |
+| Quelle                      | Beziehung          | Ziel          | Ziele je Quelle | Quellen je Ziel |
+| --------------------------- | ------------------ | ------------- | ---------------:| ---------------:|
+| historisierbare `JCIEntity` | `CHANGED_BY`       | `ChangeEvent` | `0..n`          | `1`             |
+| `ChangeEvent`               | `TRIGGERS`         | `SyncEvent`   | `1..n`          | `1`             |
+| `SyncEvent`                 | `AFFECTS`          | `JCIEntity`   | `1..n`          | `0..n`          |
+| `SyncEvent`                 | `CREATES_HISTORY`  | `PiH`         | `0..n`          | `1`             |
 
 ```text
 SYNC prüft abhängig vom geänderten Element insbesondere:
@@ -908,6 +1039,7 @@ SYNC prüft abhängig vom geänderten Element insbesondere:
 CiV und PiF2 bis PiF1o
 RaN und geregelte Ziele
 RoFOrg, RoFTeam, RoFTeamMember, RoFRole und RoleAssignment
+RoFOrgRelationship mit beiden beteiligten RoFOrg und ihren vertretenden RoleAssignments
 Task, SuccessCriterion, Result, Verification und Evidence
 ERoFObject und seine personengebundenen Verwendungen
 ```
@@ -916,14 +1048,15 @@ ERoFObject und seine personengebundenen Verwendungen
 
 1. Jedes `ChangeEvent` löst mindestens ein `SyncEvent` aus.
 2. Jedes `SyncEvent` gehört zu genau einem auslösenden `ChangeEvent`.
-3. Jedes `SyncEvent` benennt mindestens ein betroffenes JCI-Element oder Graphobjekt.
+3. Jedes `SyncEvent` benennt mindestens eine betroffene `JCIEntity`.
 4. Betroffenheit allein erzeugt kein `PiH`. Nur ein tatsächlich abgelöster Zustand wird historisiert.
 5. Ein `SyncEvent` kann kein, ein oder mehrere `PiH` erzeugen.
-6. Bei `ANGELEGT` entsteht kein `PiH` des neu angelegten Elements, weil kein vorheriger Zustand existiert.
+6. Bei `ANGELEGT` entsteht kein `PiH` der neu angelegten `JCIEntity`, weil kein vorheriger Zustand existiert.
 7. `SYNC` prüft alle für die Änderung relevanten `RaN` und Modellbedingungen.
 8. Eindeutig ableitbare und zulässige Anpassungen können verarbeitet werden. Semantische Konflikte, widersprüchliche `RaN` oder nicht eindeutig entscheidbare Änderungen werden gemeldet und nicht stillschweigend aufgelöst.
-9. `SYNC` ist die Prozesslogik; `SyncEvent` ist die Dokumentation eines konkreten Laufs. Beide sind kein `PiH`.
-10. Jeder durch `SYNC` erzeugte historische Zustand bleibt über `CREATES_HISTORY` mit genau einem `SyncEvent` und über `HAS_HISTORICAL_STATE` mit seinem ursprünglichen Element verbunden.
+9. `SYNC` ist die Prozesslogik; `SyncEvent` ist die Dokumentation eines konkreten Laufs. Beide sind kein `PiH`. Wird die gespeicherte Definition von `SYNC` selbst geändert, wird ihr bisheriger Zustand wie bei jeder anderen historisierbaren `JCIEntity` als `PiH` festgehalten.
+10. Jeder durch `SYNC` erzeugte historische Zustand bleibt über `CREATES_HISTORY` mit genau einem `SyncEvent` und über `HAS_HISTORICAL_STATE` mit seiner ursprünglichen `JCIEntity` verbunden.
+11. Bei Änderungen einer `RoFOrgRelationship` prüft `SYNC` beide beteiligten `RoFOrg`, die Gültigkeit ihrer vertretenden `RoleAssignments`, relevante `RaN`, verbundene `ERoFObjects` und bei `SUBSIDIARY` die Zyklusfreiheit der Organisationsstruktur.
 
 ### 12.5 Beispiel
 
@@ -949,11 +1082,13 @@ PiF1o: Antwort innerhalb von 48 Stunden
 
 Der JUNACO Continuous Integration Loop verbindet Zweck, Zukunft, Verantwortung, Arbeit, Umwelt, Regeln, Prüfung und historische Entwicklung in einem gemeinsamen fachlichen Graphen.
 
+`JCIEntity` bildet den abstrakten Oberbegriff aller gespeicherten Instanzen. Dadurch können sowohl Instanzen der zehn Kernelemente als auch unterstützende Graphobjekte einheitlich verändert, durch `SYNC` geprüft und – sofern sie historisierbar sind – als `PiH` festgehalten werden. `PiH`, `ChangeEvent` und `SyncEvent` bleiben unveränderlich und werden nicht erneut historisiert.
+
 `CiV` begründet, warum eine Zukunft gewollt ist. `PiF2` bis `PiF1o` beschreiben diese Zukunft auf langfristiger, strategischer, taktischer und operativer Ebene. Die gespeicherten `CONTRIBUTES_TO`-Beziehungen führen dabei vom konkreteren zum übergeordneten Zukunftszustand und erlauben einen gerichteten `n:m`-Graphen.
 
 Ein `PiF1o` beschreibt einen erreichbaren operativen Zustand. Er besitzt Erfolgskriterien und genau ein verantwortliches `RoFTeamMember`. Die daraus abgeleiteten Tasks werden über teambezogene `RoleAssignments` ausgeführt, verwenden konkrete `ERoFObjects` und können `Results` erzeugen. `Verifications` bewerten diese Ergebnisse gegen die festgelegten Erfolgskriterien.
 
-`RoF` stellt den Organisations-, Team-, Mitglieder- und Rollenkontext bereit. `ERoF` beschreibt die relevante Umwelt, wobei konkrete Umweltinteraktionen immer über handelnde Rollenaktivierungen nachvollziehbar bleiben. `RaN` wirkt als regelnder Querschnitt auf die jeweils geregelten Zukunfts-, Arbeits-, Organisations-, Rollen- und Umweltbereiche.
+`RoF` stellt den Organisations-, Team-, Mitglieder- und Rollenkontext bereit. Mutter-, Tochter- und Partnerunternehmen bleiben jeweils eigenständige `RoFOrg`; ihre Stellung zueinander wird durch eine personengebundene `RoFOrgRelationship` beschrieben. `SUBSIDIARY` kann rekursive, aber zyklusfreie Mutter-Tochter-Strukturen bilden. `PARTNERSHIP` verbindet unabhängige Organisationen und gehört zur ERoF-Perspektive beider Seiten. `ERoF` beschreibt darüber hinaus die relevante Umwelt, wobei konkrete Umweltinteraktionen immer über handelnde Rollenaktivierungen nachvollziehbar bleiben. `RaN` wirkt als regelnder Querschnitt auf die jeweils geregelten Zukunfts-, Arbeits-, Organisations-, Rollen- und Umweltbereiche.
 
 `SYNC` verarbeitet Änderungen entlang der relevanten Beziehungen. Das auslösende `ChangeEvent` führt zu mindestens einem dokumentierten `SyncEvent`. Nur wenn ein vorhandener Zustand tatsächlich abgelöst wird, hält `SYNC` diesen bisherigen Zustand als eigenes `PiH` fest. Betroffenheit allein erzeugt keinen historischen Zustand; Konflikte werden gemeldet und nicht stillschweigend aufgelöst.
 
@@ -971,7 +1106,9 @@ PiF1o ── CONTRIBUTES_TO ──► PiF1t ── CONTRIBUTES_TO ──► PiF1
                                    └── USES ──► ERoFObject
 
 RaN ── GOVERNS ──► relevante Ziele
-ChangeEvent ── TRIGGERS ──► SyncEvent ── AFFECTS ──► JCI-Element
+RoFOrg ◄── SOURCE_ORG ── RoFOrgRelationship ── TARGET_ORG ──► RoFOrg
+                              └── REPRESENTED_BY ──► RoleAssignment
+ChangeEvent ── TRIGGERS ──► SyncEvent ── AFFECTS ──► JCIEntity
                                       └── CREATES_HISTORY ──► PiH
 ```
 
