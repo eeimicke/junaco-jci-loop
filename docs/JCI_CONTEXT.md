@@ -157,7 +157,7 @@ JCIEntity → ChangeEvent → SYNC → betroffene JCIEntity-Instanzen
      └── bisheriger Zustand → PiH
 ```
 
-**Kurzes Beispiel:** Eine Organisation möchte ihren Kundenservice verbessern. Aus ihren Werten (`CiV`) entsteht ein langfristiges Zukunftsbild (`PiF2`), das über strategische (`PiF1s`) und taktische Zukunftszustände (`PiF1t`) zu einem konkreten operativen Zielzustand (`PiF1o`) führt. Ein verantwortliches Teammitglied setzt diesen durch Tasks um. Dabei arbeitet es in seiner Rolle (`RoF`) mit Systemen und Informationen aus der Umwelt (`ERoF`). Regeln und Normen (`RaN`) geben den zulässigen Rahmen vor. Die erzeugten Ergebnisse werden anhand festgelegter Erfolgskriterien geprüft. Bei einer relevanten Änderung verfolgt `SYNC` die Auswirkungen. Der durch die Änderung abgelöste Zustand wird als eigener `PiH` festgehalten; danach gilt der neue Zustand als aktuell. Bei weiteren Änderungen entstehen weitere `PiH`, sodass die früheren Zustände in ihrer zeitlichen Reihenfolge nachvollziehbar bleiben.
+**Kurzes Beispiel:** Eine Organisation möchte ihren Kundenservice verbessern. Aus ihren Werten (`CiV`) entsteht ein langfristiges Zukunftsbild (`PiF2`), das über strategische (`PiF1s`) und taktische Zukunftszustände (`PiF1t`) zu einem konkreten operativen Zielzustand (`PiF1o`) führt. Ein Teammitglied ist für diesen Zustand accountable. Die daraus abgeleiteten Tasks werden von verantwortlichen Teams getragen und durch konkrete Rollenaktivierungen ausgeführt. Dabei interagieren die ausführenden Rollen (`RoF`) mit Systemen und Informationen aus der Umwelt (`ERoF`). Regeln und Normen (`RaN`) geben den zulässigen Rahmen vor. Die erzeugten Ergebnisse werden anhand festgelegter Erfolgskriterien geprüft. Bei einer relevanten Änderung verfolgt `SYNC` die Auswirkungen. Der durch die Änderung abgelöste Zustand wird als eigener `PiH` festgehalten; danach gilt der neue Zustand als aktuell. Bei weiteren Änderungen entstehen weitere `PiH`, sodass die früheren Zustände in ihrer zeitlichen Reihenfolge nachvollziehbar bleiben.
 
 Die Darstellung beschreibt eine Orientierung und keinen einzigen linearen Ablauf. `RaN`, `ERoF` und `SYNC` sind deshalb nicht als aufeinanderfolgende Stationen in die Zukunftskette eingefügt. Die tatsächlichen Beziehungen zwischen den JCI-Elementen bilden einen Graphen und können Verzweigungen sowie Rückbezüge enthalten.
 
@@ -638,7 +638,7 @@ Verification = Erfüllt das Result das Erfolgskriterium?
 
 Ein `PiF1o` entsteht durch die operative Konkretisierung eines oder mehrerer `PiF1t`. Für jeden `PiF1o` werden mindestens ein `SuccessCriterion`, genau ein verantwortliches `RoFTeamMember` und mindestens ein `Task` festgelegt.
 
-Die Tasks werden durch `RoleAssignments` des verantwortlichen Mitglieds ausgeführt. Ein Task kann `ERoFObjects` verwenden und `Results` erzeugen. Eine `Verification` bewertet ein Result gegen ein zum `PiF1o` gehörendes `SuccessCriterion`.
+Jeder Task wird genau einem verantwortlichen `RoFTeam` zugeordnet und durch mindestens ein `RoleAssignment` ausgeführt. Mindestens eines der ausführenden `RoleAssignments` gehört zum verantwortlichen Team; weitere `RoleAssignments` aus anderen Teams können unterstützend beteiligt sein. Das dem `PiF1o` über `ACCOUNTABLE_MEMBER` zugeordnete Teammitglied darf Tasks ausführen, muss aber nicht zu deren ausführenden Personen gehören. Ein Task kann `ERoFObjects` verwenden und `Results` erzeugen. Eine `Verification` bewertet ein Result gegen ein zum `PiF1o` gehörendes `SuccessCriterion`.
 
 Wird ein `PiF1o` oder ein verbundenes operatives Graphobjekt geändert, prüft `SYNC` die Auswirkungen auf Zukunftsbeiträge, Erfolgskriterien, Verantwortung, Tasks, Rollenaktivierungen, Umweltobjekte, Ergebnisse und Prüfungen. Nur tatsächlich abgelöste Zustände werden als eigene `PiH` festgehalten.
 
@@ -677,6 +677,7 @@ PiF1o
   ├── HAS_SUCCESS_CRITERIA ──► SuccessCriterion ◄── CHECKS ── Verification
   ├── ACCOUNTABLE_MEMBER ──► RoFTeamMember
   └── DECOMPOSES_INTO ──► Task ── PRODUCES ──► Result ◄── EVALUATES ── Verification
+                                  ├── RESPONSIBLE_TEAM ──► RoFTeam
                                   ├── EXECUTED_BY ──► RoleAssignment
                                   └── USES ──► ERoFObject
 ```
@@ -687,15 +688,18 @@ PiF1o
 2. Jeder `PiF1o` besitzt mindestens ein `SuccessCriterion`.
 3. Jeder `PiF1o` ist genau einem verantwortlichen `RoFTeamMember` zugeordnet.
 4. Jeder `PiF1o` wird in mindestens einen `Task` zerlegt; jeder Task gehört genau zu einem `PiF1o`.
-5. Jeder Task wird durch mindestens ein `RoleAssignment` des verantwortlichen Mitglieds ausgeführt.
-6. Jeder Task besitzt genau ein verantwortliches `RoFTeam`.
-7. Ein Task kann keine, eine oder mehrere Beziehungen zu `ERoFObjects` besitzen. Verwendet ein Task ein Umweltobjekt, muss mindestens ein ausführendes `RoleAssignment` dasselbe `ERoFObject` verwenden.
-8. Ein Task kann noch kein, ein oder mehrere `Results` erzeugt haben; jedes Result gehört genau zu einem Task.
-9. Eine `Verification` bewertet genau ein Result und prüft genau ein `SuccessCriterion`.
-10. Das Prüfergebnis wird auf `Verification` als `PASSED`, `FAILED` oder `PARTIAL` gespeichert.
-11. `Evidence` wird nur als eigener Knoten verwendet, wenn ein Nachweis separat verwaltet, wiederverwendet oder auditiert werden muss.
-12. `PiF1o` ist ein Zustand und niemals selbst ein Task.
-13. Ein PiF1o-Entwurf ist erst fachlich vollständig, wenn Zukunftsbeitrag, Erfolgskriterium, Verantwortung und Tasks vorhanden sind.
+5. Jeder Task wird durch mindestens ein `RoleAssignment` ausgeführt.
+6. Jeder Task besitzt genau ein verantwortliches `RoFTeam`. Mindestens ein ausführendes `RoleAssignment` muss über `IN_TEAM` zu diesem Team gehören.
+7. Weitere `RoleAssignments` aus anderen Teams dürfen unterstützend an demselben Task beteiligt sein.
+8. Das `ACCOUNTABLE_MEMBER` eines `PiF1o` darf dessen Tasks ausführen, muss aber keinem ausführenden `RoleAssignment` angehören.
+9. Accountability für den `PiF1o`, Verantwortung des Teams für den Task und tatsächliche Ausführung durch `RoleAssignments` bleiben fachlich getrennt.
+10. Ein Task kann keine, eine oder mehrere Beziehungen zu `ERoFObjects` besitzen. Verwendet ein Task ein Umweltobjekt, muss mindestens ein ausführendes `RoleAssignment` dasselbe `ERoFObject` verwenden.
+11. Ein Task kann noch kein, ein oder mehrere `Results` erzeugt haben; jedes Result gehört genau zu einem Task.
+12. Eine `Verification` bewertet genau ein Result und prüft genau ein `SuccessCriterion`.
+13. Das Prüfergebnis wird auf `Verification` als `PASSED`, `FAILED` oder `PARTIAL` gespeichert.
+14. `Evidence` wird nur als eigener Knoten verwendet, wenn ein Nachweis separat verwaltet, wiederverwendet oder auditiert werden muss.
+15. `PiF1o` ist ein Zustand und niemals selbst ein Task.
+16. Ein PiF1o-Entwurf ist erst fachlich vollständig, wenn Zukunftsbeitrag, Erfolgskriterium, Accountability und Tasks vorhanden sind.
 
 ### 9.5 Beispiel
 
@@ -706,16 +710,18 @@ PiF1o = Mindestens 95 % der Kundenanfragen werden
    ├── CONTRIBUTES_TO ──► PiF1t
    ├── HAS_SUCCESS_CRITERIA ──►
    │      SuccessCriterion = Antwortzeit höchstens 24 Stunden
-   ├── ACCOUNTABLE_MEMBER ──► RoFTeamMember
+   ├── ACCOUNTABLE_MEMBER ──► RoFTeamMember: Jana
    └── DECOMPOSES_INTO ──► Task
-             ├── EXECUTED_BY ──► RoleAssignment
+             ├── RESPONSIBLE_TEAM ──► RoFTeam: Entwicklung
+             ├── EXECUTED_BY ──► RoleAssignment: Ernst als Developer in Entwicklung
+             ├── EXECUTED_BY ──► RoleAssignment: Anna als Testerin in Qualitätssicherung
              ├── USES ──► ERoFObject: Ticketsystem
              └── PRODUCES ──► Result: beantwortete Anfrage
                                       ◄── EVALUATES ── Verification
                                                └── CHECKS ──► SuccessCriterion
 ```
 
-Die `Verification` speichert `PASSED`, `FAILED` oder `PARTIAL`. Ein separater `Evidence`-Knoten wird nur angelegt, wenn der Nachweis eigenständig verwaltet werden muss.
+Jana bleibt für den `PiF1o` accountable, obwohl Ernst und Anna den Task ausführen. Das Team Entwicklung trägt die Verantwortung für den Task; mindestens eines seiner `RoleAssignments` muss an der Ausführung beteiligt sein. Die `Verification` speichert `PASSED`, `FAILED` oder `PARTIAL`. Ein separater `Evidence`-Knoten wird nur angelegt, wenn der Nachweis eigenständig verwaltet werden muss.
 
 ---
 
@@ -811,7 +817,7 @@ RoFOrg ◄── SOURCE_ORG ── RoFOrgRelationship ── TARGET_ORG ──�
 15. Jede aktive `RoFOrgRelationship` wird durch mindestens ein gültiges `RoleAssignment` aus jeder beteiligten Organisation vertreten.
 16. Das Team jedes vertretenden `RoleAssignment` muss zur jeweils vertretenen `RoFOrg` gehören.
 17. Eine beteiligte Organisation wird nicht zusätzlich als `ERoFObject` dupliziert.
-18. Jeder `PiF1o` besitzt genau ein verantwortliches `RoFTeamMember`. Seine Tasks werden durch `RoleAssignments` dieses Mitglieds ausgeführt.
+18. Jeder `PiF1o` besitzt genau ein accountable `RoFTeamMember`. Jeder seiner Tasks besitzt genau ein verantwortliches `RoFTeam` und mindestens ein ausführendes `RoleAssignment`; das accountable Mitglied muss den Task nicht selbst ausführen.
 
 ### 10.5 Beispiel
 
