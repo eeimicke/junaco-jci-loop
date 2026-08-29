@@ -81,7 +81,22 @@ PiH, CiV, RaN, RoF, ERoF, SYNC,
 PiF2, PiF1s, PiF1t und PiF1o
 ```
 
-Für die konkrete Anwendung und Speicherung im Graphen werden zusätzliche Graphobjekte benötigt. Sie machen die Kernelemente ausführbar, prüfbar und nachvollziehbar, sind aber keine weiteren JCI-Kernelemente.
+Ein JCI-Kernelement bezeichnet einen grundlegenden fachlichen Bestandteil des Modells. Die Zugehörigkeit zu den zehn Kernelementen bedeutet nicht automatisch, dass das Kernelement selbst als Knoten gespeichert wird. Fachliche Bedeutung und technische Speicherung werden deshalb getrennt beschrieben.
+
+| JCI-Kernelement | Speicherstatus      | Gespeicherte Bedeutung                                                    |
+| --------------- | ------------------- | ------------------------------------------------------------------------- |
+| `PiH`           | eigener Elementtyp  | unveränderlicher historischer Zustand                                     |
+| `CiV`           | eigener Elementtyp  | konkrete Werte- und Zweckbeschreibung                                     |
+| `RaN`           | eigener Elementtyp  | konkrete Regel oder Norm                                                  |
+| `RoF`           | kein eigener Knoten | konzeptioneller Modellraum für Organisation, Teams, Mitglieder und Rollen |
+| `ERoF`          | kein eigener Knoten | konzeptioneller und abgeleiteter Modellraum der relevanten Umwelt         |
+| `SYNC`          | eigener Elementtyp  | gespeicherte Definition der Synchronisationslogik                         |
+| `PiF2`          | eigener Elementtyp  | konkreter langfristiger Zukunftszustand                                   |
+| `PiF1s`         | eigener Elementtyp  | konkreter strategischer Zukunftszustand                                   |
+| `PiF1t`         | eigener Elementtyp  | konkreter taktischer Zukunftszustand                                      |
+| `PiF1o`         | eigener Elementtyp  | konkreter operativer Zukunftszustand                                      |
+
+Für die konkrete Anwendung und Speicherung im Graphen werden zusätzlich Graphobjekte benötigt. Sie machen die Kernelemente ausführbar, prüfbar und nachvollziehbar, sind aber keine weiteren JCI-Kernelemente.
 
 | Bereich                   | Graphobjekt             | Bedeutung                                                        |
 | ------------------------- | ----------------------- | ---------------------------------------------------------------- |
@@ -104,16 +119,16 @@ Die Kernelemente beschreiben die grundlegende fachliche Struktur des JCI. Die zu
 
 #### 2.2.1 JCIEntity als gemeinsamer Oberbegriff
 
-`JCIEntity` ist der abstrakte Oberbegriff für jede eindeutig identifizierbare Instanz, die im JCI-Graphen als Knoten gespeichert wird. Eine `JCIEntity` ist entweder die Instanz eines der zehn fachlichen Kernelemente (`JCIElement`) oder ein unterstützendes `GraphObject`. `JCIEntity` ist kein elftes Kernelement und wird nicht als zusätzlicher fachlicher Knoten neben der konkreten Instanz gespeichert.
+`JCIEntity` ist der abstrakte Oberbegriff für jede konkrete und eindeutig identifizierbare Instanz, die im JCI-Graphen als Knoten gespeichert wird. `JCIEntity` ist kein elftes Kernelement und kein zusätzlicher Knoten neben der konkreten Instanz.
+
+Eine `JCIElementInstance` ist eine gespeicherte Ausprägung eines speicherbaren JCI-Kernelements. Ein `GraphObject` konkretisiert die praktische Anwendung der Kernelemente. `JCIElementInstance` und `GraphObject` sind abstrakte Typen zur Einordnung gespeicherter Knoten und keine zusätzlichen fachlichen Kernelemente.
 
 ```text
 JCIEntity
-├── JCIElement
+├── JCIElementInstance
 │   ├── PiH
 │   ├── CiV
 │   ├── RaN
-│   ├── RoF
-│   ├── ERoF
 │   ├── SYNC
 │   ├── PiF2
 │   ├── PiF1s
@@ -137,6 +152,22 @@ JCIEntity
     └── SyncEvent
 ```
 
+`RoF` und `ERoF` fehlen in dieser Baumstruktur nicht: Beide bleiben JCI-Kernelemente, sind aber konzeptionelle Modellräume ohne eigenen Knoten. `RoF` wird durch seine Organisations- und Rollenobjekte konkretisiert. `ERoF` wird aus Umweltobjekten, Organisationsbeziehungen und ihrer Verwendung durch handelnde Rollen abgeleitet.
+
+Beispiel für die Unterscheidung:
+
+```text
+Kernelement: CiV
+└── gespeicherte JCIElementInstance:
+    CiV „Wir handeln transparent und verbindlich.“
+
+Kernelement: RoF
+└── kein eigener RoF-Knoten
+    ├── RoFOrg „Junaco“
+    ├── RoFTeam „Entwicklung“
+    └── RoleAssignment „Anna als Developer in Entwicklung“
+```
+
 Grundsätzlich ist jede bereits vorhandene `JCIEntity` historisierbar. Ausgenommen sind `PiH`, `ChangeEvent` und `SyncEvent`: Ein `PiH` ist nach seiner Erzeugung unveränderlich und wird nicht erneut historisiert; Ereignisobjekte dokumentieren einen abgeschlossenen Vorgang und werden ebenfalls nicht nachträglich verändert. Das erstmalige Anlegen einer `JCIEntity` erzeugt noch kein `PiH`, weil kein vorheriger Zustand existiert.
 
 ### 2.3 Grundstruktur
@@ -152,14 +183,18 @@ PiH → CiV → PiF2 → PiF1s → PiF1t → PiF1o → Task → Result ← Verif
                                                 ├── wird durch RoleAssignments ausgeführt
                                                 └── interagiert mit ERoFObjects (ERoF)
 
-JCIEntity → ChangeEvent → SYNC → betroffene JCIEntity-Instanzen
-     │
+RoF-Modellraum:  RoFOrg → RoFTeam → RoFTeamMember → RoleAssignment
+ERoF-Modellraum: RoleAssignment → ERoFObject
+
+JCIEntity → ChangeEvent → SyncEvent → betroffene JCIEntity-Instanzen
+     │                         │
+     │                         └── EXECUTES → SYNC-Definition
      └── bisheriger Zustand → PiH
 ```
 
 **Kurzes Beispiel:** Eine Organisation möchte ihren Kundenservice verbessern. Aus ihren Werten (`CiV`) entsteht ein langfristiges Zukunftsbild (`PiF2`), das über strategische (`PiF1s`) und taktische Zukunftszustände (`PiF1t`) zu einem konkreten operativen Zielzustand (`PiF1o`) führt. Ein Teammitglied ist für diesen Zustand accountable. Die daraus abgeleiteten Tasks werden von verantwortlichen Teams getragen und durch konkrete Rollenaktivierungen ausgeführt. Dabei interagieren die ausführenden Rollen (`RoF`) mit Systemen und Informationen aus der Umwelt (`ERoF`). Regeln und Normen (`RaN`) geben den zulässigen Rahmen vor. Die erzeugten Ergebnisse werden anhand festgelegter Erfolgskriterien geprüft. Bei einer relevanten Änderung verfolgt `SYNC` die Auswirkungen. Der durch die Änderung abgelöste Zustand wird als eigener `PiH` festgehalten; danach gilt der neue Zustand als aktuell. Bei weiteren Änderungen entstehen weitere `PiH`, sodass die früheren Zustände in ihrer zeitlichen Reihenfolge nachvollziehbar bleiben.
 
-Die Darstellung beschreibt eine Orientierung und keinen einzigen linearen Ablauf. `RaN`, `ERoF` und `SYNC` sind deshalb nicht als aufeinanderfolgende Stationen in die Zukunftskette eingefügt. Die tatsächlichen Beziehungen zwischen den JCI-Elementen bilden einen Graphen und können Verzweigungen sowie Rückbezüge enthalten.
+Die Darstellung beschreibt eine Orientierung und keinen einzigen linearen Ablauf. `RaN`, `RoF`, `ERoF` und `SYNC` sind deshalb nicht als aufeinanderfolgende Stationen in die Zukunftskette eingefügt. `RoF` und `ERoF` bezeichnen Modellräume; `SYNC` bezeichnet die gespeicherte Prozessdefinition. Die tatsächlichen Beziehungen zwischen den gespeicherten `JCIEntities` bilden einen Graphen und können Verzweigungen sowie Rückbezüge enthalten.
 
 ### 2.4 Beziehungen zwischen JCI-Entitäten
 
@@ -228,10 +263,16 @@ Lesebeispiel für `Verification ── EVALUATES ──► Result`: **Ziele je Q
 
 Lesebeispiel für `ChangeEvent ── TRIGGERS ──► SyncEvent`: **Ziele je Quelle `1..n`** bedeutet, dass jedes `ChangeEvent` mindestens einen und möglicherweise mehrere Synchronisationsläufe auslöst. **Quellen je Ziel `1`** bedeutet, dass jedes `SyncEvent` genau durch ein `ChangeEvent` ausgelöst wird.
 
-| Quelle          | Beziehung      | Ziel          | Ziele je<br>Quelle | Quellen je<br>Ziel |
-| --------------- | -------------- | ------------- | -----------------: | -----------------: |
-| `ChangeEvent`   | `TRIGGERS`     | `SyncEvent`   | `1..n`             | `1`                |
-| `SyncEvent`     | `AFFECTS`      | `JCIEntity`   | `1..n`             | `0..n`             |
+`SYNC` und `SyncEvent` haben unterschiedliche Aufgaben: `SYNC` ist die gespeicherte Definition der Synchronisationslogik. Ein `SyncEvent` dokumentiert einen konkreten Lauf und verweist über `EXECUTES` auf die dabei verwendete Definition.
+
+| Quelle                      | Beziehung      | Ziel          | Ziele je<br>Quelle | Quellen je<br>Ziel |
+| --------------------------- | -------------- | ------------- | -----------------: | -----------------: |
+| historisierbare `JCIEntity` | `CHANGED_BY`   | `ChangeEvent` | `0..n`             | `1`                |
+| `ChangeEvent`               | `TRIGGERS`     | `SyncEvent`   | `1..n`             | `1`                |
+| `SyncEvent`                 | `EXECUTES`     | `SYNC`        | `1`                | `0..n`             |
+| `SyncEvent`                 | `AFFECTS`      | `JCIEntity`   | `1..n`             | `0..n`             |
+
+Lesebeispiel für `SyncEvent ── EXECUTES ──► SYNC`: **Ziele je Quelle `1`** bedeutet, dass jeder Synchronisationslauf genau eine SYNC-Definition verwendet. **Quellen je Ziel `0..n`** bedeutet, dass eine SYNC-Definition noch von keinem, einem oder mehreren Synchronisationsläufen verwendet worden sein kann.
 
 #### 2.4.7 Historisierung
 
@@ -244,16 +285,16 @@ Lesebeispiel für `JCIEntity ── HAS_HISTORICAL_STATE ──► PiH`: **Ziele
 
 ##### 2.4.7.1 Ablauf von Veränderung und Historisierung
 
-Die Änderung einer historisierbaren `JCIEntity` wird als `ChangeEvent` erkannt und dokumentiert. Jedes `ChangeEvent` löst mindestens ein `SyncEvent` aus. `SYNC` ermittelt die betroffenen `JCIEntity`-Instanzen und prüft, welcher bestehende Zustand durch die Änderung abgelöst wird.
+Die Änderung einer historisierbaren `JCIEntity` wird als `ChangeEvent` erkannt und dokumentiert. Jedes `ChangeEvent` löst mindestens ein `SyncEvent` aus. Das `SyncEvent` führt über `EXECUTES` genau eine SYNC-Definition aus. Diese ermittelt die betroffenen `JCIEntity`-Instanzen und prüft, welcher bestehende Zustand durch die Änderung abgelöst wird.
 
-Bevor der neue Zustand übernommen wird, hält `SYNC` den bisherigen Zustand des betroffenen Elements einschließlich seiner zu diesem Zeitpunkt gültigen Beziehungen als eigenes `PiH` fest. Anschließend gilt der geänderte Zustand als aktueller Zustand. Ein zusätzlicher `HistoricalSnapshot` ist nicht erforderlich.
+Bevor der neue Zustand übernommen wird, hält der Synchronisationslauf den bisherigen Zustand des betroffenen Elements einschließlich seiner zu diesem Zeitpunkt gültigen Beziehungen als eigenes `PiH` fest. Anschließend gilt der geänderte Zustand als aktueller Zustand. Ein zusätzlicher `HistoricalSnapshot` ist nicht erforderlich.
 
 ```text
-aktueller Zustand → ChangeEvent → SYNC → neuer aktueller Zustand
-       │                         │
-       └─ bisheriger Zustand ──┘
-                    │
-                    └──► PiH
+aktueller Zustand → ChangeEvent → SyncEvent → neuer aktueller Zustand
+       │                              ├── EXECUTES ──► SYNC
+       └── bisheriger Zustand ────────┘
+                         │
+                         └──► PiH
 ```
 
 Beim erstmaligen Anlegen einer `JCIEntity` existiert noch kein vorheriger Zustand. Deshalb erzeugt `ANGELEGT` noch kein `PiH` dieser Entität. Das Anlegen wird dennoch als `ChangeEvent` dokumentiert und durch `SYNC` verarbeitet.
@@ -265,7 +306,7 @@ Beim erstmaligen Anlegen einer `JCIEntity` existiert noch kein vorheriger Zustan
 
 `PiH` steht für **Point in Historie**. Ein `PiH` bewahrt den bisherigen Zustand einer historisierbaren `JCIEntity`, wenn dieser durch eine Änderung abgelöst wird.
 
-Die aktuelle `JCIEntity` wird nicht selbst zu `PiH`. `SYNC` hält unmittelbar vor der Übernahme einer Änderung ein eigenständiges historisches Abbild des bisherigen Zustands fest. Dieses bewahrt:
+Die aktuelle `JCIEntity` wird nicht selbst zu `PiH`. Der durch ein `SyncEvent` dokumentierte Synchronisationslauf hält unmittelbar vor der Übernahme einer Änderung ein eigenständiges historisches Abbild des bisherigen Zustands fest. Dieses bewahrt:
 
 - Identität und Typ des ursprünglichen Elements,
 - die bisherigen Eigenschaften,
@@ -277,23 +318,25 @@ Die aktuelle `JCIEntity` wird nicht selbst zu `PiH`. `SYNC` hält unmittelbar vo
 
 1. Eine Änderung wird als `ChangeEvent` erfasst.
 2. Das `ChangeEvent` löst mindestens ein `SyncEvent` aus.
-3. `SYNC` ermittelt betroffene Elemente und Beziehungen.
-4. `SYNC` prüft `RaN` und weitere Modellbedingungen.
-5. `SYNC` hält den abgelösten Zustand als `PiH` fest.
-6. Der geänderte Zustand wird zum aktuellen Zustand.
-7. Das `SyncEvent` dokumentiert die Auswirkungen des Synchronisationslaufs.
+3. Das `SyncEvent` führt über `EXECUTES` genau eine SYNC-Definition aus.
+4. Die SYNC-Definition ermittelt betroffene Elemente und Beziehungen.
+5. Sie prüft `RaN` und weitere Modellbedingungen.
+6. Der Synchronisationslauf hält den abgelösten Zustand als `PiH` fest.
+7. Der geänderte Zustand wird zum aktuellen Zustand.
+8. Das `SyncEvent` dokumentiert die verwendete SYNC-Definition und die Auswirkungen des Synchronisationslaufs.
 
 ```text
-JCIEntity ── Änderung ──► ChangeEvent ── TRIGGERS ──► SyncEvent
-    │                                                   │
-    └── bisheriger Zustand ── durch SYNC ───────────────┘
-                            │
-                            └──► PiH
+JCIEntity ── CHANGED_BY ──► ChangeEvent ── TRIGGERS ──► SyncEvent
+                                                             ├── EXECUTES ──► SYNC
+                                                             ├── AFFECTS ──► JCIEntity
+                                                             └── CREATES_HISTORY ──► PiH
+
+JCIEntity ── HAS_HISTORICAL_STATE ──► PiH
 ```
 
 ### 3.3 Objekte und Beziehungen
 
-`ChangeEvent`, `SyncEvent` und `PiH` bleiben getrennte Graphobjekte:
+`PiH`, `ChangeEvent` und `SyncEvent` bleiben getrennte `JCIEntity`-Instanzen. `PiH` ist eine `JCIElementInstance`; `ChangeEvent` und `SyncEvent` sind `GraphObjects`.
 
 | Objekt        | Bedeutung                                                      |
 | ------------- | -------------------------------------------------------------- |
@@ -307,6 +350,7 @@ Ein `SyncEvent` ist kein `PiH`. Es kann jedoch mehrere `PiH` erzeugen, wenn ein 
 | --------------------------- | ---------------------- | ------------- | ---------------:| ---------------:|
 | historisierbare `JCIEntity` | `CHANGED_BY`           | `ChangeEvent` | `0..n`          | `1`             |
 | `ChangeEvent`               | `TRIGGERS`             | `SyncEvent`   | `1..n`          | `1`             |
+| `SyncEvent`                 | `EXECUTES`             | `SYNC`        | `1`             | `0..n`          |
 | `SyncEvent`                 | `AFFECTS`              | `JCIEntity`   | `1..n`          | `0..n`          |
 | historisierbare `JCIEntity` | `HAS_HISTORICAL_STATE` | `PiH`         | `0..n`          | `1`             |
 | `SyncEvent`                 | `CREATES_HISTORY`      | `PiH`         | `0..n`          | `1`             |
@@ -731,6 +775,8 @@ Jana bleibt für den `PiF1o` accountable, obwohl Ernst und Anna den Task ausfüh
 
 `RoF` steht für **Roles and Functions** und beschreibt die organisatorische Handlungsfähigkeit im JCI-Modell. Es ordnet eigenständige Organisationen, ihre Beziehungen, Teams, Mitglieder, Rollen und die konkrete Aktivierung einer Rolle in einem Team.
 
+`RoF` ist eines der zehn fachlichen JCI-Kernelemente, wird aber nicht als eigener Knoten gespeichert. Der RoF-Modellraum wird vollständig durch `RoFOrg`, `RoFOrgRelationship`, `RoFTeam`, `RoFTeamMember`, `RoFRole`, `RoleAssignment` und ihre Beziehungen konkretisiert. Ein zusätzlicher `RoF`-Knoten würde dieselben Zusammenhänge nur redundant zusammenfassen.
+
 Eine `RoFOrg` ist immer eine eigenständig handlungsfähige Organisation. Mutterunternehmen, Tochterunternehmen und Partnerunternehmen werden daher jeweils als eigene `RoFOrg` modelliert. Ihre Stellung zueinander wird durch eine typisierte `RoFOrgRelationship` beschrieben.
 
 `RoF` beantwortet insbesondere:
@@ -868,7 +914,20 @@ Alle vier Unternehmen bleiben eigenständig handlungsfähig und behalten ihre je
 
 `ERoF` steht für **Environment of Roles or Functions** und bezeichnet den fachlichen Modellraum der relevanten Umwelt. Er umfasst die Systeme, Werkzeuge, Dokumente, Daten, Infrastrukturen, Standards, Regelwerke, Organisationsbeziehungen und weiteren Umweltbestandteile, mit denen Rollen bei ihrer Arbeit interagieren.
 
-`ERoF` ist die konzeptionelle Kategorie. Im Graphen werden konkrete Umweltbestandteile als `ERoFObject` gespeichert. Eine andere Organisation bleibt dagegen eine eigenständige `RoFOrg`. Ihre Bedeutung als relevante Umwelt entsteht durch eine `RoFOrgRelationship`; die Organisation wird nicht zusätzlich als `ERoFObject` gespeichert.
+`ERoF` ist eines der zehn fachlichen JCI-Kernelemente, wird aber nicht als eigener Knoten gespeichert. Der ERoF-Modellraum wird aus konkreten `ERoFObjects`, `RoFOrgRelationships` und ihrer Verwendung durch handelnde `RoleAssignments` abgeleitet. Eine andere Organisation bleibt eine eigenständige `RoFOrg`. Ihre Bedeutung als relevante Umwelt entsteht durch eine `RoFOrgRelationship`; die Organisation wird nicht zusätzlich als `ERoFObject` gespeichert.
+
+Beispiel:
+
+```text
+RoleAssignment: Anna als Developer
+  ├── USES ──► ERoFObject: Repository
+  └── USES ──► ERoFObject: API
+
+ERoF von Anna
+= Repository + API
+```
+
+Der ERoF-Modellraum ist damit fachlich vorhanden, ohne dass ein zusätzlicher `ERoF`-Knoten angelegt wird.
 
 Aus Sicht einer Mutterorganisation ist ihre Tochterorganisation über eine aktive `RoFOrgRelationship` mit `type = SUBSIDIARY` als Bestandteil der relevanten `ERoF` erkennbar. Die Zuordnung wird aus der Mutter als `SOURCE_ORG` und der Tochter als `TARGET_ORG` abgeleitet:
 
@@ -907,16 +966,16 @@ Wird ein `ERoFObject` oder seine Verwendung geändert, prüft `SYNC` die betroff
 
 ### 11.3 Objekte und Beziehungen
 
-| Objekt             | Bedeutung                                                     |
-| ------------------ | ------------------------------------------------------------- |
-| `ERoF`             | Fachlicher Modellraum der relevanten Umwelt.                  |
-| `ERoFObject`       | Konkret gespeichertes Umweltobjekt.                           |
-| `RoFOrgRelationship` | Umweltbezogene oder strukturelle Beziehung zwischen zwei eigenständigen Organisationen. |
-| `RoleAssignment`   | Aktive Rolle eines Mitglieds in einem Team.                   |
-| `Task`             | Tätigkeit, die ein Umweltobjekt unmittelbar verwenden kann.  |
-| `RoFTeamMember`    | Mitglied, dessen Umwelt über Rollenaktivierungen ableitbar ist.|
-| `RoFTeam`          | Team, dessen Umwelt aus seinen Mitgliedern abgeleitet wird.   |
-| `RoFOrg`           | Organisation, deren Umwelt aus ihren Teams abgeleitet wird.   |
+| Begriff oder Graphobjekt | Bedeutung                                                                           |
+| ------------------------ | ----------------------------------------------------------------------------------- |
+| `ERoF`                   | Fachlicher und abgeleiteter Modellraum ohne eigenen Knoten.                         |
+| `ERoFObject`             | Konkret gespeichertes Umweltobjekt.                                                  |
+| `RoFOrgRelationship`     | Umweltbezogene oder strukturelle Beziehung zwischen zwei eigenständigen Organisationen. |
+| `RoleAssignment`         | Aktive Rolle eines Mitglieds in einem Team.                                         |
+| `Task`                   | Tätigkeit, die ein Umweltobjekt unmittelbar verwenden kann.                        |
+| `RoFTeamMember`          | Mitglied, dessen Umwelt über Rollenaktivierungen ableitbar ist.                     |
+| `RoFTeam`                | Team, dessen Umwelt aus seinen Mitgliedern abgeleitet wird.                         |
+| `RoFOrg`                 | Organisation, deren Umwelt aus ihren Teams abgeleitet wird.                         |
 
 #### Gespeicherte Beziehungen
 
@@ -998,9 +1057,16 @@ Steht Annas `RoFOrg` in einer Partnerschaft mit einer anderen `RoFOrg`, gehört 
 
 ### 12.1 Bedeutung
 
-`SYNC` bezeichnet die querschnittliche Prozesslogik des JCI-Modells. Sie sorgt dafür, dass eine Änderung nicht isoliert bleibt, sondern entlang der gespeicherten Beziehungen auf ihre Auswirkungen geprüft wird.
+`SYNC` ist die gespeicherte und historisierbare Definition der Synchronisationslogik des JCI-Modells. Sie legt fest, wie eine Änderung erkannt, entlang der gespeicherten Beziehungen auf Auswirkungen geprüft und bei einer tatsächlichen Zustandsänderung historisiert wird.
 
-`SYNC` ist kein historischer Zustand und wird nicht selbst zu `PiH`. Ein konkreter Synchronisationslauf wird als `SyncEvent` dokumentiert. Wenn ein bestehender Zustand durch eine Änderung abgelöst wird, hält `SYNC` den bisherigen Zustand als eigenes `PiH` fest.
+Ein `SyncEvent` ist davon klar getrennt: Es dokumentiert einen konkreten Synchronisationslauf. Über `EXECUTES` verweist der Lauf auf genau die SYNC-Definition, die bei seiner Ausführung verwendet wurde.
+
+```text
+SYNC      = Welche Synchronisationslogik gilt?
+SyncEvent = Wann und mit welchem Ergebnis wurde sie ausgeführt?
+```
+
+`SYNC` ist kein historischer Zustand. Wird die gespeicherte SYNC-Definition geändert, hält der dafür ausgeführte Synchronisationslauf ihren bisherigen Zustand als eigenes `PiH` fest. Die bloße Ausführung eines `SyncEvent` verändert die SYNC-Definition dagegen nicht.
 
 ### 12.2 Entstehung
 
@@ -1008,16 +1074,18 @@ Ein Synchronisationslauf entsteht durch ein `ChangeEvent`:
 
 1. Eine Änderung an einer historisierbaren `JCIEntity` wird als `ChangeEvent` erfasst.
 2. Das `ChangeEvent` löst mindestens ein `SyncEvent` aus.
-3. `SYNC` ermittelt alle direkt und indirekt betroffenen Elemente und Beziehungen.
-4. `SYNC` prüft `RaN`, Kardinalitäten und weitere Modellbedingungen.
-5. `SYNC` unterscheidet zwischen lediglich betroffenen und tatsächlich zu ändernden Elementen.
-6. Vor jeder tatsächlichen Änderung hält `SYNC` den bisherigen Zustand als eigenes `PiH` fest.
-7. Zulässige Änderungen werden übernommen; Konflikte werden gemeldet.
-8. Das `SyncEvent` dokumentiert geprüfte Elemente, erzeugte `PiH`, Änderungen, Konflikte und das Ergebnis des Synchronisationslaufs.
+3. Das `SyncEvent` verweist über `EXECUTES` auf genau eine gespeicherte SYNC-Definition.
+4. Die verwendete `SYNC`-Definition ermittelt alle direkt und indirekt betroffenen Elemente und Beziehungen.
+5. Sie prüft `RaN`, Kardinalitäten und weitere Modellbedingungen.
+6. Sie unterscheidet zwischen lediglich betroffenen und tatsächlich zu ändernden Elementen.
+7. Vor jeder tatsächlichen Änderung hält der Synchronisationslauf den bisherigen Zustand als eigenes `PiH` fest.
+8. Zulässige Änderungen werden übernommen; Konflikte werden gemeldet.
+9. Das `SyncEvent` dokumentiert die verwendete SYNC-Definition, geprüfte Elemente, erzeugte `PiH`, Änderungen, Konflikte und das Ergebnis des Synchronisationslaufs.
 
 ```text
 JCIEntity ── CHANGED_BY ──► ChangeEvent ── TRIGGERS ──► SyncEvent
                                                           │
+                                                          ├── EXECUTES ──► SYNC
                                                           ├── AFFECTS ──► JCIEntity
                                                           └── CREATES_HISTORY ──► PiH
 ```
@@ -1026,8 +1094,9 @@ JCIEntity ── CHANGED_BY ──► ChangeEvent ── TRIGGERS ──► Sync
 
 | Objekt        | Bedeutung                                                    |
 | ------------- | ------------------------------------------------------------ |
+| `SYNC`        | Gespeicherte und historisierbare Definition der Synchronisationslogik. |
 | `ChangeEvent` | Dokumentiert Anlass, Art und Ausgangspunkt einer Änderung.  |
-| `SyncEvent`   | Dokumentiert einen konkreten Synchronisationslauf.          |
+| `SyncEvent`   | Dokumentiert einen konkreten Lauf einer SYNC-Definition.    |
 | `PiH`         | Bewahrt einen durch die Änderung abgelösten Zustand.        |
 | `RaN`         | Liefert Regeln, Normen und Grenzen für die Prüfung.          |
 | `JCIEntity`   | Kann Ausgangspunkt, betroffene oder geänderte Entität sein. |
@@ -1036,11 +1105,12 @@ JCIEntity ── CHANGED_BY ──► ChangeEvent ── TRIGGERS ──► Sync
 | --------------------------- | ------------------ | ------------- | ---------------:| ---------------:|
 | historisierbare `JCIEntity` | `CHANGED_BY`       | `ChangeEvent` | `0..n`          | `1`             |
 | `ChangeEvent`               | `TRIGGERS`         | `SyncEvent`   | `1..n`          | `1`             |
+| `SyncEvent`                 | `EXECUTES`         | `SYNC`        | `1`             | `0..n`          |
 | `SyncEvent`                 | `AFFECTS`          | `JCIEntity`   | `1..n`          | `0..n`          |
 | `SyncEvent`                 | `CREATES_HISTORY`  | `PiH`         | `0..n`          | `1`             |
 
 ```text
-SYNC prüft abhängig vom geänderten Element insbesondere:
+Die ausgeführte SYNC-Definition prüft abhängig vom geänderten Element insbesondere:
 
 CiV und PiF2 bis PiF1o
 RaN und geregelte Ziele
@@ -1054,15 +1124,17 @@ ERoFObject und seine personengebundenen Verwendungen
 
 1. Jedes `ChangeEvent` löst mindestens ein `SyncEvent` aus.
 2. Jedes `SyncEvent` gehört zu genau einem auslösenden `ChangeEvent`.
-3. Jedes `SyncEvent` benennt mindestens eine betroffene `JCIEntity`.
-4. Betroffenheit allein erzeugt kein `PiH`. Nur ein tatsächlich abgelöster Zustand wird historisiert.
-5. Ein `SyncEvent` kann kein, ein oder mehrere `PiH` erzeugen.
-6. Bei `ANGELEGT` entsteht kein `PiH` der neu angelegten `JCIEntity`, weil kein vorheriger Zustand existiert.
-7. `SYNC` prüft alle für die Änderung relevanten `RaN` und Modellbedingungen.
-8. Eindeutig ableitbare und zulässige Anpassungen können verarbeitet werden. Semantische Konflikte, widersprüchliche `RaN` oder nicht eindeutig entscheidbare Änderungen werden gemeldet und nicht stillschweigend aufgelöst.
-9. `SYNC` ist die Prozesslogik; `SyncEvent` ist die Dokumentation eines konkreten Laufs. Beide sind kein `PiH`. Wird die gespeicherte Definition von `SYNC` selbst geändert, wird ihr bisheriger Zustand wie bei jeder anderen historisierbaren `JCIEntity` als `PiH` festgehalten.
-10. Jeder durch `SYNC` erzeugte historische Zustand bleibt über `CREATES_HISTORY` mit genau einem `SyncEvent` und über `HAS_HISTORICAL_STATE` mit seiner ursprünglichen `JCIEntity` verbunden.
-11. Bei Änderungen einer `RoFOrgRelationship` prüft `SYNC` beide beteiligten `RoFOrg`, die Gültigkeit ihrer vertretenden `RoleAssignments`, relevante `RaN`, verbundene `ERoFObjects` und bei `SUBSIDIARY` die Zyklusfreiheit der Organisationsstruktur.
+3. Jedes `SyncEvent` führt über `EXECUTES` genau eine gespeicherte SYNC-Definition aus.
+4. Eine SYNC-Definition kann von keinem, einem oder mehreren `SyncEvents` ausgeführt werden.
+5. Jedes `SyncEvent` benennt mindestens eine betroffene `JCIEntity`.
+6. Betroffenheit allein erzeugt kein `PiH`. Nur ein tatsächlich abgelöster Zustand wird historisiert.
+7. Ein `SyncEvent` kann kein, ein oder mehrere `PiH` erzeugen.
+8. Bei `ANGELEGT` entsteht kein `PiH` der neu angelegten `JCIEntity`, weil kein vorheriger Zustand existiert.
+9. Die ausgeführte SYNC-Definition prüft alle für die Änderung relevanten `RaN` und Modellbedingungen.
+10. Eindeutig ableitbare und zulässige Anpassungen können verarbeitet werden. Semantische Konflikte, widersprüchliche `RaN` oder nicht eindeutig entscheidbare Änderungen werden gemeldet und nicht stillschweigend aufgelöst.
+11. `SYNC` ist die gespeicherte Prozessdefinition; `SyncEvent` ist die unveränderliche Dokumentation eines konkreten Laufs. Wird die SYNC-Definition selbst geändert, wird ihr bisheriger Zustand wie bei jeder anderen historisierbaren `JCIEntity` als `PiH` festgehalten.
+12. Jeder durch einen Synchronisationslauf erzeugte historische Zustand bleibt über `CREATES_HISTORY` mit genau einem `SyncEvent` und über `HAS_HISTORICAL_STATE` mit seiner ursprünglichen `JCIEntity` verbunden.
+13. Bei Änderungen einer `RoFOrgRelationship` prüft die ausgeführte SYNC-Definition beide beteiligten `RoFOrg`, die Gültigkeit ihrer vertretenden `RoleAssignments`, relevante `RaN`, verbundene `ERoFObjects` und bei `SUBSIDIARY` die Zyklusfreiheit der Organisationsstruktur.
 
 ### 12.5 Beispiel
 
@@ -1074,13 +1146,14 @@ PiF1o: Antwort innerhalb von 48 Stunden
                   └── CHANGED_BY ──► ChangeEvent
                                           │
                                           └── TRIGGERS ──► SyncEvent
+                                                               ├── EXECUTES ──► SYNC: JCI-Standardprozess 1.0
                                                                ├── AFFECTS ──► PiF1o
                                                                ├── AFFECTS ──► SuccessCriterion
                                                                ├── AFFECTS ──► Task
                                                                └── CREATES_HISTORY ──► PiH
 ```
 
-`SYNC` prüft den `PiF1o`, seine Erfolgskriterien, Tasks, Verantwortung, Rollenaktivierungen und verwendeten `ERoFObjects`. Der bisherige PiF1o-Zustand wird als `PiH` festgehalten. Abhängige Elemente erhalten nur dann ein eigenes `PiH`, wenn ihr Zustand tatsächlich geändert wird. Das `SyncEvent` dokumentiert alle Prüfungen, Änderungen und Konflikte.
+Das `SyncEvent` führt die SYNC-Definition `JCI-Standardprozess 1.0` aus. Diese prüft den `PiF1o`, seine Erfolgskriterien, Tasks, Verantwortung, Rollenaktivierungen und verwendeten `ERoFObjects`. Der bisherige PiF1o-Zustand wird als `PiH` festgehalten. Abhängige Elemente erhalten nur dann ein eigenes `PiH`, wenn ihr Zustand tatsächlich geändert wird. Das `SyncEvent` dokumentiert die verwendete Definition sowie alle Prüfungen, Änderungen und Konflikte.
 
 ---
 
@@ -1088,15 +1161,15 @@ PiF1o: Antwort innerhalb von 48 Stunden
 
 Der JUNACO Continuous Integration Loop verbindet Zweck, Zukunft, Verantwortung, Arbeit, Umwelt, Regeln, Prüfung und historische Entwicklung in einem gemeinsamen fachlichen Graphen.
 
-`JCIEntity` bildet den abstrakten Oberbegriff aller gespeicherten Instanzen. Dadurch können sowohl Instanzen der zehn Kernelemente als auch unterstützende Graphobjekte einheitlich verändert, durch `SYNC` geprüft und – sofern sie historisierbar sind – als `PiH` festgehalten werden. `PiH`, `ChangeEvent` und `SyncEvent` bleiben unveränderlich und werden nicht erneut historisiert.
+`JCIEntity` bildet den abstrakten Oberbegriff aller gespeicherten Instanzen. Acht der zehn Kernelemente besitzen eigene gespeicherte `JCIElementInstances`. `RoF` und `ERoF` bleiben fachliche Modellräume ohne eigenen Knoten und werden durch ihre konkreten Graphobjekte und Beziehungen sichtbar. `PiH`, `ChangeEvent` und `SyncEvent` bleiben unveränderlich und werden nicht erneut historisiert.
 
 `CiV` begründet, warum eine Zukunft gewollt ist. `PiF2` bis `PiF1o` beschreiben diese Zukunft auf langfristiger, strategischer, taktischer und operativer Ebene. Die gespeicherten `CONTRIBUTES_TO`-Beziehungen führen dabei vom konkreteren zum übergeordneten Zukunftszustand und erlauben einen gerichteten `n:m`-Graphen.
 
 Ein `PiF1o` beschreibt einen erreichbaren operativen Zustand. Er besitzt Erfolgskriterien und genau ein verantwortliches `RoFTeamMember`. Die daraus abgeleiteten Tasks werden über teambezogene `RoleAssignments` ausgeführt, verwenden konkrete `ERoFObjects` und können `Results` erzeugen. `Verifications` bewerten diese Ergebnisse gegen die festgelegten Erfolgskriterien.
 
-`RoF` stellt den Organisations-, Team-, Mitglieder- und Rollenkontext bereit. Mutter-, Tochter- und Partnerunternehmen bleiben jeweils eigenständige `RoFOrg`; ihre Stellung zueinander wird durch eine personengebundene `RoFOrgRelationship` beschrieben. `SUBSIDIARY` kann rekursive, aber zyklusfreie Mutter-Tochter-Strukturen bilden. `PARTNERSHIP` verbindet unabhängige Organisationen und gehört zur ERoF-Perspektive beider Seiten. `ERoF` beschreibt darüber hinaus die relevante Umwelt, wobei konkrete Umweltinteraktionen immer über handelnde Rollenaktivierungen nachvollziehbar bleiben. `RaN` wirkt als regelnder Querschnitt auf die jeweils geregelten Zukunfts-, Arbeits-, Organisations-, Rollen- und Umweltbereiche.
+Der RoF-Modellraum stellt den Organisations-, Team-, Mitglieder- und Rollenkontext bereit. Mutter-, Tochter- und Partnerunternehmen bleiben jeweils eigenständige `RoFOrg`; ihre Stellung zueinander wird durch eine personengebundene `RoFOrgRelationship` beschrieben. `SUBSIDIARY` kann rekursive, aber zyklusfreie Mutter-Tochter-Strukturen bilden. `PARTNERSHIP` verbindet unabhängige Organisationen und gehört zur ERoF-Perspektive beider Seiten. Der ERoF-Modellraum beschreibt darüber hinaus die relevante Umwelt, wobei konkrete Umweltinteraktionen immer über handelnde Rollenaktivierungen nachvollziehbar bleiben. `RaN` wirkt als regelnder Querschnitt auf die jeweils geregelten Zukunfts-, Arbeits-, Organisations-, Rollen- und Umweltbereiche.
 
-`SYNC` verarbeitet Änderungen entlang der relevanten Beziehungen. Das auslösende `ChangeEvent` führt zu mindestens einem dokumentierten `SyncEvent`. Nur wenn ein vorhandener Zustand tatsächlich abgelöst wird, hält `SYNC` diesen bisherigen Zustand als eigenes `PiH` fest. Betroffenheit allein erzeugt keinen historischen Zustand; Konflikte werden gemeldet und nicht stillschweigend aufgelöst.
+`SYNC` ist die gespeicherte Definition der Synchronisationslogik. Das auslösende `ChangeEvent` führt zu mindestens einem dokumentierten `SyncEvent`, das über `EXECUTES` auf die verwendete SYNC-Definition verweist. Nur wenn ein vorhandener Zustand tatsächlich abgelöst wird, hält der Synchronisationslauf diesen bisherigen Zustand als eigenes `PiH` fest. Betroffenheit allein erzeugt keinen historischen Zustand; Konflikte werden gemeldet und nicht stillschweigend aufgelöst.
 
 ```text
 PiH ── PROVIDES_CONTEXT_TO ──► CiV ── INSCRIBES_PURPOSE_IN ──► PiF2
@@ -1115,6 +1188,7 @@ RaN ── GOVERNS ──► relevante Ziele
 RoFOrg ◄── SOURCE_ORG ── RoFOrgRelationship ── TARGET_ORG ──► RoFOrg
                               └── REPRESENTED_BY ──► RoleAssignment
 ChangeEvent ── TRIGGERS ──► SyncEvent ── AFFECTS ──► JCIEntity
+                                      ├── EXECUTES ──► SYNC
                                       └── CREATES_HISTORY ──► PiH
 ```
 
