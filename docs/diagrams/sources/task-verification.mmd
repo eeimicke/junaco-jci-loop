@@ -1,9 +1,10 @@
 flowchart LR
     PiF1o -->|DECOMPOSES_INTO| Task
     Task -->|EXECUTED_BY| Assignment[RoleAssignment]
-    Task -->|PRODUCES| Result
-    Verification -->|EVALUATES| Result
+    Task -->|PRODUCES| Result[Result revision n]
+    Verification[Verification binds Result revision n and criterion revision m] -->|EVALUATES| Result
     Verification -->|USES_EVIDENCE| Evidence
-    Verification -->|CHECKS| Criterion[SuccessCriterion]
+    Verification -->|CHECKS| Criterion[SuccessCriterion revision m]
     PiF1o -->|HAS_SUCCESS_CRITERIA| Criterion
+    Verification -. applicable only if not superseded and both revisions are current .-> Applicable{applicable?}
 

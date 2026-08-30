@@ -2,7 +2,7 @@
 
 ## Status and purpose
 
-This document concretizes the technical mapping of the JCI model in Neo4j. It implements [JCI_CONTEXT.md](../../JCI_CONTEXT.md), [JCI_ONTOLOGY.md](../../JCI_ONTOLOGY.md), [JCI_GRAPH_RULES.md](../../JCI_GRAPH_RULES.md) and [JCI_SYNC_SPEC.md](../../JCI_SYNC_SPEC.md). In the event of a conflict, the technical specification applies; the schema must not change their semantics.
+This document specifies the technical mapping of the JCI model to Neo4j. It implements [JCI_CONTEXT.md](../../JCI_CONTEXT.md), [JCI_ONTOLOGY.md](../../JCI_ONTOLOGY.md), [JCI_GRAPH_RULES.md](../../JCI_GRAPH_RULES.md), and [JCI_SYNC_SPEC.md](../../JCI_SYNC_SPEC.md). In the event of a conflict, the domain specification applies; this schema must not change its semantics.
 
 ## Common label and property strategy
 
@@ -50,7 +50,33 @@ Neo4j properties do not store nested JSON objects. The canonical structures from
 | `HistoricalCorrection.previousValue`  | `previousValueJson`    |
 | `HistoricalCorrection.correctedValue` | `correctedValueJson`   |
 
-The JSON strings use UTF-8, lexicographically sorted object keys, and the canonical data type rules from Section 2.2.7. `PiH.contentHash` is calculated from the technical structures before this Neo4j projection.
+The JSON strings use UTF-8, lexicographically sorted object keys, and the canonical data type rules from section 2.2.7. `PiH.contentHash` is calculated from the domain structures before this Neo4j projection.
+
+### Technical required fields for change, verification, and correction
+
+The following fields specify how the already defined domain processes are stored. Every listed node additionally carries the `JCIEntity` label and its abstract and concrete type labels.
+
+| Node | Property | Meaning |
+| ---- | -------- | ------- |
+| `ChangeEvent` | `idempotencyKey` | immutable, graph-wide unique identifier of the domain change request |
+| `ChangeEvent` | `targetEntityId` | UUID of the requested target entity, even if a `CREATED` attempt fails before creation |
+| `ChangeEvent` | `targetEntityType` | concrete type of the requested target entity |
+| `ChangeEvent` | `requestedRevision` | expected positive source revision; absent for `CREATED` |
+| `SyncEvent` | `runId` | immutable, graph-wide unique identifier of the completed technical run |
+| `RoleAssignment` | `bootstrapKey` | value `ROOT`, set exclusively on the initial root assignment |
+| `Verification` | `evaluatedResultRevision` | exact revision of the `Result` connected through `EVALUATES` that was evaluated |
+| `Verification` | `checkedCriterionRevision` | exact revision of the `SuccessCriterion` connected through `CHECKS` that was checked |
+| `HistoricalCorrection` | `baseHistoryViewHash` | SHA-256 of the effective historical view reread before correction |
+
+Neo4j does not store `null` as a property. `requestedRevision` is therefore absent exactly when `changeType = 'CREATED'`. For every other change type, the property must exist and be a positive integer.
+
+A historical correction request additionally uses the canonical relationship:
+
+```text
+(:ChangeEvent)-[:TARGETS_HISTORY]->(:PiH)
+```
+
+It identifies the immutable `PiH` addressed by the request. It replaces neither `CHANGED_BY` nor `CORRECTS`: a `PiH` never receives `CHANGED_BY`; the `HistoricalCorrection` created only after successful validation still points through `CORRECTS` to the same `PiH`.
 
 ## Labels and properties for tasks
 
@@ -98,6 +124,75 @@ FOR (t:Task) REQUIRE t.revision IS NOT NULL;
 CREATE INDEX task_kind_index IF NOT EXISTS FOR (t:Task) ON (t.taskKind);
 CREATE INDEX task_status_index IF NOT EXISTS FOR (t:Task) ON (t.status);
 
+CREATE CONSTRAINT change_event_idempotency_key_exists IF NOT EXISTS
+FOR (e:ChangeEvent) REQUIRE e.idempotencyKey IS NOT NULL;
+
+CREATE CONSTRAINT change_event_idempotency_key_unique IF NOT EXISTS
+FOR (e:ChangeEvent) REQUIRE e.idempotencyKey IS UNIQUE;
+
+CREATE CONSTRAINT change_event_idempotency_key_type IF NOT EXISTS
+FOR (e:ChangeEvent) REQUIRE e.idempotencyKey IS :: STRING;
+
+CREATE CONSTRAINT change_event_target_entity_id_exists IF NOT EXISTS
+FOR (e:ChangeEvent) REQUIRE e.targetEntityId IS NOT NULL;
+
+CREATE CONSTRAINT change_event_target_entity_type_exists IF NOT EXISTS
+FOR (e:ChangeEvent) REQUIRE e.targetEntityType IS NOT NULL;
+
+CREATE CONSTRAINT change_event_target_entity_id_type IF NOT EXISTS
+FOR (e:ChangeEvent) REQUIRE e.targetEntityId IS :: STRING;
+
+CREATE CONSTRAINT change_event_target_entity_type_type IF NOT EXISTS
+FOR (e:ChangeEvent) REQUIRE e.targetEntityType IS :: STRING;
+
+CREATE CONSTRAINT change_event_requested_revision_type IF NOT EXISTS
+FOR (e:ChangeEvent) REQUIRE e.requestedRevision IS :: INTEGER;
+
+CREATE INDEX change_event_target_index IF NOT EXISTS
+FOR (e:ChangeEvent) ON (e.targetEntityId, e.targetEntityType);
+
+CREATE CONSTRAINT sync_event_run_id_exists IF NOT EXISTS
+FOR (e:SyncEvent) REQUIRE e.runId IS NOT NULL;
+
+CREATE CONSTRAINT sync_event_run_id_unique IF NOT EXISTS
+FOR (e:SyncEvent) REQUIRE e.runId IS UNIQUE;
+
+CREATE CONSTRAINT sync_event_run_id_type IF NOT EXISTS
+FOR (e:SyncEvent) REQUIRE e.runId IS :: STRING;
+
+CREATE CONSTRAINT role_assignment_bootstrap_key_unique IF NOT EXISTS
+FOR (a:RoleAssignment) REQUIRE a.bootstrapKey IS UNIQUE;
+
+CREATE CONSTRAINT role_assignment_bootstrap_key_type IF NOT EXISTS
+FOR (a:RoleAssignment) REQUIRE a.bootstrapKey IS :: STRING;
+
+CREATE CONSTRAINT verification_result_revision_exists IF NOT EXISTS
+FOR (v:Verification) REQUIRE v.evaluatedResultRevision IS NOT NULL;
+
+CREATE CONSTRAINT verification_result_revision_type IF NOT EXISTS
+FOR (v:Verification) REQUIRE v.evaluatedResultRevision IS :: INTEGER;
+
+CREATE CONSTRAINT verification_criterion_revision_exists IF NOT EXISTS
+FOR (v:Verification) REQUIRE v.checkedCriterionRevision IS NOT NULL;
+
+CREATE CONSTRAINT verification_criterion_revision_type IF NOT EXISTS
+FOR (v:Verification) REQUIRE v.checkedCriterionRevision IS :: INTEGER;
+
+CREATE CONSTRAINT historical_correction_base_view_hash_exists IF NOT EXISTS
+FOR (c:HistoricalCorrection) REQUIRE c.baseHistoryViewHash IS NOT NULL;
+
+CREATE CONSTRAINT historical_correction_base_view_hash_type IF NOT EXISTS
+FOR (c:HistoricalCorrection) REQUIRE c.baseHistoryViewHash IS :: STRING;
+
+CREATE CONSTRAINT historical_correction_fields_exists IF NOT EXISTS
+FOR (c:HistoricalCorrection) REQUIRE c.correctedFields IS NOT NULL;
+
+CREATE CONSTRAINT historical_correction_fields_type IF NOT EXISTS
+FOR (c:HistoricalCorrection) REQUIRE c.correctedFields IS :: LIST<STRING NOT NULL>;
+
+CREATE CONSTRAINT pih_origin_revision_unique IF NOT EXISTS
+FOR (h:PiH) REQUIRE (h.originalEntityId, h.originalRevision) IS UNIQUE;
+
 CREATE CONSTRAINT sync_event_started_at_exists IF NOT EXISTS
 FOR (e:SyncEvent) REQUIRE e.startedAt IS NOT NULL;
 
@@ -122,6 +217,63 @@ FOR (e:SyncEvent) REQUIRE e.correctionCount IS NOT NULL;
 CREATE CONSTRAINT sync_event_conflict_count_exists IF NOT EXISTS
 FOR (e:SyncEvent) REQUIRE e.conflictCount IS NOT NULL;
 ```
+
+## Atomic bootstrap of an empty graph
+
+The bootstrap is the only creation that cannot use an existing `RoleAssignment` and a previously active SYNC definition. It is permitted only while no node with the `JCIEntity` label exists. One transaction creates the minimal organization, one technical member, its role, the root assignment, and exactly one initial active SYNC definition. The root assignment is permanently identified by `bootstrapKey = 'ROOT'` and remains the only active `JCIEntity` without `CREATED_BY`.
+
+The following parameterized query is an executable bootstrap example. It returns exactly one row when it writes. If it returns no row, the graph was not empty; the calling deployment step must treat this as an error and must not attempt a second bootstrap.
+
+```cypher
+MATCH (existing:JCIEntity)
+WITH count(existing) AS existingCount
+WHERE existingCount = 0
+WITH datetime() AS now
+CREATE (org:JCIEntity:GraphObject:RoFOrg {
+  id: randomUUID(), entityType: 'RoFOrg', name: $organizationName,
+  legalName: $organizationName, orgType: 'COMPANY', status: 'ACTIVE',
+  revision: 1, createdAt: now, updatedAt: now
+})
+CREATE (team:JCIEntity:GraphObject:RoFTeam {
+  id: randomUUID(), entityType: 'RoFTeam', name: 'JCI Bootstrap',
+  teamType: 'SERVICE', validFrom: now, status: 'ACTIVE',
+  revision: 1, createdAt: now, updatedAt: now
+})
+CREATE (member:JCIEntity:GraphObject:RoFTeamMember {
+  id: randomUUID(), entityType: 'RoFTeamMember', name: 'JCI System',
+  displayName: 'JCI System', memberType: 'TECHNICAL', status: 'ACTIVE',
+  revision: 1, createdAt: now, updatedAt: now
+})
+CREATE (role:JCIEntity:GraphObject:RoFRole {
+  id: randomUUID(), entityType: 'RoFRole', name: 'JCI Bootstrap Administrator',
+  roleName: 'JCI Bootstrap Administrator',
+  responsibility: 'One-time initialization of the JCI graph', status: 'ACTIVE',
+  revision: 1, createdAt: now, updatedAt: now
+})
+CREATE (root:JCIEntity:GraphObject:RoleAssignment {
+  id: randomUUID(), entityType: 'RoleAssignment', name: 'JCI Root Assignment',
+  bootstrapKey: 'ROOT', validFrom: now, status: 'ACTIVE',
+  revision: 1, createdAt: now, updatedAt: now
+})
+CREATE (definition:JCIEntity:JCIElementInstance:SYNC {
+  id: randomUUID(), entityType: 'SYNC', name: 'Initial JCI SYNC definition',
+  version: $syncVersion, definitionJson: $definitionJson,
+  validFrom: now, status: 'ACTIVE', revision: 1,
+  createdAt: now, updatedAt: now
+})
+CREATE (org)-[:HAS_TEAM]->(team)
+CREATE (team)-[:HAS_MEMBER {validFrom: now}]->(member)
+CREATE (member)-[:HAS_ROLE {validFrom: now}]->(role)
+CREATE (member)-[:HAS_ASSIGNMENT]->(root)
+CREATE (root)-[:IN_TEAM]->(team)
+CREATE (root)-[:ACTIVATES_ROLE]->(role)
+FOREACH (created IN [org, team, member, role, definition] |
+  CREATE (created)-[:CREATED_BY]->(root)
+)
+RETURN root.id AS rootRoleAssignmentId, definition.id AS initialSyncDefinitionId;
+```
+
+The precondition and every `CREATE` statement must run in the same Neo4j transaction. After commit, the existing root together with the empty-graph check prevents another bootstrap. Every later entity, including a new SYNC definition, is created exclusively through the regular `ChangeEvent`/`SyncEvent` process.
 
 Neo4j constraints do not fully enforce enum values, cardinalities, and graph-wide cycle rules. These rules are checked by `SYNC` before writing and by validation queries after writing.
 
@@ -307,6 +459,306 @@ WHERE e.revision IS NULL OR e.revision < 1
 RETURN e.id AS entityId, e.entityType, e.revision, e.status;
 ```
 
+### Closed bootstrap and creation responsibility
+
+An initialized graph has exactly one root assignment with `bootstrapKey = 'ROOT'` and at least one active SYNC definition. No other `bootstrapKey` value is permitted. The following query finds a missing, duplicate, or incomplete bootstrap:
+
+```cypher
+MATCH (entity:JCIEntity)
+WITH count(entity) AS entityCount,
+     COUNT {
+       MATCH (:JCIEntity:GraphObject:RoleAssignment {bootstrapKey: 'ROOT'})
+     } AS rootCount,
+     COUNT {
+       MATCH (:JCIEntity:JCIElementInstance:SYNC {status: 'ACTIVE'})
+     } AS activeDefinitionCount,
+     COUNT {
+       MATCH (assignment:JCIEntity:GraphObject:RoleAssignment)
+       WHERE assignment.bootstrapKey IS NOT NULL
+          AND assignment.bootstrapKey <> 'ROOT'
+     } AS invalidBootstrapKeyCount
+WHERE entityCount > 0
+  AND (rootCount <> 1 OR activeDefinitionCount < 1 OR invalidBootstrapKeyCount > 0)
+RETURN entityCount, rootCount, activeDefinitionCount, invalidBootstrapKeyCount;
+```
+
+The root assignment is the only permitted exception to `CREATED_BY`. Every other domain or documentation node must have exactly one creating actor after the atomic bootstrap:
+
+```cypher
+MATCH (entity:JCIEntity)
+OPTIONAL MATCH (entity)-[:CREATED_BY]->(actor:JCIEntity:GraphObject:RoleAssignment)
+WITH entity, count(DISTINCT actor) AS actorCount,
+     ('RoleAssignment' IN labels(entity) AND entity.bootstrapKey = 'ROOT') AS isRoot
+WHERE actorCount > 1
+   OR (isRoot AND actorCount <> 0)
+   OR (NOT isRoot AND entity.status <> 'DRAFT' AND actorCount <> 1)
+RETURN entity.id AS entityId, entity.entityType, isRoot, actorCount;
+```
+
+An imported node in `DRAFT` may temporarily have no creating actor; more than one `CREATED_BY` edge is prohibited even there. Exactly one creating actor must exist before activation or completion.
+
+**Short example:** During the first deployment, the bootstrap transaction creates the `JCI Root Assignment` and the initial SYNC definition together. The very next regularly created domain node requires `CREATED_BY`; a second assignment with `bootstrapKey = 'ROOT'` fails the uniqueness constraint.
+
+### ChangeEvent target, revision, and lifecycle
+
+The target properties on `ChangeEvent` remain available even when an attempt fails before a node is created. `HISTORICAL_CORRECTION` may target only a `PiH` at revision `1`. Every other change type may target only historizable types.
+
+```cypher
+MATCH (change:JCIEntity:GraphObject:ChangeEvent)
+WITH change,
+     ['CiV','RaN','SYNC','PiF2','PiF1s','PiF1t','PiF1o',
+      'RoFOrg','RoFOrgRelationship','RoFTeam','RoFTeamMember','RoFRole',
+      'RoleAssignment','Task','SuccessCriterion','Result','Verification',
+      'Evidence','ERoFObject','RaNConflict'] AS mutableTargetTypes,
+     ['CREATED','CHANGED','ACHIEVED','COMPLETED','REPLACED',
+      'REVOKED','RESOLVED','HISTORICAL_CORRECTION'] AS changeTypes
+WHERE change.changeType IS NULL OR NOT change.changeType IN changeTypes
+   OR change.idempotencyKey IS NULL
+   OR valueType(change.idempotencyKey) <> 'STRING NOT NULL'
+   OR trim(toString(change.idempotencyKey)) = ''
+   OR change.targetEntityId IS NULL
+   OR valueType(change.targetEntityId) <> 'STRING NOT NULL'
+   OR NOT (toLower(toString(change.targetEntityId)) =~
+      '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+   OR change.targetEntityType IS NULL
+   OR valueType(change.targetEntityType) <> 'STRING NOT NULL'
+   OR (change.requestedRevision IS NOT NULL
+       AND valueType(change.requestedRevision) <> 'INTEGER NOT NULL')
+   OR (change.changeType = 'CREATED' AND change.requestedRevision IS NOT NULL)
+   OR (change.changeType <> 'CREATED'
+       AND (change.requestedRevision IS NULL
+            OR toIntegerOrNull(change.requestedRevision) < 1))
+   OR (change.changeType = 'HISTORICAL_CORRECTION'
+       AND (change.targetEntityType <> 'PiH' OR change.requestedRevision <> 1))
+   OR (change.changeType <> 'HISTORICAL_CORRECTION'
+       AND NOT change.targetEntityType IN mutableTargetTypes)
+RETURN change.id AS changeEventId, change.changeType, change.targetEntityId,
+       change.targetEntityType, change.requestedRevision;
+```
+
+`CHANGED_BY` depends on the request type and outcome. A normal request has exactly one matching source entity. An unfinished or unsuccessful `CREATED` request has none; after exactly one successful run, the newly created entity points to it. A historical correction has exactly one `TARGETS_HISTORY` instead of `CHANGED_BY`.
+
+```cypher
+MATCH (change:JCIEntity:GraphObject:ChangeEvent)
+WITH change,
+     COUNT {
+       MATCH (source:JCIEntity)-[:CHANGED_BY]->(change)
+     } AS sourceCount,
+     COUNT {
+       MATCH (source:JCIEntity)-[:CHANGED_BY]->(change)
+       WHERE source.id = change.targetEntityId
+         AND source.entityType = change.targetEntityType
+     } AS matchingSourceCount,
+     COUNT {
+       MATCH (change)-[:TARGETS_HISTORY]->(history:JCIEntity:PiH)
+     } AS historyTargetCount,
+     COUNT {
+       MATCH (change)-[:TARGETS_HISTORY]->(history:JCIEntity:PiH)
+       WHERE history.id = change.targetEntityId
+         AND history.entityType = change.targetEntityType
+         AND history.revision = change.requestedRevision
+     } AS matchingHistoryTargetCount,
+     COUNT {
+       MATCH (change)-[:TRIGGERS]->(:JCIEntity:GraphObject:SyncEvent)
+     } AS completedRunCount,
+     COUNT {
+       MATCH (change)-[:TRIGGERS]->(:JCIEntity:GraphObject:SyncEvent {outcome: 'SUCCESS'})
+     } AS successfulRunCount
+WHERE (change.changeType = 'CREATED' AND
+       (historyTargetCount <> 0 OR successfulRunCount > 1
+        OR (successfulRunCount = 0 AND sourceCount <> 0)
+        OR (successfulRunCount = 1 AND
+            (sourceCount <> 1 OR matchingSourceCount <> 1))))
+   OR (change.changeType = 'HISTORICAL_CORRECTION' AND
+       (sourceCount <> 0 OR historyTargetCount <> 1
+        OR matchingHistoryTargetCount <> 1))
+   OR (NOT change.changeType IN ['CREATED','HISTORICAL_CORRECTION'] AND
+       (sourceCount <> 1 OR matchingSourceCount <> 1 OR historyTargetCount <> 0))
+RETURN change.id AS changeEventId, change.changeType,
+       sourceCount, matchingSourceCount, historyTargetCount,
+       matchingHistoryTargetCount, completedRunCount, successfulRunCount;
+```
+
+```cypher
+MATCH (source)-[relationship:TARGETS_HISTORY]->(target)
+WHERE NOT ('JCIEntity' IN labels(source)) OR NOT ('GraphObject' IN labels(source))
+   OR NOT ('ChangeEvent' IN labels(source))
+   OR NOT ('JCIEntity' IN labels(target)) OR NOT ('PiH' IN labels(target))
+RETURN elementId(relationship) AS relationshipId,
+       labels(source) AS sourceLabels, labels(target) AS targetLabels;
+```
+
+```cypher
+MATCH (source)-[relationship:TRIGGERS]->(target)
+WHERE NOT ('JCIEntity' IN labels(source)) OR NOT ('GraphObject' IN labels(source))
+   OR NOT ('ChangeEvent' IN labels(source))
+   OR NOT ('JCIEntity' IN labels(target)) OR NOT ('GraphObject' IN labels(target))
+   OR NOT ('SyncEvent' IN labels(target))
+RETURN elementId(relationship) AS relationshipId,
+       labels(source) AS sourceLabels, labels(target) AS targetLabels;
+```
+
+Parallel duplicate edges must not bypass a cardinality check through `DISTINCT` on the target node:
+
+```cypher
+MATCH (source:JCIEntity)-[relationship]->(target:JCIEntity)
+WHERE type(relationship) IN [
+  'CREATED_BY','REQUESTED_BY','CORRECTED_BY','CHANGED_BY',
+  'TARGETS_HISTORY','TRIGGERS','EXECUTES','AFFECTS',
+  'HAS_HISTORICAL_STATE','CREATES_HISTORY','CREATES_CORRECTION',
+  'CORRECTS','CAUSED_BY','SUPERSEDES'
+]
+WITH source, type(relationship) AS relationshipType, target,
+     count(relationship) AS relationshipCount
+WHERE relationshipCount > 1
+RETURN source.id AS sourceId, relationshipType,
+       target.id AS targetId, relationshipCount;
+```
+
+For a normal change, the target can already be resolved at acceptance and must therefore be named through `AFFECTS` by every completed run. For `CREATED`, this is mandatory for the successful run; an earlier failed attempt may remain documented without a target reference:
+
+```cypher
+MATCH (target:JCIEntity)-[:CHANGED_BY]->(change:JCIEntity:GraphObject:ChangeEvent)
+MATCH (change)-[:TRIGGERS]->(event:JCIEntity:GraphObject:SyncEvent)
+WHERE (change.changeType <> 'CREATED' OR event.outcome = 'SUCCESS')
+  AND NOT EXISTS { MATCH (event)-[:AFFECTS]->(target) }
+RETURN change.id AS changeEventId, event.id AS syncEventId, target.id AS missingAffectedId;
+```
+
+```cypher
+MATCH (change:JCIEntity:GraphObject:ChangeEvent)-[:TARGETS_HISTORY]->(history:JCIEntity:PiH)
+MATCH (change)-[:TRIGGERS]->(event:JCIEntity:GraphObject:SyncEvent)
+WHERE NOT EXISTS { MATCH (event)-[:AFFECTS]->(history) }
+RETURN change.id AS changeEventId, event.id AS syncEventId, history.id AS missingAffectedId;
+```
+
+Zero completed runs is a permitted **pending** state. Every completed technical run is appended exactly once as a new immutable `SyncEvent`. Graph-wide uniqueness of `runId`, `revision = 1`, `status = 'RECORDED'`, and `updatedAt = createdAt` protects the stored result. Whether every terminal `SyncRun` outside the graph already has an event must additionally be checked by technical run/outbox reconciliation; this fact cannot be derived from Neo4j alone.
+
+Regardless of the number of completed attempts, a domain change request may be committed successfully at most once:
+
+```cypher
+MATCH (change:JCIEntity:GraphObject:ChangeEvent)
+WITH change, COUNT {
+  MATCH (change)-[:TRIGGERS]
+        ->(:JCIEntity:GraphObject:SyncEvent {outcome: 'SUCCESS'})
+} AS successfulRunCount
+WHERE successfulRunCount > 1
+RETURN change.id AS changeEventId, successfulRunCount;
+```
+
+An unsuccessful run must create neither a historical state nor a historical correction:
+
+```cypher
+MATCH (change:JCIEntity:GraphObject:ChangeEvent)-[:TRIGGERS]
+      ->(event:JCIEntity:GraphObject:SyncEvent)
+WITH change, event,
+     COUNT {
+       MATCH (event)-[:CREATES_HISTORY]->(:JCIEntity:PiH)
+     } AS historyCount,
+     COUNT {
+       MATCH (event)-[:CREATES_CORRECTION]
+             ->(:JCIEntity:GraphObject:HistoricalCorrection)
+     } AS correctionCount
+WHERE event.outcome IN ['FAILED','CONFLICT']
+  AND (historyCount <> 0 OR correctionCount <> 0)
+RETURN change.id AS changeEventId, event.id AS syncEventId,
+       event.outcome, historyCount, correctionCount;
+```
+
+A successful normal change request creates exactly the `PiH` of the requested source revision for its existing target entity. Additional domain entities that actually change may receive their own additional `PiH` nodes:
+
+```cypher
+MATCH (target:JCIEntity)-[:CHANGED_BY]
+      ->(change:JCIEntity:GraphObject:ChangeEvent)-[:TRIGGERS]
+      ->(event:JCIEntity:GraphObject:SyncEvent {outcome: 'SUCCESS'})
+WHERE NOT change.changeType IN ['CREATED','HISTORICAL_CORRECTION']
+WITH target, change, event, COUNT {
+  MATCH (event)-[:CREATES_HISTORY]->(history:JCIEntity:PiH)
+  WHERE history.originalEntityId = target.id
+    AND history.originalEntityType = target.entityType
+    AND history.originalRevision = change.requestedRevision
+} AS targetHistoryCount
+WHERE targetHistoryCount <> 1
+RETURN change.id AS changeEventId, event.id AS syncEventId,
+       target.id AS targetEntityId, change.requestedRevision,
+       targetHistoryCount;
+```
+
+A successful historical correction request creates exactly one correction whose `CORRECTS` and `CAUSED_BY` paths lead back to the same `PiH` and the same `ChangeEvent`:
+
+```cypher
+MATCH (change:JCIEntity:GraphObject:ChangeEvent {changeType: 'HISTORICAL_CORRECTION'})
+      -[:TARGETS_HISTORY]->(history:JCIEntity:PiH)
+MATCH (change)-[:TRIGGERS]
+      ->(event:JCIEntity:GraphObject:SyncEvent {outcome: 'SUCCESS'})
+WITH change, history, event,
+     COUNT {
+       MATCH (event)-[:CREATES_CORRECTION]
+             ->(:JCIEntity:GraphObject:HistoricalCorrection)
+     } AS totalCorrectionCount,
+     COUNT {
+       MATCH (event)-[:CREATES_CORRECTION]
+             ->(correction:JCIEntity:GraphObject:HistoricalCorrection)
+             -[:CORRECTS]->(history)
+       MATCH (correction)-[:CAUSED_BY]->(change)
+     } AS matchingCorrectionCount
+WHERE totalCorrectionCount <> 1 OR matchingCorrectionCount <> 1
+RETURN change.id AS changeEventId, event.id AS syncEventId,
+       history.id AS historyId, totalCorrectionCount, matchingCorrectionCount;
+```
+
+A successful `CREATED` run must atomically create the new entity at revision `1`, name it through `AFFECTS`, and create no `PiH` for that new identity:
+
+```cypher
+MATCH (change:JCIEntity:GraphObject:ChangeEvent {changeType: 'CREATED'})
+WITH change,
+     COUNT {
+       MATCH (change)-[:TRIGGERS]->(event:JCIEntity:GraphObject:SyncEvent {outcome: 'SUCCESS'})
+     } AS successCount,
+     COUNT {
+       MATCH (change)-[:TRIGGERS]->(event:JCIEntity:GraphObject:SyncEvent {outcome: 'SUCCESS'})
+             -[:AFFECTS]->(target:JCIEntity)
+       WHERE target.id = change.targetEntityId
+         AND target.entityType = change.targetEntityType
+         AND target.createdAt >= event.startedAt
+         AND target.createdAt <= event.completedAt
+      } AS atomicTargetCount,
+     COUNT {
+       MATCH (change)-[:TRIGGERS]->(event:JCIEntity:GraphObject:SyncEvent {outcome: 'SUCCESS'})
+             -[:AFFECTS]->(target:JCIEntity)
+       WHERE target.id = change.targetEntityId
+         AND target.entityType = change.targetEntityType
+         AND EXISTS {
+           MATCH (target)-[:CREATED_BY]
+                 ->(:JCIEntity:GraphObject:RoleAssignment)
+         }
+         AND (target.revision = 1 OR EXISTS {
+           MATCH (target)-[:HAS_HISTORICAL_STATE]->(initialHistory:JCIEntity:PiH)
+           WHERE initialHistory.originalEntityId = target.id
+             AND initialHistory.originalEntityType = target.entityType
+             AND initialHistory.originalRevision = 1
+         })
+     } AS attributableInitialRevisionCount,
+     COUNT {
+       MATCH (change)-[:TRIGGERS]->(event:JCIEntity:GraphObject:SyncEvent {outcome: 'SUCCESS'})
+             -[:CREATES_HISTORY]->(history:JCIEntity:PiH)
+       WHERE history.originalEntityId = change.targetEntityId
+     } AS invalidCreationHistoryCount
+WHERE successCount > 1
+   OR (successCount = 1 AND
+       (atomicTargetCount <> 1 OR attributableInitialRevisionCount <> 1
+        OR invalidCreationHistoryCount <> 0))
+RETURN change.id AS changeEventId, successCount,
+       atomicTargetCount, attributableInitialRevisionCount,
+       invalidCreationHistoryCount;
+```
+
+Revision `1` is checked in the successful write transaction before commit. A later permitted change may increment the target node's current revision; a downstream stock validation must therefore not incorrectly require that the entity stay at revision `1` forever.
+
+**Short example:** A request to create a Task has `requestedRevision = null`. If acceptance fails before creation, the ChangeEvent and final FAILED SyncEvent remain without `CHANGED_BY` and may have `affectedCount = 0`. On success, the Task at revision `1`, `Task ──CHANGED_BY──► ChangeEvent`, and `SyncEvent ──AFFECTS──► Task` are created, but no PiH exists for this new Task.
+
+**Short example for a historical correction:** A request names `targetEntityId = <PiH-ID>`, `targetEntityType = 'PiH'`, and `requestedRevision = 1`. The ChangeEvent points through `TARGETS_HISTORY` to this PiH, but the PiH receives no `CHANGED_BY`. Only a successful run creates the `HistoricalCorrection`, whose `CORRECTS` points to exactly the same PiH.
+
 ### Succession relationships
 
 ```cypher
@@ -363,15 +815,147 @@ RETURN c.id AS criterionId, c.measurementType, c.operator, c.targetValue;
 ```
 
 ```cypher
-MATCH (v:Verification)
-OPTIONAL MATCH (v)-[:EVALUATES]->(result:Result)
-OPTIONAL MATCH (v)-[:CHECKS]->(criterion:SuccessCriterion)
-WITH v, count(DISTINCT result) AS resultCount, count(DISTINCT criterion) AS criterionCount
+MATCH (v:JCIEntity:GraphObject:Verification)
+WITH v,
+     COUNT {
+       MATCH (v)-[:EVALUATES]->(:JCIEntity:GraphObject:Result)
+     } AS resultCount,
+     COUNT {
+       MATCH (v)-[:CHECKS]->(:JCIEntity:GraphObject:SuccessCriterion)
+     } AS criterionCount,
+     COUNT {
+       MATCH (goal:JCIEntity:JCIElementInstance:PiF1o)-[:DECOMPOSES_INTO]
+             ->(:JCIEntity:GraphObject:Task)-[:PRODUCES]
+             ->(result:JCIEntity:GraphObject:Result)<-[:EVALUATES]-(v)
+       MATCH (goal)-[:HAS_SUCCESS_CRITERIA]
+             ->(criterion:JCIEntity:GraphObject:SuccessCriterion)<-[:CHECKS]-(v)
+     } AS commonGoalCount
 WHERE v.status <> 'COMPLETED'
    OR NOT v.outcome IN ['VALID','INVALID','INCONCLUSIVE']
+   OR v.verifiedAt IS NULL
+   OR v.evaluatedResultRevision IS NULL
+   OR valueType(v.evaluatedResultRevision) <> 'INTEGER NOT NULL'
+   OR toIntegerOrNull(v.evaluatedResultRevision) < 1
+   OR v.checkedCriterionRevision IS NULL
+   OR valueType(v.checkedCriterionRevision) <> 'INTEGER NOT NULL'
+   OR toIntegerOrNull(v.checkedCriterionRevision) < 1
    OR resultCount <> 1 OR criterionCount <> 1
-RETURN v.id AS verificationId, resultCount, criterionCount, v.status, v.outcome;
+   OR commonGoalCount <> 1
+   OR NOT EXISTS {
+        MATCH (v)-[:EVALUATES]->(result:JCIEntity:GraphObject:Result {status: 'COMPLETED'})
+      }
+   OR NOT EXISTS {
+        MATCH (v)-[:CHECKS]->(criterion:JCIEntity:GraphObject:SuccessCriterion {status: 'ACTIVE'})
+      }
+RETURN v.id AS verificationId, resultCount, criterionCount, commonGoalCount,
+       v.evaluatedResultRevision, v.checkedCriterionRevision,
+       v.status, v.outcome;
 ```
+
+The bound revisions must resolve either to the current state or to exactly one historical state of the same entity. The verification timestamp must fall within the validity interval of that revision:
+
+```cypher
+MATCH (v:JCIEntity:GraphObject:Verification)-[:EVALUATES]->(result:JCIEntity:GraphObject:Result)
+MATCH (v)-[:CHECKS]->(criterion:JCIEntity:GraphObject:SuccessCriterion)
+WITH v, result, criterion,
+     CASE
+       WHEN v.evaluatedResultRevision = result.revision
+        AND v.verifiedAt >= result.updatedAt THEN 1 ELSE 0
+     END AS currentResultMatch,
+     CASE
+       WHEN v.checkedCriterionRevision = criterion.revision
+        AND v.verifiedAt >= criterion.updatedAt THEN 1 ELSE 0
+     END AS currentCriterionMatch,
+     COUNT {
+       MATCH (result)-[:HAS_HISTORICAL_STATE]->(history:JCIEntity:PiH)
+       WHERE history.originalEntityId = result.id
+         AND history.originalEntityType = 'Result'
+         AND history.originalRevision = v.evaluatedResultRevision
+         AND history.validFrom <= v.verifiedAt
+         AND v.verifiedAt < history.validUntil
+     } AS resultHistoryCount,
+     COUNT {
+       MATCH (criterion)-[:HAS_HISTORICAL_STATE]->(history:JCIEntity:PiH)
+       WHERE history.originalEntityId = criterion.id
+         AND history.originalEntityType = 'SuccessCriterion'
+         AND history.originalRevision = v.checkedCriterionRevision
+         AND history.validFrom <= v.verifiedAt
+         AND v.verifiedAt < history.validUntil
+     } AS criterionHistoryCount
+WHERE currentResultMatch + resultHistoryCount <> 1
+   OR currentCriterionMatch + criterionHistoryCount <> 1
+RETURN v.id AS verificationId,
+       result.id AS resultId, v.evaluatedResultRevision, result.revision AS currentResultRevision,
+       criterion.id AS criterionId, v.checkedCriterionRevision,
+       criterion.revision AS currentCriterionRevision,
+       currentResultMatch, resultHistoryCount,
+       currentCriterionMatch, criterionHistoryCount;
+```
+
+Before creating a Verification, `SYNC` reads both current revisions and checks them again immediately before commit. A later change to the Result or criterion does not modify the Verification; it merely makes it inapplicable to the current success evaluation. The following **selection query** is therefore not an error query. It returns only currently applicable, non-superseded Verifications:
+
+```cypher
+MATCH (v:JCIEntity:GraphObject:Verification)-[:EVALUATES]->(result:JCIEntity:GraphObject:Result)
+MATCH (v)-[:CHECKS]->(criterion:JCIEntity:GraphObject:SuccessCriterion)
+MATCH (goal:JCIEntity:JCIElementInstance:PiF1o)-[:DECOMPOSES_INTO]
+      ->(:JCIEntity:GraphObject:Task)-[:PRODUCES]->(result)
+MATCH (goal)-[:HAS_SUCCESS_CRITERIA]->(criterion)
+WHERE v.status = 'COMPLETED'
+  AND result.status = 'COMPLETED'
+  AND criterion.status = 'ACTIVE'
+  AND v.evaluatedResultRevision = result.revision
+  AND v.checkedCriterionRevision = criterion.revision
+  AND NOT EXISTS {
+    MATCH (:JCIEntity:GraphObject:Verification)-[:SUPERSEDES]->(v)
+  }
+RETURN DISTINCT v.id AS applicableVerificationId,
+       result.id AS resultId, result.revision AS resultRevision,
+       criterion.id AS criterionId, criterion.revision AS criterionRevision,
+       goal.id AS pif1oId;
+```
+
+The `PiF1o` aggregation may use only this applicable set. If a bound revision is no longer current, a new Verification is required; it may supersede the earlier Verification through `SUPERSEDES` without changing the earlier stored revision binding.
+
+```cypher
+MATCH (newer:JCIEntity:GraphObject:Verification)-[:SUPERSEDES]->(older:JCIEntity:GraphObject:Verification)
+MATCH (newer)-[:EVALUATES]->(newResult:JCIEntity:GraphObject:Result)
+MATCH (older)-[:EVALUATES]->(oldResult:JCIEntity:GraphObject:Result)
+MATCH (newer)-[:CHECKS]->(newCriterion:JCIEntity:GraphObject:SuccessCriterion)
+MATCH (older)-[:CHECKS]->(oldCriterion:JCIEntity:GraphObject:SuccessCriterion)
+WHERE newResult.id <> oldResult.id
+   OR newCriterion.id <> oldCriterion.id
+   OR newer.verifiedAt <= older.verifiedAt
+   OR newer.evaluatedResultRevision < older.evaluatedResultRevision
+   OR newer.checkedCriterionRevision < older.checkedCriterionRevision
+RETURN newer.id AS newerVerificationId, older.id AS olderVerificationId,
+       newResult.id AS newResultId, oldResult.id AS oldResultId,
+       newCriterion.id AS newCriterionId, oldCriterion.id AS oldCriterionId,
+       newer.evaluatedResultRevision, older.evaluatedResultRevision,
+       newer.checkedCriterionRevision, older.checkedCriterionRevision;
+```
+
+```cypher
+MATCH (verification:JCIEntity:GraphObject:Verification)
+WITH verification,
+     COUNT {
+       MATCH (verification)-[:SUPERSEDES]
+             ->(:JCIEntity:GraphObject:Verification)
+     } AS predecessorCount,
+     COUNT {
+       MATCH (:JCIEntity:GraphObject:Verification)-[:SUPERSEDES]
+             ->(verification)
+     } AS successorCount
+WHERE predecessorCount > 1 OR successorCount > 1
+RETURN verification.id AS verificationId, predecessorCount, successorCount;
+```
+
+```cypher
+MATCH (verification:JCIEntity:GraphObject:Verification)
+      -[:SUPERSEDES*1..]->(verification)
+RETURN DISTINCT verification.id AS verificationCycle;
+```
+
+**Short example:** A Verification binds Result revision `3` and criterion revision `2`. If the criterion changes to revision `3`, the old verification remains traceable but no longer counts toward `ACHIEVED`; only a new Verification with `checkedCriterionRevision = 3` can be applied again.
 
 ### RoF validity, capacity and organizational relationships
 
@@ -484,15 +1068,28 @@ RETURN r.id AS ruleId, r.effect, r.scopeType, [scope IN scopes | scope.id] AS sc
 ### PiH, corrections and SyncEvent
 
 ```cypher
-MATCH (history:PiH)
-OPTIONAL MATCH (origin:JCIEntity)-[:HAS_HISTORICAL_STATE]->(history)
-OPTIONAL MATCH (event:SyncEvent)-[:CREATES_HISTORY]->(history)
-WITH history, count(DISTINCT origin) AS originCount, count(DISTINCT event) AS eventCount
+MATCH (history:JCIEntity:PiH)
+WITH history,
+     COUNT {
+       MATCH (:JCIEntity)-[:HAS_HISTORICAL_STATE]->(history)
+     } AS originCount,
+     COUNT {
+       MATCH (:JCIEntity:GraphObject:SyncEvent)-[:CREATES_HISTORY]->(history)
+     } AS eventCount
 WHERE originCount <> 1 OR eventCount <> 1
+   OR history.originalEntityId IS NULL
+   OR history.originalEntityType IS NULL
+   OR history.originalRevision IS NULL OR history.originalRevision < 1
+   OR history.recordedAt IS NULL
+   OR history.validFrom IS NULL OR history.validUntil IS NULL
+   OR history.validUntil <= history.validFrom
    OR history.snapshotSchemaVersion IS NULL
    OR history.stateDataJson IS NULL OR history.relationshipDataJson IS NULL
-   OR history.contentHash IS NULL OR history.originalRevision < 1
-RETURN history.id AS historyId, originCount, eventCount;
+   OR history.contentHash IS NULL
+   OR NOT (history.contentHash =~ '^[0-9a-f]{64}$')
+RETURN history.id AS historyId, history.originalEntityId,
+       history.originalEntityType, history.originalRevision,
+       originCount, eventCount;
 ```
 
 ```cypher
@@ -507,29 +1104,132 @@ WITH correction, count(DISTINCT history) AS historyCount,
 WHERE historyCount <> 1 OR eventCount <> 1 OR changeCount <> 1 OR actorCount <> 1
    OR correction.valueSchemaVersion IS NULL
    OR correction.previousValueJson IS NULL OR correction.correctedValueJson IS NULL
-RETURN correction.id AS correctionId, historyCount, eventCount, changeCount, actorCount;
+   OR correction.baseHistoryViewHash IS NULL
+   OR NOT (correction.baseHistoryViewHash =~ '^[0-9a-f]{64}$')
+   OR correction.correctedFields IS NULL OR size(correction.correctedFields) = 0
+   OR size(correction.correctedFields) <>
+      size(reduce(uniqueFields = [], field IN correction.correctedFields |
+        CASE WHEN field IN uniqueFields THEN uniqueFields ELSE uniqueFields + field END))
+   OR any(index IN range(0, size(correction.correctedFields) - 2)
+          WHERE correction.correctedFields[index] >= correction.correctedFields[index + 1])
+   OR any(field IN correction.correctedFields
+          WHERE field IS NULL OR trim(field) = '' OR NOT (field STARTS WITH '/'))
+   OR NOT EXISTS {
+        MATCH (correction)-[:CAUSED_BY]->(sameChange:JCIEntity:GraphObject:ChangeEvent)
+              -[:TARGETS_HISTORY]->(sameHistory:JCIEntity:PiH)
+        MATCH (correction)-[:CORRECTS]->(sameHistory)
+        MATCH (sameChange)-[:TRIGGERS]->(sameEvent:JCIEntity:GraphObject:SyncEvent)
+              -[:CREATES_CORRECTION]->(correction)
+        MATCH (sameEvent)-[:AFFECTS]->(sameHistory)
+      }
+RETURN correction.id AS correctionId, historyCount, eventCount, changeCount, actorCount,
+       correction.baseHistoryViewHash, correction.correctedFields;
+```
+
+A `HistoricalCorrection` may fully supersede at most one older correction of the same `PiH` and may itself be superseded by at most one newer correction. Branches, target changes, and cycles are invalid:
+
+```cypher
+MATCH (correction:JCIEntity:GraphObject:HistoricalCorrection)
+OPTIONAL MATCH (correction)-[:SUPERSEDES]->(older:JCIEntity:GraphObject:HistoricalCorrection)
+OPTIONAL MATCH (newer:JCIEntity:GraphObject:HistoricalCorrection)-[:SUPERSEDES]->(correction)
+WITH correction, collect(DISTINCT older) AS olderCorrections,
+     collect(DISTINCT newer) AS newerCorrections
+WHERE size(olderCorrections) > 1 OR size(newerCorrections) > 1
+   OR any(older IN olderCorrections WHERE NOT EXISTS {
+        MATCH (correction)-[:CORRECTS]->(history:JCIEntity:PiH)
+        MATCH (older)-[:CORRECTS]->(history)
+      })
+   OR any(older IN olderCorrections
+          WHERE any(field IN older.correctedFields
+                    WHERE NOT field IN correction.correctedFields))
+   OR any(older IN olderCorrections
+          WHERE correction.correctedAt <= older.correctedAt)
+RETURN correction.id AS correctionId,
+       [older IN olderCorrections | older.id] AS supersededIds,
+       [newer IN newerCorrections | newer.id] AS supersedingIds;
 ```
 
 ```cypher
-MATCH (event:SyncEvent)
-OPTIONAL MATCH (change:ChangeEvent)-[:TRIGGERS]->(event)
-OPTIONAL MATCH (event)-[:EXECUTES]->(definition:SYNC)
-OPTIONAL MATCH (event)-[:AFFECTS]->(affected:JCIEntity)
-OPTIONAL MATCH (event)-[:CREATES_HISTORY]->(history:PiH)
-OPTIONAL MATCH (event)-[:CREATES_CORRECTION]->(correction:HistoricalCorrection)
-OPTIONAL MATCH (conflict:RaNConflict)-[:DETECTED_BY]->(event)
-WITH event, count(DISTINCT change) AS triggerCount,
-     count(DISTINCT definition) AS definitionCount,
-     count(DISTINCT affected) AS actualAffectedCount,
-     count(DISTINCT history) AS actualHistoryCount,
-     count(DISTINCT correction) AS actualCorrectionCount,
-     count(DISTINCT conflict) AS actualConflictCount
-WHERE triggerCount <> 1 OR definitionCount <> 1 OR actualAffectedCount < 1
+MATCH (correction:JCIEntity:GraphObject:HistoricalCorrection)
+      -[:SUPERSEDES*1..]->(correction)
+RETURN DISTINCT correction.id AS correctionCycle;
+```
+
+Multiple non-superseded corrections for the same `PiH` may apply in parallel when their `correctedFields` are disjoint. If two current corrections touch the same path, one must fully supersede the other through `SUPERSEDES` and contain at least the predecessor's complete field set; otherwise the effective historical state would be ambiguous.
+
+```cypher
+MATCH (left:JCIEntity:GraphObject:HistoricalCorrection)-[:CORRECTS]->(history:JCIEntity:PiH)
+MATCH (right:JCIEntity:GraphObject:HistoricalCorrection)-[:CORRECTS]->(history)
+WHERE left.id < right.id
+  AND NOT EXISTS {
+    MATCH (:JCIEntity:GraphObject:HistoricalCorrection)-[:SUPERSEDES]->(left)
+  }
+  AND NOT EXISTS {
+    MATCH (:JCIEntity:GraphObject:HistoricalCorrection)-[:SUPERSEDES]->(right)
+  }
+  AND any(field IN left.correctedFields WHERE field IN right.correctedFields)
+RETURN history.id AS historyId, left.id AS leftCorrectionId,
+       right.id AS rightCorrectionId,
+       [field IN left.correctedFields WHERE field IN right.correctedFields] AS overlappingFields;
+```
+
+Before every new correction, `SYNC` rereads the `PiH` and every non-superseded correction. The canonical hash input contains the `historyId`, `PiH.contentHash`, and the IDs, field lists, and values of all current corrections sorted by correction ID. The view hash therefore changes after every successful addition or supersession, even if the resulting domain value later equals an earlier value. The request must name exactly this SHA-256 as `baseHistoryViewHash`.
+
+The following **selection query** returns the source set to serialize canonically; SHA-256 calculation and overlay of the JSON values take place in the SYNC rules package:
+
+```cypher
+MATCH (history:JCIEntity:PiH)
+OPTIONAL MATCH (correction:JCIEntity:GraphObject:HistoricalCorrection)-[:CORRECTS]->(history)
+WHERE correction IS NULL OR NOT EXISTS {
+  MATCH (:JCIEntity:GraphObject:HistoricalCorrection)-[:SUPERSEDES]->(correction)
+}
+WITH history, correction
+ORDER BY correction.id
+WITH history, collect(correction{
+       .id, .correctionType, .correctedFields,
+       .previousValueJson, .correctedValueJson
+     }) AS activeCorrections
+RETURN history.id AS historyId, history.contentHash AS pihContentHash,
+       activeCorrections;
+```
+
+Immediately before commit, `SYNC` recalculates the hash and compares it with `baseHistoryViewHash`. The SYNC write layer serializes correction transactions by target `PiH.id`: only the first write attempt from the same base view may commit; each later attempt rereads the now changed historical state and produces `CONFLICT` if its request is unchanged. `baseHistoryViewHash` is deliberately not graph-wide unique because different `PiH` nodes may have the same effective view. Serialization and the pre-commit check cannot be replaced by a later pure Cypher query because Neo4j deliberately stores the canonical JSON values only as strings.
+
+**Short example:** One current correction adds `/relationshipData/HAS_MEMBER:OUT:team-7/validUntil`. A second current correction may simultaneously change `/stateData/name`. If it also wants to change the same `validUntil` path, it must supersede the first correction through `SUPERSEDES` and use the `baseHistoryViewHash` recalculated immediately beforehand.
+
+```cypher
+MATCH (event:JCIEntity:GraphObject:SyncEvent)
+WITH event,
+     COUNT {
+       MATCH (:JCIEntity:GraphObject:ChangeEvent)-[:TRIGGERS]->(event)
+     } AS triggerCount,
+     COUNT {
+       MATCH (event)-[:EXECUTES]->(:JCIEntity:JCIElementInstance:SYNC)
+     } AS definitionCount,
+     COUNT {
+       MATCH (event)-[:AFFECTS]->(:JCIEntity)
+     } AS actualAffectedCount,
+     COUNT {
+       MATCH (event)-[:CREATES_HISTORY]->(:JCIEntity:PiH)
+     } AS actualHistoryCount,
+     COUNT {
+       MATCH (event)-[:CREATES_CORRECTION]
+             ->(:JCIEntity:GraphObject:HistoricalCorrection)
+     } AS actualCorrectionCount,
+     COUNT {
+       MATCH (:JCIEntity:GraphObject:RaNConflict)-[:DETECTED_BY]->(event)
+     } AS actualConflictCount
+WHERE triggerCount <> 1 OR definitionCount <> 1
+   OR event.runId IS NULL
+   OR valueType(event.runId) <> 'STRING NOT NULL'
+   OR NOT (toLower(toString(event.runId)) =~
+      '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
    OR event.startedAt IS NULL OR event.completedAt IS NULL
    OR event.completedAt < event.startedAt
    OR event.outcome IS NULL
    OR NOT event.outcome IN ['SUCCESS','CONFLICT','FAILED']
-   OR event.affectedCount IS NULL OR event.affectedCount < 1
+   OR (event.outcome IN ['SUCCESS','CONFLICT'] AND actualAffectedCount < 1)
+   OR event.affectedCount IS NULL OR event.affectedCount < 0
    OR event.changedCount IS NULL OR event.changedCount < 0
    OR event.historyCount IS NULL OR event.historyCount < 0
    OR event.correctionCount IS NULL OR event.correctionCount < 0
@@ -546,11 +1246,26 @@ RETURN event.id AS syncEventId, triggerCount, definitionCount,
        event.conflictCount, actualConflictCount;
 ```
 
+`AFFECTS` therefore depends on the outcome: a run with `SUCCESS` or `CONFLICT` names at least one affected `JCIEntity`. Only a `FAILED` run that ends early before target resolution may document zero targets and `affectedCount = 0`. Once a target has actually been resolved, it must be stored through `AFFECTS` and counted even for a failed run.
+
+**Short example:** Two technical retries of the same request have the same triggering `ChangeEvent`, but different `runId` values and two separate `SyncEvent` nodes. At most one successful attempt may commit the domain change; both events remain traceable append-only.
+
 `affectedCount`, `historyCount`, `correctionCount`, and `conflictCount` are fully verifiable from the stored relationships. In contrast, `changedCount` denotes the number of domain target changes actually adopted in the same transaction. Because the model deliberately stores no additional `CHANGES` relationship for this purpose, `SYNC` calculates this value from the deduplicated transaction write set immediately before commit. Each existing mutable `JCIEntity` in that set must receive exactly one revision increment and exactly one corresponding `PiH`. A domain target entity newly created by the change request counts as an adopted change but does not yet receive a `PiH`. Newly generated process and documentation objects such as `PiH`, `SyncEvent`, `HistoricalCorrection`, or a `RaNConflict` documented by `SYNC` do not count toward `changedCount`. With `CONFLICT` or `FAILED`, rolled-back write operations do not count either. The calculated value is adopted atomically together with the graph state and the final `SyncEvent`.
 
 ## Transaction rule for SYNC
 
 `SYNC` checks hierarchy, dependencies, Task type rules, and applicable `RaN` before adoption. Derived Task statuses are aggregated from the atomic tasks up the parent chain and only then to the affected `PiF1o`. Current states, required `PiH`, new or resolved `RaNConflict` objects, relationships, the deduplicated transaction write set, and the final `SyncEvent` are adopted atomically. Before commit, all five count values are calculated from this write set and the relationships to be stored. A conflict or error must not leave a partially updated graph.
+
+The following additional rules apply to the clarified processes: A `CREATED` target is created atomically with revision `1`, its `CHANGED_BY` edge, and the final successful event. Before a Verification is stored, both bound revisions are compared again with the current target revisions. Before a HistoricalCorrection is stored, the target PiH, the current correction set, and `baseHistoryViewHash` are checked again within the same transaction; only then are `HistoricalCorrection`, `CORRECTS`, `CAUSED_BY`, and `CREATES_CORRECTION` created together. `SyncEvent` nodes are never updated or reused for another run; exactly one new node is appended for each `runId`.
+
+## Limits of declarative enforcement
+
+Neo4j constraints and subsequent Cypher queries cover the stored graph state, but they cannot guarantee four runtime properties on their own:
+
+1. A `SyncRun` completed outside the graph can only be recognized as a missing `SyncEvent` after reconciliation with the technical run/outbox log.
+2. Preventing later changes to or deletion of immutable nodes and their relationships requires restricted write roles or exclusively approved SYNC write transactions; a property constraint is not an append-only mechanism.
+3. The canonical overlay of `stateDataJson`, `relationshipDataJson`, and correction values, as well as SHA-256 calculation, takes place in the versioned SYNC rules package. Cypher validates structure, uniqueness, and the stored hash format, but not the JSON semantics themselves.
+4. Revision `1` of a newly created target and the Verification and history revisions rechecked immediately before commit are transaction preconditions. A later snapshot of the graph after further development can reconstruct this temporal fact only from the fully stored history.
 
 ## Migration and versioning
 
@@ -563,6 +1278,18 @@ Schema changes are stored as forward, immutable migrations with increasing numbe
 5. new target version.
 
 A restoreable database backup is created before a migration. A migration is only completed if all post-validations return zero errors. The active `SYNC.definition` names the appropriate ontology, graph rule and schema target version; an incompatible combination may not be activated.
+
+The following migration-compatible order applies to the fields clarified in this document:
+
+1. First write new properties without existence or unique constraints and classify all legacy data.
+2. Derive `ChangeEvent.targetEntityId`, `targetEntityType`, and `requestedRevision` from the unique `CHANGED_BY` source or, for historical corrections, from `CORRECTS` and `CAUSED_BY`. An old failed request without a target edge may be supplemented only from an unchanged request record.
+3. Take `SyncEvent.runId` exclusively from the technical run/outbox log. A newly generated random ID would falsify the historical run identity and is therefore not a valid backfill.
+4. Determine the revision bindings of existing Verifications from `verifiedAt`, the current revision, and unambiguous `PiH` validity intervals. Zero or multiple candidates stop the migration.
+5. Mark a root assignment with `bootstrapKey = 'ROOT'` only if it and its initial SYNC definition are unambiguously proven. An ambiguous, non-empty legacy data set is not automatically reinterpreted as the closed bootstrap.
+6. For existing HistoricalCorrections, calculate the original `baseHistoryViewHash` only when the correction sequence can be reconstructed completely. Overlapping, non-superseded field corrections require prior domain resolution.
+7. Create all existence, type, and uniqueness constraints only after a successful backfill, and then execute all validation queries again.
+
+For a completely empty database, the backfills are omitted. In that case, the constraints are created first and the atomic bootstrap transaction is then executed exactly once. This documentation change does not itself run a migration or bootstrap against a live database.
 
 **Short example:** Migration `V002` complements `REPLACED_BY`. It first checks all existing `REPLACED` entities, creates the required successor edges within a controlled data migration and only activates the new constraint when no replaced entity remains without a successor.
 

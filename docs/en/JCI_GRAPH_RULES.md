@@ -13,9 +13,10 @@ This document specifies technology-independent cardinalities and invariants of t
 5. Every change in professional status is an actual change.
 6. `updatedAt` is not before `createdAt`; for immutable entities both values ​​are the same.
 7. `PiH`, `ChangeEvent`, `SyncEvent` and `HistoricalCorrection` permanently own `status = RECORDED` and `revision = 1`.
-8. These four entity types are not changed, deleted or re-historicized.
+8. These four entity types are not changed in content, deleted, or historized again. For `ChangeEvent`, only append-only `TRIGGERS` edges to completed attempts and, for a successful `CREATED`, exactly one subsequently established incoming `CHANGED_BY` edge are permitted; properties, existing edges, `revision`, and `updatedAt` remain unchanged.
 9. Empty mandatory fields are not permitted.
 10. Professional relationships are saved exclusively as edges and not additionally as ID lists.
+11. `ChangeEvent.targetEntityId` and `targetEntityType` are immutable audit coordinates of the accepted request. They do not replace an edge. As soon as a canonical target relationship exists, it must identify the same entity; for a `CREATED` that has not yet succeeded or has failed, the target node may be absent.
 
 ## 3. Status rules
 
@@ -34,7 +35,7 @@ There is no transition back to a changeable state from `ACHIEVED`, `REPLACED`, `
 
 Binding transition rules:
 
-1. Variable subject entities are created as `DRAFT` and may only become `ACTIVE` after complete validation.
+1. Mutable domain entities are created as `DRAFT` and may only become `ACTIVE` after complete validation. Only the six entities of the initial bootstrap under section 12 are created atomically and directly as `ACTIVE`.
 2. `DRAFT` is allowed to change to `ACTIVE` or `REVOKED`.
 3. `ACTIVE` is generally allowed to change to `REPLACED` or `REVOKED`.
 4. An active future element may become `ACHIEVED` if the target conditions are met.
@@ -109,10 +110,11 @@ The “Targets per source” column applies in the direction of the arrow; “So
 
 | Source | relationship | Target | Targets per source | Sources per destination |
 | --------------------------- | ---------------------- | ---------------------- | --------------: | --------------: |
-| historizable `JCIEntity` | `CHANGED_BY` | `ChangeEvent` |          `0..n` |             `1` |
-| `ChangeEvent` | `TRIGGERS` | `SyncEvent` |          `1..n` |             `1` |
+| historizable `JCIEntity` | `CHANGED_BY` | `ChangeEvent` |          `0..n` |          `0..1` |
+| `ChangeEvent` | `TRIGGERS` | `SyncEvent` |          `0..n` |             `1` |
+| `ChangeEvent` | `TARGETS_HISTORY` | `PiH` |          `0..1` |          `0..n` |
 | `SyncEvent` | `EXECUTES` | `SYNC` |             `1` |          `0..n` |
-| `SyncEvent` | `AFFECTS` | `JCIEntity` |          `1..n` |          `0..n` |
+| `SyncEvent` | `AFFECTS` | `JCIEntity` |          `0..n` |          `0..n` |
 | historizable `JCIEntity` | `HAS_HISTORICAL_STATE` | `PiH` |          `0..n` |             `1` |
 | `SyncEvent` | `CREATES_HISTORY` | `PiH` |          `0..n` |             `1` |
 | `HistoricalCorrection` | `CORRECTS` | `PiH` |             `1` |          `0..n` |
@@ -120,6 +122,16 @@ The “Targets per source” column applies in the direction of the arrow; “So
 | `SyncEvent` | `CREATES_CORRECTION` | `HistoricalCorrection` |          `0..n` |             `1` |
 | `HistoricalCorrection` | `SUPERSEDES` | `HistoricalCorrection` |          `0..1` |          `0..1` |
 | replaceable `JCIEntity` | `REPLACED_BY` | same concrete type |          `0..1` |          `0..n` |
+
+Conditional invariants:
+
+1. A normal change to an existing historizable entity has exactly one `CHANGED_BY` source.
+2. For `CREATED`, the `ChangeEvent` has no `CHANGED_BY` source before the successful commit. Only for `SUCCESS` are the new entity with `revision = 1`, `CREATED_BY`, and exactly one `CHANGED_BY` edge created atomically; for `CONFLICT` or `FAILED`, none of them and no `PiH` are created.
+3. A `ChangeEvent` with `changeType = HISTORICAL_CORRECTION` has exactly one `TARGETS_HISTORY`, no `CHANGED_BY` source, and `requestedRevision = 1`. All other change types have no `TARGETS_HISTORY`.
+4. An accepted `ChangeEvent` may have `TRIGGERS = 0` while no attempt has finished. Each completed or controlled-aborted `SyncRun` appends exactly one edge; each `SyncEvent` has exactly one triggering `ChangeEvent`.
+5. A `SyncEvent` with `SUCCESS` or `CONFLICT` has at least one `AFFECTS` target. Only a `FAILED` attempt that ends before successful target resolution may have no `AFFECTS` target.
+
+**Short example:** A rejected `CREATED` request retains its `ChangeEvent` and receives a `SyncEvent` after the attempt ends, but creates neither the requested target node nor `CHANGED_BY` or `PiH`.
 
 `RaN ── GOVERNS ──► zulässige JCIEntity` has `0..n` in both directions.
 
@@ -139,8 +151,8 @@ The “Targets per source” column applies in the direction of the arrow; “So
 ## 5. Actor and evidence rules
 
 1. Actors are saved as relationships to `RoleAssignment`; Duplicates of text or ID are not permitted.
-2. A functionally active or completed `JCIEntity` has exactly one `CREATED_BY` relationship.
-3. `CREATED_BY = 0` is only allowed for bootstrap and import states before technical activation.
+2. A functionally active or completed `JCIEntity` has exactly one `CREATED_BY` relationship, except for the one-time root `RoleAssignment` of the initial bootstrap.
+3. Only exactly one root `RoleAssignment` with `bootstrapKey = "ROOT"` may permanently have `CREATED_BY = 0`. For imported entities, its absence is permitted only temporarily while they have `status = DRAFT`.
 4. Each `ChangeEvent` has exactly one `REQUESTED_BY`.
 5. Each `HistoricalCorrection` has exactly one `CORRECTED_BY`.
 6. Evidence is stored exclusively as `Evidence` nodes and connected via `USES_EVIDENCE`.
@@ -200,19 +212,24 @@ The “Targets per source” column applies in the direction of the arrow; “So
 1. Each `SuccessCriterion` has exactly one `requirementLevel = REQUIRED | OPTIONAL`, one `evaluationMode = ALL | ANY`, one `operator` that matches the `measurementType` and one valid `targetValue`.
 2. Unless expressly stated otherwise, `requirementLevel = REQUIRED` and `evaluationMode = ALL` apply.
 3. Each `PiF1o` has at least one `REQUIRED` criterion.
-4. A current `Verification` is completed and will not be replaced by any other Verification via `SUPERSEDES`.
-5. `SUPERSEDES` only connects verifications with the same `Result` and the same `SuccessCriterion`.
-6. Verification chains are forward in time, have no branching and are cycle-free.
-7. For `evaluationMode = ALL`, a criterion is met if at least one current Verification exists and all current verifications are `VALID`.
-8. For `evaluationMode = ANY`, a criterion is met if at least one current Verification is `VALID`.
-9. `INVALID`, `INCONCLUSIVE` and a missing current Verification do not meet a criterion; In the case of `ALL`, one of them already prevents fulfillment.
-10. Only verifications of results whose tasks belong to the same `PiF1o` as the checked criterion are taken into account.
-11. A `PiF1o` may reach `ACHIEVED` if all `REQUIRED` criteria are met, all assigned tasks `COMPLETED`, all Task dependencies are met, all verifications taken into account are completed and all relevant model and `RaN` rules are adhered to.
-12. `OPTIONAL` criteria are evaluated and documented, but do not block `ACHIEVED`.
-13. `ACHIEVED` is terminal. Later changes to goals, criteria or framework are reflected by a new operational future element.
-14. For `BOOLEAN` only `EQUALS` and `NOT_EQUALS` are permitted, for `NUMERIC` only numerical comparison operators are permitted and for `TEXTUAL` only `EQUALS`, `NOT_EQUALS`, `CONTAINS` and `MATCHES` are permitted.
-15. A higher future element may only reach `ACHIEVED` if there is at least one current direct contribution and its `contributionMode` is fulfilled: `ALL` requires all, `ANY` at least one direct contribution in `ACHIEVED`.
-16. `REPLACED` and `REVOKED` are not considered current contributions. A replacement only counts if it is connected to the same target through `CONTRIBUTES_TO`.
+4. Every `Verification` has positive integers `evaluatedResultRevision` and `checkedCriterionRevision`.
+5. The `Result` connected via `EVALUATES` has `status = COMPLETED`; the `SuccessCriterion` connected via `CHECKS` has `status = ACTIVE`. Result and criterion belong to the same `PiF1o`.
+6. When the Verification is created, `evaluatedResultRevision` and `checkedCriterionRevision` exactly match the target revisions read from a consistent view. Both revisions are read again immediately before commit; any deviation produces `CONFLICT`, and the Verification is not stored.
+7. A Verification is applicable only if it is `COMPLETED`, has not been superseded via `SUPERSEDES`, and remains bound to the current revisions of its Result and criterion.
+8. `SUPERSEDES` only connects Verifications with the same `Result` and the same `SuccessCriterion`.
+9. Verification chains are forward in time, have no branching, and are cycle-free.
+10. For `evaluationMode = ALL`, a criterion is met if at least one applicable current Verification exists and all applicable current Verifications are `VALID`.
+11. For `evaluationMode = ANY`, a criterion is met if at least one applicable current Verification is `VALID`.
+12. `INVALID`, `INCONCLUSIVE`, and a missing applicable current Verification do not meet a criterion; for `ALL`, one of them already prevents fulfillment.
+13. Only applicable current Verifications of Results whose Tasks belong to the same `PiF1o` as the checked criterion are considered.
+14. A `PiF1o` may reach `ACHIEVED` if all `REQUIRED` criteria are met, all assigned Tasks are `COMPLETED`, all Task dependencies are met, all considered Verifications are applicable, and all relevant model and `RaN` rules are satisfied.
+15. `OPTIONAL` criteria are evaluated and documented but do not block `ACHIEVED`.
+16. `ACHIEVED` is terminal. Later changes to targets, criteria, or framework conditions are represented by a new operational future element.
+17. For `BOOLEAN`, only `EQUALS` and `NOT_EQUALS` are permitted; for `NUMERIC`, only numeric comparison operators are permitted; and for `TEXTUAL`, only `EQUALS`, `NOT_EQUALS`, `CONTAINS`, and `MATCHES` are permitted.
+18. A higher future element may reach `ACHIEVED` only if at least one current direct contribution exists and its `contributionMode` is satisfied: `ALL` requires all direct contributions in `ACHIEVED`, while `ANY` requires at least one.
+19. `REPLACED` and `REVOKED` are not current contributions. A replacement counts only if it is itself connected to the same target via `CONTRIBUTES_TO`.
+
+**Short example:** A Verification binds revision 4 of a Result and revision 2 of a criterion. If the criterion changes to revision 3 before commit, the attempt ends with `CONFLICT`. If it changes only later, the Verification remains stored but no longer counts toward the current aggregation.
 
 ## 9. Task hierarchy, dependencies and status
 
@@ -236,31 +253,55 @@ The “Targets per source” column applies in the direction of the arrow; “So
 2. `CREATED` does not create a `PiH` for the newly created entity.
 3. Each `PiH` maps properties and relationships to exactly one revision of the original entity.
 4. A deviation in a `PiH` does not produce a `PiH` of the `PiH`, but rather a `HistoricalCorrection`.
-5. The valid historical reading consists of the unchanged `PiH` and its unreplaced corrections.
-6. `SUPERSEDES` may only connect corrections of the same `PiH` and must be forward in time and cycle-free.
-7. The `CAUSED_BY` event of a correction must be the same event that triggered the `SyncEvent` connected via `CREATES_CORRECTION`.
-8. A historical correction does not automatically change the current state of the original entity.
-9. A `PiH` contains exactly the properties and incoming and outgoing functional relationships of the specified `originalRevision` that are valid at that time.
-10. `contentHash` corresponds to SHA-256 of the canonical serialization of `StateSnapshot` and sorted `RelationshipSnapshot` entries.
-11. Each `RelationshipSnapshot` has type, direction, counterpart entity ID, counterpart entity type and a typed property map.
-12. `correctedFields`, `previousValue` and `correctedValue` have the same key set; for `ADDITION`, the previous value of the supplemented path is `NULL`.
+5. The valid historical reading, the `HistoryView`, consists deterministically of the unchanged `PiH` and its non-superseded corrections.
+6. `correctedFields` contains unique, lexicographically sorted canonical JSON Pointers. `previousValue` and `correctedValue` have exactly the same key set; for `ADDITION`, the previous value of the added path is `NULL`.
+7. Multiple active corrections of the same `PiH` have pairwise disjoint `correctedFields`.
+8. If a new correction overlaps an active correction, it must fully replace exactly that one correction via `SUPERSEDES`. Its `correctedFields` contain at least the predecessor's complete field set; additional fields must not overlap any other active correction. Partial adoption of predecessor fields or overlap with multiple active corrections is prohibited.
+9. `SUPERSEDES` connects only corrections of the same `PiH`, is forward in time, and is cycle-free.
+10. `baseHistoryViewHash` equals the SHA-256 of the canonical `HistoryView` immediately before the new correction. The request supplies the same value as `expectedHistoryViewHash`.
+11. Correction commits are serialized per `PiH`. Immediately before commit, the `HistoryView` is recalculated; a differing hash produces `CONFLICT` and no `HistoricalCorrection`.
+12. The `CAUSED_BY` event of a correction must be the same event that triggered the `SyncEvent` connected via `CREATES_CORRECTION`. This `ChangeEvent` has exactly one `TARGETS_HISTORY` edge to the same `PiH` and no `CHANGED_BY` source.
+13. A historical correction does not automatically change the current state of the original entity.
+14. A `PiH` contains exactly the properties and incoming and outgoing domain relationships valid at that time for the specified `originalRevision`.
+15. `contentHash` equals the SHA-256 of the canonical serialization of `StateSnapshot` and sorted `RelationshipSnapshot` entries.
+16. Every `RelationshipSnapshot` has a type, direction, counterpart entity ID, counterpart entity type, and a typed property map.
+
+**Short example:** If an active correction corrects `/stateData/name`, a second active correction may simultaneously correct `/relationshipData/...`. A new correction of `/stateData/name` must fully supersede the previous correction via `SUPERSEDES` and be checked against the now-current `HistoryView`.
 
 ## 11. SYNC and revision rules
 
-1. A `SyncRun` is technical condition and not a node of the JCI graph.
-2. A `SyncEvent` is only created after completion or controlled termination of a `SyncRun`.
-3. A failed attempt produces a `SyncEvent` with `outcome = FAILED`.
-4. Incomplete technical changes from a failed attempt will be rolled back.
-5. `completedAt` of a `SyncEvent` is not before `startedAt`.
-6. All counts of a `SyncEvent` are non-negative and match the associated entities.
-7. Repetitions may not adopt the same technical change multiple times.
-8. `conflictCount` of a `SyncEvent` corresponds to the number of `RaNConflict` objects inversely assigned via `DETECTED_BY`.
-9. An entity with `status = REPLACED` has exactly one outgoing `REPLACED_BY` relationship to the same specific entity type.
-10. An entity in another state does not have an outbound `REPLACED_BY` relationship.
-11. `REPLACED_BY` has no self-references or cycles; a successor may merge several predecessors.
-12. For `CONFLICT` or `FAILED`, neither new revisions nor `PiH` arise for states that have not been adopted; the final `SyncEvent` and required `RaNConflict` objects remain separate test documentation.
-13. If the storage of a final `SyncEvent` is temporarily technically impossible, it must be made up with the same `runId`, the same `ChangeEvent` and the same idempotence identifier without executing the compartment change again.
+1. A `SyncRun` is technical state and not a node of the JCI graph.
+2. An accepted `ChangeEvent` immutably has `idempotencyKey`, `targetEntityId`, `targetEntityType`, and `requestedRevision` and schedules at least one technical `SyncRun`.
+3. While no attempt has finished, `TRIGGERS = 0` is permitted. Each completed or controlled-aborted `SyncRun` creates exactly one `SyncEvent` with a unique `runId` and appends exactly one `TRIGGERS` edge.
+4. For `changeType = CREATED`, the target ID must be free and `requestedRevision = null`. Only for `SUCCESS` are the target entity with `revision = 1`, `CREATED_BY`, and `CHANGED_BY` created; no `PiH` is created. For `CONFLICT` or `FAILED`, none of them are created.
+5. For all normal changes, the target must exist and `requestedRevision` must equal its current revision.
+6. For `HISTORICAL_CORRECTION`, the target must be an existing `PiH`, `requestedRevision = 1`, `TARGETS_HISTORY = 1`, and `CHANGED_BY = 0`.
+7. A failed attempt creates a `SyncEvent` with `outcome = FAILED`.
+8. Incomplete domain changes from a failed attempt are rolled back.
+9. `completedAt` of a `SyncEvent` is not before `startedAt`.
+10. All counts of a `SyncEvent` are non-negative and match the connected entities. `SUCCESS` and `CONFLICT` require `affectedCount >= 1`; only an early `FAILED` before target resolution permits `affectedCount = 0`.
+11. Retries must not apply the same domain change more than once; each attempt actually run has its own `runId` and its own `SyncEvent`.
+12. `conflictCount` of a `SyncEvent` equals the number of `RaNConflict` objects assigned inversely via `DETECTED_BY`.
+13. An entity with `status = REPLACED` has exactly one outgoing `REPLACED_BY` relationship to the same concrete entity type.
+14. An entity in any other status has no outgoing `REPLACED_BY` relationship.
+15. `REPLACED_BY` has no self-references or cycles; one successor may merge multiple predecessors.
+16. For `CONFLICT` or `FAILED`, no new revisions or `PiH` are created for states that were not applied; the final `SyncEvent` and required `RaNConflict` objects remain separate attempt documentation.
+17. If storing a final `SyncEvent` is temporarily technically impossible, it must be recorded later with the same `runId`, the same `ChangeEvent`, and the same `idempotencyKey`, without executing the domain change again.
+18. The technology-independent exchange format uses `schemaVersion = "1.1"`. `HISTORICAL_CORRECTION` uses a structured payload with `expectedHistoryViewHash` instead of generic `operations`.
 
-## 12. Closed rule status
+## 12. Initial bootstrap
+
+1. The bootstrap is permitted only once and only in a completely empty graph.
+2. It is executed in exactly one atomic transaction; if an error occurs, no partial graph remains.
+3. The minimal graph contains one `RoFOrg`, one `RoFTeam`, one technical `RoFTeamMember`, one `RoFRole`, exactly one root `RoleAssignment` with `bootstrapKey = "ROOT"`, and one `SYNC` definition together with the required RoF relationships.
+4. All six bootstrap entities are created directly with `status = ACTIVE`, `revision = 1`, and the same `createdAt` and `updatedAt`. Any `validFrom` values on the types and relationships equal the same bootstrap timestamp. This is the only exception to the regular `DRAFT` start.
+5. Only the root `RoleAssignment` may permanently exist without `CREATED_BY`. All other bootstrap entities have exactly one `CREATED_BY` edge to the root `RoleAssignment`.
+6. The bootstrap creates neither `ChangeEvent`, `SyncRun`, `SyncEvent`, nor `PiH`.
+7. After a successful commit, repetition and a second root `RoleAssignment` are prohibited. All further changes use the normal SYNC process.
+8. An import is not a bootstrap. Imported entities without complete provenance remain `DRAFT` until they have been validated through the regular process.
+
+**Short example:** In the empty database, deployment jointly creates the organization, administration team, technical member, role, root assignment, and active SYNC definition. Only after that does the root `RoleAssignment` regularly request the first domain entity.
+
+## 13. Closed rule status
 
 The status preconditions, cardinalities, traceability, future, Task, RoF, ERoF, RaN, historization and SYNC rules of this version are binding. New domain-specific subtypes may only be added via a versioned model change and must receive their own status preconditions and automated tests before activation.

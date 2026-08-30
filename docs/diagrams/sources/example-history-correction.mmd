@@ -1,6 +1,12 @@
 flowchart LR
-    Correction[HistoricalCorrection] -->|CORRECTS| History[PiH]
+    ChangeEvent[ChangeEvent HISTORICAL_CORRECTION] -->|TARGETS_HISTORY| History[PiH immutable]
+    ChangeEvent -. expectedHistoryViewHash .-> View[effective HistoryView]
+    Correction[HistoricalCorrection] -->|CORRECTS| History
     Correction -->|CAUSED_BY| ChangeEvent
     Correction -->|CORRECTED_BY| Assignment[RoleAssignment]
     Correction -->|USES_EVIDENCE| Evidence
     SyncEvent -->|CREATES_CORRECTION| Correction
+    ChangeEvent -->|TRIGGERS| SyncEvent[SyncEvent after completed run]
+    Correction -. baseHistoryViewHash must match .-> View
+    Correction -. correctedFields disjoint or one active predecessor superseded .-> FieldCheck{field conflict check}
+    Correction -->|SUPERSEDES| Previous[one overlapping active HistoricalCorrection]

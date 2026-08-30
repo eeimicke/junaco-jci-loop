@@ -3,6 +3,8 @@ import re
 import unittest
 from pathlib import Path
 
+from jsonschema import Draft202012Validator, FormatChecker, ValidationError
+
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
@@ -27,7 +29,7 @@ RELATIONSHIPS = {
     "RESOLVED_THROUGH", "CREATED_BY", "REQUESTED_BY", "CORRECTED_BY",
     "CHANGED_BY", "TRIGGERS", "EXECUTES", "REPLACED_BY",
     "HAS_HISTORICAL_STATE", "CREATES_HISTORY", "CORRECTS", "CAUSED_BY",
-    "CREATES_CORRECTION",
+    "CREATES_CORRECTION", "TARGETS_HISTORY",
 }
 
 
@@ -119,6 +121,63 @@ class SpecificationConsistencyTests(unittest.TestCase):
         self.assertIn("zählen nicht zu `changedCount`", self.neo4j)
         self.assertNotIn("[:CHANGES]", self.neo4j)
 
+    def test_six_clarified_invariants_are_projected_across_specifications(self):
+        """Every normative layer must retain the six clarified model decisions."""
+        normative_layers = {
+            "context": self.context,
+            "ontology": self.ontology,
+            "graph rules": self.rules,
+            "sync specification": self.sync,
+            "Neo4j projection": self.neo4j,
+        }
+        required_terms = (
+            "runId",
+            "requestedRevision",
+            "TARGETS_HISTORY",
+            "evaluatedResultRevision",
+            "checkedCriterionRevision",
+            "bootstrapKey",
+            "baseHistoryViewHash",
+            "correctedFields",
+            "HistoryView",
+        )
+        for layer_name, content in normative_layers.items():
+            for term in required_terms:
+                with self.subTest(layer=layer_name, term=term):
+                    self.assertIn(term, content)
+
+        schema_dir = DOCS / "schemas"
+        request_schema = (schema_dir / "jci-change-request.schema.json").read_text(
+            encoding="utf-8"
+        )
+        result_schema = (schema_dir / "jci-sync-result.schema.json").read_text(
+            encoding="utf-8"
+        )
+        jsonld_context = (schema_dir / "jci-context.jsonld").read_text(
+            encoding="utf-8"
+        )
+        for term in (
+            "idempotencyKey",
+            "requestedRevision",
+            "expectedHistoryViewHash",
+            "correctedFields",
+        ):
+            with self.subTest(exchange_schema="request", term=term):
+                self.assertIn(term, request_schema)
+        for term in ("runId", "affectedEntityIds", "conflictIds"):
+            with self.subTest(exchange_schema="result", term=term):
+                self.assertIn(term, result_schema)
+        for term in (
+            "runId",
+            "requestedRevision",
+            "evaluatedResultRevision",
+            "checkedCriterionRevision",
+            "bootstrapKey",
+            "baseHistoryViewHash",
+        ):
+            with self.subTest(exchange_schema="jsonld", term=term):
+                self.assertIn(term, jsonld_context)
+
     def test_core_chapters_have_examples(self):
         for chapter in range(3, 13):
             pattern = rf"## {chapter}\..*?(?=\n## {chapter + 1}\.|\Z)"
@@ -154,6 +213,102 @@ class SpecificationConsistencyTests(unittest.TestCase):
                 data = json.loads((schema_dir / name).read_text(encoding="utf-8"))
                 self.assertIsInstance(data, dict)
                 self.assertIn("@context" if name.endswith(".jsonld") else "$schema", data)
+
+    def test_exchange_schemas_are_valid_and_enforce_conditional_invariants(self):
+        """Version 1.1 must distinguish create, correction and run outcomes."""
+        schema_dir = DOCS / "schemas"
+        request_schema = json.loads(
+            (schema_dir / "jci-change-request.schema.json").read_text(encoding="utf-8")
+        )
+        result_schema = json.loads(
+            (schema_dir / "jci-sync-result.schema.json").read_text(encoding="utf-8")
+        )
+        Draft202012Validator.check_schema(request_schema)
+        Draft202012Validator.check_schema(result_schema)
+        request_validator = Draft202012Validator(
+            request_schema, format_checker=FormatChecker()
+        )
+        result_validator = Draft202012Validator(
+            result_schema, format_checker=FormatChecker()
+        )
+
+        base_request = {
+            "schemaVersion": "1.1",
+            "requestId": "11111111-1111-4111-8111-111111111111",
+            "idempotencyKey": "create-task-1",
+            "requestedAt": "2026-08-30T10:00:00+02:00",
+            "requestedRevision": None,
+            "changeType": "CREATED",
+            "target": {
+                "id": "22222222-2222-4222-8222-222222222222",
+                "entityType": "Task",
+            },
+            "requestedByRoleAssignmentId": "33333333-3333-4333-8333-333333333333",
+            "reason": "Neuen atomaren Task anlegen",
+            "operations": [
+                {
+                    "op": "ADD",
+                    "path": "/name",
+                    "value": {"valueType": "STRING", "value": "API erweitern"},
+                }
+            ],
+        }
+        request_validator.validate(base_request)
+
+        invalid_created = dict(base_request, requestedRevision=1)
+        with self.assertRaises(ValidationError):
+            request_validator.validate(invalid_created)
+
+        value = {"valueType": "STRING", "value": "Team A"}
+        correction_request = {
+            **base_request,
+            "idempotencyKey": "correct-history-1",
+            "requestedRevision": 1,
+            "changeType": "HISTORICAL_CORRECTION",
+            "target": {
+                "id": "44444444-4444-4444-8444-444444444444",
+                "entityType": "PiH",
+            },
+            "historicalCorrection": {
+                "correctionType": "ADDITION",
+                "reason": "Historische Teamzuordnung belegt",
+                "valueSchemaVersion": "1.0",
+                "expectedHistoryViewHash": "a" * 64,
+                "correctedFields": ["/stateData/team"],
+                "previousValue": {
+                    "/stateData/team": {"valueType": "NULL", "value": None}
+                },
+                "correctedValue": {"/stateData/team": value},
+            },
+        }
+        correction_request.pop("operations")
+        request_validator.validate(correction_request)
+
+        invalid_correction = dict(correction_request, operations=base_request["operations"])
+        with self.assertRaises(ValidationError):
+            request_validator.validate(invalid_correction)
+
+        base_result = {
+            "schemaVersion": "1.1",
+            "requestId": base_request["requestId"],
+            "runId": "55555555-5555-4555-8555-555555555555",
+            "syncEventId": "66666666-6666-4666-8666-666666666666",
+            "outcome": "FAILED",
+            "completedAt": "2026-08-30T10:01:00+02:00",
+            "affectedCount": 0,
+            "changedCount": 0,
+            "historyCount": 0,
+            "correctionCount": 0,
+            "conflictCount": 0,
+            "affectedEntityIds": [],
+            "conflictIds": [],
+            "errors": [{"code": "TARGET_UNRESOLVED", "message": "Ziel nicht auflösbar"}],
+        }
+        result_validator.validate(base_result)
+
+        invalid_success = dict(base_result, outcome="SUCCESS", errors=[])
+        with self.assertRaises(ValidationError):
+            result_validator.validate(invalid_success)
 
     def test_public_jsonld_namespace_matches_vocabulary_page(self):
         namespace = "https://eeimicke.github.io/junaco-jci-loop/ns/jci/1.0#"

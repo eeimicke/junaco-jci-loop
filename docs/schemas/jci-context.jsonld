@@ -11,6 +11,16 @@
     "updatedAt": {"@id": "jci:updatedAt", "@type": "http://www.w3.org/2001/XMLSchema#dateTime"},
     "validFrom": {"@id": "jci:validFrom", "@type": "http://www.w3.org/2001/XMLSchema#dateTime"},
     "validUntil": {"@id": "jci:validUntil", "@type": "http://www.w3.org/2001/XMLSchema#dateTime"},
-    "revision": {"@id": "jci:revision", "@type": "http://www.w3.org/2001/XMLSchema#integer"}
+    "revision": {"@id": "jci:revision", "@type": "http://www.w3.org/2001/XMLSchema#integer"},
+    "idempotencyKey": "jci:idempotencyKey",
+    "targetEntityId": "jci:targetEntityId",
+    "targetEntityType": {"@id": "jci:targetEntityType", "@type": "@vocab"},
+    "requestedRevision": {"@id": "jci:requestedRevision", "@type": "http://www.w3.org/2001/XMLSchema#integer"},
+    "runId": "jci:runId",
+    "bootstrapKey": "jci:bootstrapKey",
+    "evaluatedResultRevision": {"@id": "jci:evaluatedResultRevision", "@type": "http://www.w3.org/2001/XMLSchema#integer"},
+    "checkedCriterionRevision": {"@id": "jci:checkedCriterionRevision", "@type": "http://www.w3.org/2001/XMLSchema#integer"},
+    "baseHistoryViewHash": "jci:baseHistoryViewHash",
+    "TARGETS_HISTORY": {"@id": "jci:TARGETS_HISTORY", "@type": "@id"}
   }
 }

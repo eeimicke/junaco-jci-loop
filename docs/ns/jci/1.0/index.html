@@ -54,10 +54,26 @@
     <code>DETECTED_BY</code>, <code>RESOLVED_BY</code>,
     <code>RESOLVED_THROUGH</code>, <code>CREATED_BY</code>,
     <code>REQUESTED_BY</code>, <code>CORRECTED_BY</code>, <code>CHANGED_BY</code>,
-    <code>TRIGGERS</code>, <code>EXECUTES</code>, <code>REPLACED_BY</code>,
+    <code>TARGETS_HISTORY</code>, <code>TRIGGERS</code>, <code>EXECUTES</code>, <code>REPLACED_BY</code>,
     <code>HAS_HISTORICAL_STATE</code>, <code>CREATES_HISTORY</code>,
     <code>CORRECTS</code>, <code>CAUSED_BY</code> und / and <code>CREATES_CORRECTION</code>.
   </p>
+
+  <h2>Präzisierende Eigenschaften / Clarifying properties</h2>
+  <table>
+    <thead><tr><th>Begriff / Term</th><th>Einordnung / Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>idempotencyKey</code></td><td>Eindeutige Kennung eines fachlichen Veränderungsauftrags. / <span lang="en">Unique identifier of a domain change request.</span></td></tr>
+      <tr><td><code>targetEntityId</code></td><td>Identität des angeforderten Ziels. / <span lang="en">Identity of the requested target.</span></td></tr>
+      <tr><td><code>targetEntityType</code></td><td>Konkreter Entitätstyp des angeforderten Ziels. / <span lang="en">Concrete entity type of the requested target.</span></td></tr>
+      <tr><td><code>requestedRevision</code></td><td>Erwartete Ausgangsrevision; bei <code>CREATED</code> nicht gesetzt. / <span lang="en">Expected base revision; absent for <code>CREATED</code>.</span></td></tr>
+      <tr><td><code>runId</code></td><td>Eindeutige Kennung eines abgeschlossenen technischen Synchronisationslaufs. / <span lang="en">Unique identifier of a completed technical synchronization run.</span></td></tr>
+      <tr><td><code>bootstrapKey</code></td><td>Kennung des einmaligen Root-RoleAssignment. / <span lang="en">Marker of the one-time root role assignment.</span></td></tr>
+      <tr><td><code>evaluatedResultRevision</code></td><td>Von einer Verification bewertete Result-Revision. / <span lang="en">Result revision evaluated by a verification.</span></td></tr>
+      <tr><td><code>checkedCriterionRevision</code></td><td>Von einer Verification geprüfte SuccessCriterion-Revision. / <span lang="en">SuccessCriterion revision checked by a verification.</span></td></tr>
+      <tr><td><code>baseHistoryViewHash</code></td><td>SHA-256 des vor einer HistoricalCorrection erneut gelesenen effektiven historischen Stands. / <span lang="en">SHA-256 of the effective historical view re-read before a historical correction.</span></td></tr>
+    </tbody>
+  </table>
 
   <h2>Beispiele für vollständige IRIs / Full IRI examples</h2>
   <ul>

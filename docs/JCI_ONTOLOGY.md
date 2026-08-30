@@ -71,7 +71,18 @@ Jede konkrete `JCIEntity` besitzt:
 | `revision`    | Integer  |      ja | mindestens `1`                             |
 | `status`      | Enum     |      ja | typabhängiger zulässiger Status            |
 
-`PiH`, `ChangeEvent`, `SyncEvent` und `HistoricalCorrection` sind unveränderlich. Für sie gelten dauerhaft `revision = 1` und `updatedAt = createdAt`.
+`PiH`, `ChangeEvent`, `SyncEvent` und `HistoricalCorrection` sind inhaltlich unveränderlich. Für sie gelten dauerhaft `revision = 1` und `updatedAt = createdAt`. Ein `ChangeEvent` dokumentiert einen angenommenen Veränderungsauftrag, während ein `SyncEvent` das Ergebnis genau eines beendeten oder kontrolliert abgebrochenen technischen `SyncRun` dokumentiert. Die beim Laufabschluss entstehende Beziehung `TRIGGERS` darf ausschließlich append-only ergänzt werden. Beim erfolgreichen `CREATED` darf außerdem genau einmal `CHANGED_BY` von der neu erzeugten Entität zum bereits bestehenden `ChangeEvent` hergestellt werden. Diese Provenienzergänzungen verändern keine Eigenschaft des `ChangeEvent`.
+
+Für die hier präzisierten Entitätstypen gelten insbesondere folgende typspezifischen Pflichtfelder:
+
+| Entitätstyp            | Zusätzliche Pflichtfelder |
+| ---------------------- | ------------------------- |
+| `ChangeEvent`          | `idempotencyKey`, `targetEntityId`, `targetEntityType`, `requestedRevision` |
+| `SyncEvent`            | `runId` |
+| `Verification`         | `evaluatedResultRevision`, `checkedCriterionRevision` |
+| `HistoricalCorrection` | `baseHistoryViewHash` |
+
+`requestedRevision` ist ausschließlich bei `changeType = CREATED` `null`; andernfalls ist es eine positive Ganzzahl. Die Zielangaben des `ChangeEvent` sind unveränderliche Audit-Koordinaten des Auftrags und ersetzen keine fachliche Beziehung. `runId` identifiziert genau einen technischen Versuch. `baseHistoryViewHash` bindet eine historische Korrektur an die vor ihr wirksame historische Sicht.
 
 Typspezifische Pflichtfelder und Aufzählungswerte sind in Abschnitt 2.2.5 von [JCI_CONTEXT.md](JCI_CONTEXT.md) kanonisch beschrieben. Die verbindlichen Statusübergänge stehen in Abschnitt 2.2.4. Eine Datenbankimplementierung darf sie technisch konkretisieren, aber nicht abschwächen oder semantisch umdeuten.
 
@@ -108,6 +119,10 @@ Verification CHECKS SuccessCriterion
 Verification USES_EVIDENCE Evidence
 Verification SUPERSEDES Verification
 ```
+
+Eine `Verification` bindet mit `evaluatedResultRevision` und `checkedCriterionRevision` genau die Revisionen, die geprüft wurden. Ihr `Result` ist `COMPLETED`, ihr `SuccessCriterion` ist `ACTIVE`, und beide gehören zum selben `PiF1o`. Anwendbar ist nur eine nicht abgelöste Verification, deren gebundene Revisionen weiterhin den aktuellen Revisionen ihrer beiden Ziele entsprechen.
+
+**Kurzes Beispiel:** Eine Verification prüft Revision 3 eines abgeschlossenen Results gegen Revision 2 eines aktiven Erfolgskriteriums. Wird das Kriterium später zu Revision 3 geändert, bleibt die Verification dokumentiert, ist für die aktuelle Aggregation aber nicht mehr anwendbar.
 
 ### 5.3 Organisation und Rollen
 
@@ -152,11 +167,16 @@ ChangeEvent USES_EVIDENCE Evidence
 HistoricalCorrection USES_EVIDENCE Evidence
 ```
 
+Der initiale Bootstrap bildet ausschließlich die einmalige Vertrauenswurzel eines vollständig leeren Graphen. Dabei wird genau ein Root-`RoleAssignment` mit `bootstrapKey = "ROOT"` erzeugt. Nur dieses RoleAssignment darf dauerhaft ohne `CREATED_BY` bestehen. Der atomare Minimalgraph enthält eine `RoFOrg`, ein `RoFTeam`, ein technisches `RoFTeamMember`, eine `RoFRole`, das Root-`RoleAssignment` und eine `SYNC`-Definition. Alle sechs Entitäten entstehen unmittelbar mit `status = ACTIVE`, `revision = 1` sowie demselben `createdAt` und `updatedAt`; vorhandene `validFrom`-Werte der Typen und Beziehungen entsprechen demselben Bootstrapzeitpunkt. Dies ist die einzige Ausnahme vom regulären `DRAFT`-Start. Alle Entitäten außer dem Root-`RoleAssignment` verweisen über `CREATED_BY` auf diese Vertrauenswurzel. Der Bootstrap erzeugt weder `ChangeEvent`, `SyncRun`, `SyncEvent` noch `PiH`, ist nicht wiederholbar und ist kein Datenimport.
+
+**Kurzes Beispiel:** Nach dem einmaligen Anlegen des technischen Administrationsteams kann dessen Root-`RoleAssignment` den ersten regulären `CREATED`-Auftrag anfordern. Ein späterer Import darf den Bootstrap nicht erneut ausführen.
+
 ### 5.6 Veränderung, Historisierung und Korrektur
 
 ```text
 historisierbare JCIEntity CHANGED_BY ChangeEvent
 ChangeEvent TRIGGERS SyncEvent
+ChangeEvent TARGETS_HISTORY PiH
 SyncEvent EXECUTES SYNC
 SyncEvent AFFECTS JCIEntity
 historisierbare JCIEntity HAS_HISTORICAL_STATE PiH
@@ -168,7 +188,15 @@ HistoricalCorrection SUPERSEDES HistoricalCorrection
 ersetzbare JCIEntity REPLACED_BY gleicher konkreter JCIEntity-Typ
 ```
 
-`EXECUTES` dokumentiert im abgeschlossenen `SyncEvent`, welche SYNC-Definition der technische `SyncRun` verwendet hat. Der technische `SyncRun` wird nicht als Zwischenknoten gespeichert.
+`EXECUTES` dokumentiert im abgeschlossenen `SyncEvent`, welche SYNC-Definition der technische `SyncRun` verwendet hat. Der technische `SyncRun` wird nicht als Zwischenknoten gespeichert. Ein angenommenes `ChangeEvent` darf zunächst kein Ziel über `TRIGGERS` besitzen. Jeder beendete oder kontrolliert abgebrochene Versuch erzeugt genau ein neues `SyncEvent` und ergänzt genau eine `TRIGGERS`-Kante append-only.
+
+`CHANGED_BY` besitzt bedingte Semantik: Eine normale Änderung besitzt genau eine Quellentität. Bei `CREATED` fehlt die Quelle bis zum erfolgreichen Commit; nur bei `SUCCESS` entstehen Zielentität und Kante gemeinsam. Ein `ChangeEvent` für `HISTORICAL_CORRECTION` besitzt dagegen keine `CHANGED_BY`-Quelle, sondern genau ein `TARGETS_HISTORY` zu dem unverändert bleibenden `PiH`. Das später über `CORRECTS` verbundene PiH muss dasselbe Ziel sein.
+
+`AFFECTS` kann leer sein, wenn ein Versuch mit `outcome = FAILED` bereits vor erfolgreicher Zielauflösung endet. Ein `SyncEvent` mit `SUCCESS` oder `CONFLICT` besitzt mindestens ein `AFFECTS`-Ziel.
+
+Eine `HistoricalCorrection` speichert mit `baseHistoryViewHash` den Hash der wirksamen `HistoryView` unmittelbar vor ihrer Erzeugung. Nicht abgelöste Korrekturen desselben `PiH` müssen feldweise disjunkt sein. Eine neue Korrektur mit überlappenden `correctedFields` ersetzt genau eine aktive Vorgängerkorrektur vollständig über `SUPERSEDES`; andernfalls entsteht ein Konflikt.
+
+**Kurzes Beispiel:** Während der erste SyncRun noch läuft, besitzt das `ChangeEvent` noch kein `TRIGGERS`-Ziel. Erst sein Abschluss erzeugt das `SyncEvent`. Eine spätere historische Berichtigung verweist bereits mit `TARGETS_HISTORY` auf das betroffene `PiH`, ohne dieses zu verändern.
 
 `REPLACED_BY` ist die gespeicherte Nachfolgebeziehung einer Entität mit `status = REPLACED`. Quelle und Ziel besitzen denselben konkreten `entityType`; Selbstbezüge und Zyklen sind unzulässig.
 
@@ -196,7 +224,7 @@ SyncEvent
 HistoricalCorrection
 ```
 
-Diese vier Typen sind unveränderlich und werden nicht erneut historisiert. Eine Abweichung in einem `PiH` wird durch ein neues `HistoricalCorrection`-Objekt dokumentiert. Das `PiH` selbst bleibt unverändert.
+Diese vier Typen sind inhaltlich unveränderlich und werden nicht erneut historisiert. Ausschließlich die oben beschriebenen append-only Provenienzergänzungen am `ChangeEvent` sind zulässig. Eine Abweichung in einem `PiH` wird durch ein neues `HistoricalCorrection`-Objekt dokumentiert. Das `PiH` selbst bleibt unverändert. `TARGETS_HISTORY` adressiert nur den Anlass der Korrektur und ist keine Änderung des historischen Zustands.
 
 ## 8. Task-Typen und Task-Graph
 
@@ -216,6 +244,8 @@ Nur `ATOMIC`-Tasks besitzen `EXECUTED_BY`, `USES` und `PRODUCES`. Ein aktiver od
 ## 9. Maschinenlesbarer Austausch und Erweiterung
 
 Vollständige Graph- und Ontologieexporte verwenden JSON-LD 1.1 mit dem Kontext `schemas/jci-context.jsonld`. Entitäten werden als `urn:jci:<UUID>` identifiziert; konkrete Typen und Beziehungen verwenden den öffentlichen, versionierten Namensraum `https://eeimicke.github.io/junaco-jci-loop/ns/jci/1.0#`.
+
+`JCIChangeRequest` und `JCISyncResult` verwenden `schemaVersion = "1.1"`. Für `HISTORICAL_CORRECTION` ersetzt ein strukturiertes `historicalCorrection`-Objekt die allgemeinen `operations`; es enthält insbesondere `expectedHistoryViewHash`, eindeutige lexikografisch sortierte `correctedFields`, `previousValue` und `correctedValue`.
 
 Komplexe Eigenschaften verwenden die strukturierten Typen aus `JCI_CONTEXT.md` und werden als JSON-LD-kompatible JSON-Werte übertragen. Die Neo4j-Projektion als kanonische JSON-Zeichenkette verändert das Austauschformat nicht.
 

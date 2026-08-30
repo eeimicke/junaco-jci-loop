@@ -24,7 +24,9 @@ def may_transition(entity_type: str, source: str | None, target: str) -> bool:
         return False
 
     # Unveränderliche Historisierungs- und Prozessobjekte entstehen direkt
-    # als RECORDED und besitzen keinen späteren Statuswechsel.
+    # als RECORDED und besitzen keinen späteren Statuswechsel. ChangeEvent
+    # dokumentiert dabei bereits den angenommenen Auftrag; SyncEvent erst den
+    # Abschluss eines technischen Versuchs.
     if entity_type in {"PiH", "ChangeEvent", "SyncEvent", "HistoricalCorrection"}:
         return source is None and target == "RECORDED"
 
@@ -181,6 +183,236 @@ def ran_decision(effect: str, condition: bool) -> str:
     raise ValueError("unknown RaN effect")
 
 
+def valid_sync_lifecycle(
+    scheduled_run_ids: list[str],
+    completed_run_ids: list[str],
+    sync_event_run_ids: list[str],
+) -> bool:
+    """Prüft die 1:1-Abbildung beendeter technischer Läufe auf SyncEvents.
+
+    Ein angenommenes `ChangeEvent` darf zunächst nur einen eingeplanten,
+    noch laufenden `SyncRun` besitzen. Erst Abschluss oder kontrollierter
+    Abbruch erzeugen ein unveränderliches `SyncEvent`. Wiederholungsversuche
+    verwenden neue `runId`-Werte und erzeugen jeweils ein weiteres Ereignis.
+
+    Beispiel:
+    Lauf A ist beendet, Lauf B läuft noch. Dann muss genau für A ein
+    `SyncEvent` existieren. Ein Ereignis für B wäre verfrüht; zwei Ereignisse
+    für A würden denselben Versuch doppelt dokumentieren.
+    """
+    # Jeder beendete Lauf muss zuvor eingeplant und jede ID eindeutig sein.
+    if len(set(scheduled_run_ids)) != len(scheduled_run_ids):
+        return False
+    if len(set(completed_run_ids)) != len(completed_run_ids):
+        return False
+    if not set(completed_run_ids).issubset(scheduled_run_ids):
+        return False
+
+    # SyncEvents dürfen nur für beendete Läufe existieren und bilden diese
+    # Menge exakt ab. Noch laufende Versuche bleiben ereignislos.
+    return (
+        len(set(sync_event_run_ids)) == len(sync_event_run_ids)
+        and set(sync_event_run_ids) == set(completed_run_ids)
+    )
+
+
+def valid_created_outcome(
+    *,
+    target_existed_before: bool,
+    requested_revision: int | None,
+    outcome: str,
+    target_exists_after: bool,
+    target_revision_after: int | None,
+    changed_by_count: int,
+    history_count: int,
+) -> bool:
+    """Prüft den Sonderfall `CREATED` ohne erfundenen Ausgangszustand.
+
+    Das Ziel eines `CREATED`-Auftrags darf bei Annahme noch nicht existieren
+    und besitzt deshalb keine angeforderte Ausgangsrevision. Nur ein
+    erfolgreicher Commit legt Revision 1 samt genau einer `CHANGED_BY`-
+    Beziehung an. Weil vorher kein Zustand vorhanden war, entsteht kein PiH.
+
+    Beispiel:
+    Ein neuer Task mit freier UUID wird erfolgreich erzeugt. Er beginnt mit
+    Revision 1 und verweist auf sein ChangeEvent; ein „Task Revision 0“ wird
+    weder konstruiert noch historisiert.
+    """
+    if target_existed_before or requested_revision is not None or history_count != 0:
+        return False
+    if outcome == "SUCCESS":
+        return (
+            target_exists_after
+            and target_revision_after == 1
+            and changed_by_count == 1
+        )
+    if outcome in {"CONFLICT", "FAILED"}:
+        return (
+            not target_exists_after
+            and target_revision_after is None
+            and changed_by_count == 0
+        )
+    return False
+
+
+def valid_historical_target(
+    *,
+    change_type: str,
+    changed_by_count: int,
+    target_history_ids: list[str],
+    corrected_history_id: str | None,
+    requested_revision: int | None,
+) -> bool:
+    """Prüft die eindeutige Adressierung einer historischen Korrektur.
+
+    `HISTORICAL_CORRECTION` ändert keine aktuelle Quellentität. Das
+    `ChangeEvent` zeigt deshalb nicht über `CHANGED_BY`, sondern genau über
+    `TARGETS_HISTORY` auf ein unveränderliches PiH. Bei Erfolg muss die
+    erzeugte Korrektur über `CORRECTS` dasselbe PiH bezeichnen.
+    """
+    if change_type != "HISTORICAL_CORRECTION":
+        return not target_history_ids
+    return (
+        changed_by_count == 0
+        and requested_revision == 1
+        and len(target_history_ids) == 1
+        and corrected_history_id == target_history_ids[0]
+    )
+
+
+def verification_is_applicable(
+    *,
+    result_status: str,
+    criterion_status: str,
+    same_pif1o: bool,
+    result_revision: int,
+    criterion_revision: int,
+    evaluated_result_revision: int,
+    checked_criterion_revision: int,
+    superseded: bool,
+) -> bool:
+    """Bestimmt, ob eine Verification für die Zielaggregation noch gilt.
+
+    Eine Verification ist eine abgeschlossene Aussage über genau eine
+    Result- und SuccessCriterion-Revision. Ändert sich eines der Prüfziele,
+    bleibt die Verification als Nachweis erhalten, ist aber nicht mehr auf
+    den aktuellen Modellzustand anwendbar.
+
+    Beispiel:
+    Revision 3 eines Ergebnisses wurde gegen Revision 2 des Kriteriums
+    geprüft. Nach Änderung des Kriteriums auf Revision 3 muss eine neue
+    Verification entstehen; die alte darf PiF1o nicht auf ACHIEVED setzen.
+    """
+    return (
+        result_status == "COMPLETED"
+        and criterion_status == "ACTIVE"
+        and same_pif1o
+        and not superseded
+        and evaluated_result_revision == result_revision
+        and checked_criterion_revision == criterion_revision
+    )
+
+
+def valid_bootstrap(
+    *,
+    graph_was_empty: bool,
+    root_keys: list[str],
+    required_types: set[str],
+    created_types: set[str],
+    created_statuses: dict[str, str],
+    revisions: dict[str, int],
+    created_at_values: set[str],
+    valid_from_values: set[str],
+    entities_without_creator: list[str],
+) -> bool:
+    """Prüft die geschlossene einmalige Vertrauenswurzel des JCI-Graphen.
+
+    Der Bootstrap ist nur im vollständig leeren Graphen zulässig. Er legt
+    Organisation, Team, technisches Mitglied, Rolle, Root-RoleAssignment und
+    aktive SYNC-Definition atomar an. Alle sechs Entitäten müssen sofort
+    `ACTIVE`, auf Revision 1 und auf denselben Gültigkeitsbeginn gesetzt
+    werden. Nur das Root-RoleAssignment darf ohne `CREATED_BY` bleiben;
+    danach gelten die normalen Provenienzregeln.
+    """
+    return (
+        graph_was_empty
+        and root_keys == ["ROOT"]
+        and required_types.issubset(created_types)
+        and set(created_statuses) == required_types
+        and all(status == "ACTIVE" for status in created_statuses.values())
+        and set(revisions) == required_types
+        and all(revision == 1 for revision in revisions.values())
+        and len(created_at_values) == 1
+        and len(valid_from_values) == 1
+        and created_at_values == valid_from_values
+        and entities_without_creator == ["RoleAssignment:ROOT"]
+    )
+
+
+def valid_historical_correction_commit(
+    *,
+    expected_hash: str,
+    current_hash: str,
+    corrected_fields: list[str],
+    active_field_sets: list[set[str]],
+    superseded_indexes: list[int],
+) -> bool:
+    """Prüft konkurrierende Ergänzungen zur wirksamen HistoryView.
+
+    Feldfremde Korrekturen dürfen nebeneinander aktiv sein. Überlappt eine
+    neue Korrektur bestehende Felder, muss sie genau eine aktive Korrektur
+    vollständig ersetzen. Der Hashvergleich verhindert, dass ein Auftrag
+    unbemerkt auf einer zwischenzeitlich veralteten historischen Sicht
+    committed wird.
+    """
+    if expected_hash != current_hash:
+        return False
+    if not corrected_fields or corrected_fields != sorted(set(corrected_fields)):
+        return False
+
+    new_fields = set(corrected_fields)
+    overlaps = [
+        index for index, active_fields in enumerate(active_field_sets)
+        if new_fields & active_fields
+    ]
+    if not overlaps:
+        return not superseded_indexes
+
+    # Eine Überlappung mit mehreren aktiven Korrekturen ist nicht eindeutig.
+    # Bei genau einer muss die neue Korrektur deren gesamte Feldmenge tragen;
+    # zusätzliche, bisher unberührte Felder sind dabei zulässig.
+    return (
+        len(overlaps) == 1
+        and superseded_indexes == overlaps
+        and new_fields.issuperset(active_field_sets[overlaps[0]])
+    )
+
+
+def valid_correction_value_maps(
+    *,
+    correction_type: str,
+    corrected_fields: list[str],
+    previous_values: dict[str, dict[str, object]],
+    corrected_values: dict[str, dict[str, object]],
+) -> bool:
+    """Prüft die vollständige Feldbindung der Korrekturwerte.
+
+    Beide Wertemengen müssen exakt dieselben kanonischen Pfade wie
+    `correctedFields` enthalten. Bei `ADDITION` darf zuvor gerade kein Wert
+    wirksam gewesen sein; dies wird ausdrücklich als typisiertes `NULL`
+    gespeichert und nicht durch ein fehlendes Map-Feld angedeutet.
+    """
+    field_set = set(corrected_fields)
+    if set(previous_values) != field_set or set(corrected_values) != field_set:
+        return False
+    if correction_type == "ADDITION":
+        return all(
+            value.get("valueType") == "NULL" and value.get("value") is None
+            for value in previous_values.values()
+        )
+    return correction_type in {"CORRECTION", "CLARIFICATION"}
+
+
 class ModelRuleTests(unittest.TestCase):
     def test_terminal_statuses_cannot_reopen(self):
         """
@@ -209,8 +441,10 @@ class ModelRuleTests(unittest.TestCase):
         """
         JCI-Einordnung:
         `PiH`, `ChangeEvent`, `SyncEvent` und `HistoricalCorrection` sind
-        unveränderliche Prozess- und Historisierungsobjekte. Sie beschreiben
-        abgeschlossene Tatsachen und werden direkt mit `RECORDED` angelegt.
+        unveränderliche Prozess- und Historisierungsobjekte. `ChangeEvent`
+        beschreibt bereits einen angenommenen Auftrag; die übrigen drei
+        beschreiben abgeschlossene historische oder technische Tatsachen.
+        Alle werden direkt mit `RECORDED` angelegt.
 
         Beispiel:
         Nach einem beendeten Synchronisationslauf dokumentiert ein
@@ -365,6 +599,199 @@ class ModelRuleTests(unittest.TestCase):
         # Eine verpflichtende, aber nicht erfüllte Bedingung verweigert die
         # Entscheidung. Allein daraus entsteht noch kein Regelkonflikt.
         self.assertEqual(ran_decision("REQUIRE", False), "DENY")
+
+    def test_change_event_sync_run_lifecycle(self):
+        """Ein SyncEvent dokumentiert genau einen bereits beendeten Lauf."""
+        # Lauf A ist beendet, Lauf B läuft noch. Nur A darf bereits als
+        # unveränderliches SyncEvent am ChangeEvent hängen.
+        self.assertTrue(valid_sync_lifecycle(["A", "B"], ["A"], ["A"]))
+
+        # Ein Ereignis für den noch laufenden Lauf B wäre eine vorweggenommene
+        # Abschlussdokumentation und ist daher unzulässig.
+        self.assertFalse(valid_sync_lifecycle(["A", "B"], ["A"], ["A", "B"]))
+
+        # Ein Retry ist ein eigener Lauf und darf nach seinem Abschluss ein
+        # zweites Ereignis mit einer anderen runId erzeugen.
+        self.assertTrue(valid_sync_lifecycle(["A", "B"], ["A", "B"], ["A", "B"]))
+
+    def test_created_has_no_fictitious_history(self):
+        """CREATED beginnt bei Revision 1 und historisiert keine Revision 0."""
+        self.assertTrue(valid_created_outcome(
+            target_existed_before=False,
+            requested_revision=None,
+            outcome="SUCCESS",
+            target_exists_after=True,
+            target_revision_after=1,
+            changed_by_count=1,
+            history_count=0,
+        ))
+        self.assertTrue(valid_created_outcome(
+            target_existed_before=False,
+            requested_revision=None,
+            outcome="FAILED",
+            target_exists_after=False,
+            target_revision_after=None,
+            changed_by_count=0,
+            history_count=0,
+        ))
+
+        # Eine bereits belegte Ziel-ID ist kein CREATED-Ausgangspunkt.
+        self.assertFalse(valid_created_outcome(
+            target_existed_before=True,
+            requested_revision=None,
+            outcome="SUCCESS",
+            target_exists_after=True,
+            target_revision_after=1,
+            changed_by_count=1,
+            history_count=0,
+        ))
+
+    def test_historical_correction_targets_exact_pih(self):
+        """TARGETS_HISTORY und CORRECTS müssen dasselbe PiH adressieren."""
+        self.assertTrue(valid_historical_target(
+            change_type="HISTORICAL_CORRECTION",
+            changed_by_count=0,
+            target_history_ids=["pih-1"],
+            corrected_history_id="pih-1",
+            requested_revision=1,
+        ))
+
+        # Die Korrektur darf nicht stillschweigend auf ein anderes PiH zeigen.
+        self.assertFalse(valid_historical_target(
+            change_type="HISTORICAL_CORRECTION",
+            changed_by_count=0,
+            target_history_ids=["pih-1"],
+            corrected_history_id="pih-2",
+            requested_revision=1,
+        ))
+
+    def test_verification_is_bound_to_target_revisions(self):
+        """Nur eine Verification der aktuellen Zielrevisionen ist anwendbar."""
+        common = {
+            "result_status": "COMPLETED",
+            "criterion_status": "ACTIVE",
+            "same_pif1o": True,
+            "result_revision": 3,
+            "criterion_revision": 2,
+            "evaluated_result_revision": 3,
+            "checked_criterion_revision": 2,
+            "superseded": False,
+        }
+        self.assertTrue(verification_is_applicable(**common))
+
+        # Nach der Änderung des Kriteriums auf Revision 3 bleibt der Nachweis
+        # erhalten, zählt aber nicht mehr zur aktuellen Zielerreichung.
+        stale = dict(common, criterion_revision=3)
+        self.assertFalse(verification_is_applicable(**stale))
+
+    def test_bootstrap_is_single_closed_trust_root(self):
+        """Der Bootstrap ist vollständig, atomar und nicht wiederholbar."""
+        required = {
+            "RoFOrg", "RoFTeam", "RoFTeamMember", "RoFRole",
+            "RoleAssignment", "SYNC",
+        }
+        self.assertTrue(valid_bootstrap(
+            graph_was_empty=True,
+            root_keys=["ROOT"],
+            required_types=required,
+            created_types=required,
+            created_statuses={entity_type: "ACTIVE" for entity_type in required},
+            revisions={entity_type: 1 for entity_type in required},
+            created_at_values={"2026-08-30T09:00:00+02:00"},
+            valid_from_values={"2026-08-30T09:00:00+02:00"},
+            entities_without_creator=["RoleAssignment:ROOT"],
+        ))
+
+        # Ein zweites Root oder ein Bootstrap in einem bestehenden Graphen
+        # würde die Vertrauenswurzel mehrdeutig machen.
+        self.assertFalse(valid_bootstrap(
+            graph_was_empty=False,
+            root_keys=["ROOT", "ROOT"],
+            required_types=required,
+            created_types=required,
+            created_statuses={entity_type: "ACTIVE" for entity_type in required},
+            revisions={entity_type: 1 for entity_type in required},
+            created_at_values={"2026-08-30T09:00:00+02:00"},
+            valid_from_values={"2026-08-30T09:00:00+02:00"},
+            entities_without_creator=["RoleAssignment:ROOT"],
+        ))
+
+        # Ein zwar vollständiger, aber als DRAFT erzeugter Minimalgraph wäre
+        # nicht handlungsfähig: Das Root-RoleAssignment könnte den ersten
+        # regulären Auftrag nicht unter einer aktiven SYNC-Definition stellen.
+        draft_statuses = {entity_type: "ACTIVE" for entity_type in required}
+        draft_statuses["RoleAssignment"] = "DRAFT"
+        self.assertFalse(valid_bootstrap(
+            graph_was_empty=True,
+            root_keys=["ROOT"],
+            required_types=required,
+            created_types=required,
+            created_statuses=draft_statuses,
+            revisions={entity_type: 1 for entity_type in required},
+            created_at_values={"2026-08-30T09:00:00+02:00"},
+            valid_from_values={"2026-08-30T09:00:00+02:00"},
+            entities_without_creator=["RoleAssignment:ROOT"],
+        ))
+
+    def test_historical_corrections_are_conflict_safe(self):
+        """Disjunkte Felder sind parallel möglich; Überlappungen sind streng."""
+        history_hash = "a" * 64
+
+        # Eine Ergänzung eines bisher unberührten Felds darf neben der
+        # bestehenden Korrektur aktiv werden.
+        self.assertTrue(valid_historical_correction_commit(
+            expected_hash=history_hash,
+            current_hash=history_hash,
+            corrected_fields=["/stateData/team"],
+            active_field_sets=[{"/stateData/owner"}],
+            superseded_indexes=[],
+        ))
+
+        # Dasselbe Feld darf nur durch vollständiges Ersetzen genau einer
+        # aktiven Vorgängerkorrektur geändert werden.
+        self.assertTrue(valid_historical_correction_commit(
+            expected_hash=history_hash,
+            current_hash=history_hash,
+            corrected_fields=["/stateData/owner", "/stateData/team"],
+            active_field_sets=[{"/stateData/owner"}],
+            superseded_indexes=[0],
+        ))
+
+        # Ein inzwischen veralteter HistoryView-Hash verhindert Lost Updates.
+        self.assertFalse(valid_historical_correction_commit(
+            expected_hash="b" * 64,
+            current_hash=history_hash,
+            corrected_fields=["/stateData/team"],
+            active_field_sets=[],
+            superseded_indexes=[],
+        ))
+
+        # Der ergänzte Pfad muss in beiden Wertemengen vorkommen; sein alter
+        # Wert ist ausdrücklich NULL, weil er in der Basissicht fehlte.
+        self.assertTrue(valid_correction_value_maps(
+            correction_type="ADDITION",
+            corrected_fields=["/stateData/team"],
+            previous_values={
+                "/stateData/team": {"valueType": "NULL", "value": None}
+            },
+            corrected_values={
+                "/stateData/team": {"valueType": "STRING", "value": "Team A"}
+            },
+        ))
+
+        # Ein zusätzliches, nicht deklariertes Map-Feld wäre eine versteckte
+        # Änderung außerhalb von correctedFields und ist deshalb ungültig.
+        self.assertFalse(valid_correction_value_maps(
+            correction_type="CORRECTION",
+            corrected_fields=["/stateData/team"],
+            previous_values={
+                "/stateData/team": {"valueType": "STRING", "value": "Team B"},
+                "/stateData/owner": {"valueType": "STRING", "value": "Anna"},
+            },
+            corrected_values={
+                "/stateData/team": {"valueType": "STRING", "value": "Team A"}
+            },
+        ))
 
 
 if __name__ == "__main__":

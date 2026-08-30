@@ -1,24 +1,36 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/eeimicke/junaco-jci-loop/main/docs/schemas/jci-change-request.schema.json",
-  "title": "JCIChangeRequest 1.0",
+  "title": "JCIChangeRequest 1.1",
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schemaVersion", "requestId", "idempotencyKey", "requestedAt",
-    "requestedRevision", "changeType", "target",
-    "requestedByRoleAssignmentId", "reason", "operations"
+    "schemaVersion",
+    "requestId",
+    "idempotencyKey",
+    "requestedAt",
+    "requestedRevision",
+    "changeType",
+    "target",
+    "requestedByRoleAssignmentId",
+    "reason"
   ],
   "properties": {
-    "schemaVersion": {"const": "1.0"},
+    "schemaVersion": {"const": "1.1"},
     "requestId": {"type": "string", "format": "uuid"},
     "idempotencyKey": {"type": "string", "minLength": 1},
     "requestedAt": {"type": "string", "format": "date-time"},
     "requestedRevision": {"type": ["integer", "null"], "minimum": 1},
     "changeType": {
       "enum": [
-        "CREATED", "CHANGED", "ACHIEVED", "COMPLETED", "REPLACED",
-        "REVOKED", "RESOLVED", "HISTORICAL_CORRECTION"
+        "CREATED",
+        "CHANGED",
+        "ACHIEVED",
+        "COMPLETED",
+        "REPLACED",
+        "REVOKED",
+        "RESOLVED",
+        "HISTORICAL_CORRECTION"
       ]
     },
     "target": {
@@ -36,13 +48,39 @@
       "type": "array",
       "minItems": 1,
       "items": {"$ref": "#/$defs/operation"}
-    }
+    },
+    "historicalCorrection": {"$ref": "#/$defs/historicalCorrection"}
   },
-  "allOf": [
+  "oneOf": [
     {
-      "if": {"properties": {"changeType": {"const": "CREATED"}}},
-      "then": {"properties": {"requestedRevision": {"type": "null"}}},
-      "else": {"properties": {"requestedRevision": {"type": "integer", "minimum": 1}}}
+      "properties": {
+        "changeType": {"const": "CREATED"},
+        "requestedRevision": {"type": "null"}
+      },
+      "required": ["operations"],
+      "not": {"required": ["historicalCorrection"]}
+    },
+    {
+      "properties": {
+        "changeType": {"const": "HISTORICAL_CORRECTION"},
+        "requestedRevision": {"const": 1},
+        "target": {
+          "properties": {"entityType": {"const": "PiH"}},
+          "required": ["entityType"]
+        }
+      },
+      "required": ["historicalCorrection"],
+      "not": {"required": ["operations"]}
+    },
+    {
+      "properties": {
+        "changeType": {
+          "enum": ["CHANGED", "ACHIEVED", "COMPLETED", "REPLACED", "REVOKED", "RESOLVED"]
+        },
+        "requestedRevision": {"type": "integer", "minimum": 1}
+      },
+      "required": ["operations"],
+      "not": {"required": ["historicalCorrection"]}
     }
   ],
   "$defs": {
@@ -52,9 +90,52 @@
       "required": ["valueType", "value"],
       "properties": {
         "valueType": {
-          "enum": ["NULL", "BOOLEAN", "INTEGER", "DECIMAL", "STRING", "DATE", "DATETIME", "OBJECT", "ARRAY"]
+          "enum": [
+            "NULL",
+            "BOOLEAN",
+            "INTEGER",
+            "DECIMAL",
+            "STRING",
+            "DATE",
+            "DATETIME",
+            "OBJECT",
+            "ARRAY"
+          ]
         },
         "value": {}
+      }
+    },
+    "typedValueMap": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {"$ref": "#/$defs/typedValue"},
+      "propertyNames": {"pattern": "^/"}
+    },
+    "historicalCorrection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "correctionType",
+        "reason",
+        "valueSchemaVersion",
+        "expectedHistoryViewHash",
+        "correctedFields",
+        "previousValue",
+        "correctedValue"
+      ],
+      "properties": {
+        "correctionType": {"enum": ["ADDITION", "CORRECTION", "CLARIFICATION"]},
+        "reason": {"type": "string", "minLength": 1},
+        "valueSchemaVersion": {"type": "string", "minLength": 1},
+        "expectedHistoryViewHash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "correctedFields": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^/"}
+        },
+        "previousValue": {"$ref": "#/$defs/typedValueMap"},
+        "correctedValue": {"$ref": "#/$defs/typedValueMap"}
       }
     },
     "operation": {
@@ -75,12 +156,18 @@
       },
       "allOf": [
         {
-          "if": {"properties": {"op": {"enum": ["CONNECT", "DISCONNECT"]}}, "required": ["op"]},
+          "if": {
+            "properties": {"op": {"enum": ["CONNECT", "DISCONNECT"]}},
+            "required": ["op"]
+          },
           "then": {"required": ["relationshipType", "direction", "otherEntityId"]},
           "else": {"required": ["path"]}
         },
         {
-          "if": {"properties": {"op": {"enum": ["ADD", "REPLACE"]}}, "required": ["op"]},
+          "if": {
+            "properties": {"op": {"enum": ["ADD", "REPLACE"]}},
+            "required": ["op"]
+          },
           "then": {"required": ["value"]}
         }
       ]
