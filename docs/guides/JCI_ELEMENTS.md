@@ -51,13 +51,13 @@ Ein `RoleAssignment` bedeutet: Ein bestimmtes Mitglied aktiviert eine vorhandene
 
 ```mermaid
 flowchart LR
-    PiF1o -->|HAS_SUCCESS_CRITERIA| Criterion[SuccessCriterion]
     PiF1o -->|DECOMPOSES_INTO| Task
     Task -->|EXECUTED_BY| Assignment[RoleAssignment]
     Task -->|PRODUCES| Result
     Verification -->|EVALUATES| Result
-    Verification -->|CHECKS| Criterion
     Verification -->|USES_EVIDENCE| Evidence
+    Verification -->|CHECKS| Criterion[SuccessCriterion]
+    PiF1o -->|HAS_SUCCESS_CRITERIA| Criterion
 ```
 
 - `Task`: Was wird getan?
