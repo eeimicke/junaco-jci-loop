@@ -1,0 +1,16 @@
+flowchart LR
+    RaN --> Type{ruleType}
+    Type --> Rule[RULE]
+    Type --> Norm[NORM]
+    Type --> Policy[POLICY]
+    Type --> Constraint[CONSTRAINT]
+    Type --> Law[LAW]
+    RaN --> Effect{effect}
+    Effect --> Require[REQUIRE]
+    Effect --> Prohibit[PROHIBIT]
+    Effect --> Permit[PERMIT]
+    RaN --> Scope{scopeType}
+    Scope --> Global[GLOBAL]
+    Scope --> Organization[ORGANIZATION]
+    Scope --> Team[TEAM]
+    Scope --> Entity[ENTITY]

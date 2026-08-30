@@ -1,0 +1,6 @@
+flowchart LR
+    Correction[HistoricalCorrection] -->|CORRECTS| History[PiH]
+    Correction -->|CAUSED_BY| ChangeEvent
+    Correction -->|CORRECTED_BY| Assignment[RoleAssignment]
+    Correction -->|USES_EVIDENCE| Evidence
+    SyncEvent -->|CREATES_CORRECTION| Correction

@@ -205,6 +205,51 @@ class SpecificationConsistencyTests(unittest.TestCase):
                     f"Nicht kanonische Beziehungen in {path.name}",
                 )
 
+    def test_complete_example_covers_entities_rules_and_sync_outcomes(self):
+        required_terms = ENTITY_TYPES | {
+            "RULE", "NORM", "POLICY", "CONSTRAINT", "LAW",
+            "REQUIRE", "PROHIBIT", "PERMIT",
+            "GLOBAL", "ORGANIZATION", "TEAM", "ENTITY",
+            "PRIORITY_TIE", "UNEVALUABLE",
+            "SUCCESS", "CONFLICT", "FAILED",
+        }
+        examples = (
+            DOCS / "guides" / "JCI_EXAMPLE.md",
+            DOCS / "en" / "guides" / "JCI_EXAMPLE.md",
+        )
+        for path in examples:
+            content = path.read_text(encoding="utf-8")
+            with self.subTest(example=path):
+                missing = {term for term in required_terms if term not in content}
+                self.assertFalse(missing, f"Begriffe fehlen in {path}: {sorted(missing)}")
+
+    def test_complete_example_diagram_sources_exist(self):
+        expected = {
+            "example-complete-entity-map.mmd",
+            "example-purpose-future.mmd",
+            "example-organisation.mmd",
+            "example-task-execution.mmd",
+            "example-environment.mmd",
+            "example-ran-types.mmd",
+            "example-ran-conflict.mmd",
+            "example-sync-outcomes.mmd",
+            "example-history-correction.mmd",
+        }
+        diagram_dir = DOCS / "diagrams" / "sources"
+        self.assertTrue(expected.issubset({path.name for path in diagram_dir.glob("*.mmd")}))
+
+    def test_complete_example_language_versions_are_structurally_synchronized(self):
+        german = (DOCS / "guides" / "JCI_EXAMPLE.md").read_text(encoding="utf-8")
+        english = (DOCS / "en" / "guides" / "JCI_EXAMPLE.md").read_text(encoding="utf-8")
+        german_chapters = re.findall(r"(?m)^## (\d+)\.", german)
+        english_chapters = re.findall(r"(?m)^## (\d+)\.", english)
+        self.assertEqual(german_chapters, english_chapters)
+        self.assertEqual(german_chapters, [str(number) for number in range(1, 14)])
+
+        german_relationships = {term for term in RELATIONSHIPS if term in german}
+        english_relationships = {term for term in RELATIONSHIPS if term in english}
+        self.assertEqual(german_relationships, english_relationships)
+
 
 if __name__ == "__main__":
     unittest.main()
