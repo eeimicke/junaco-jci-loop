@@ -1,50 +1,74 @@
 # JUNACO JCI Loop
 
-Dieses Repository enthält die kanonische Spezifikation des **JUNACO Continuous Integration Model for Organisations** und des daraus gebildeten **JCI Loop**.
+🇩🇪 [Deutsch](#deutsch) · 🇬🇧 [English](#english)
 
-Der JCI Loop ist ein graphbasiertes Organisationsmodell. Er verbindet Zweck und Werte, Zukunftszustände, Regeln, Rollen, Umweltbeziehungen, operative Umsetzung, Synchronisation und Historisierung in einem nachvollziehbaren Zusammenhang.
+## Deutsch
 
-## Kanonische Spezifikation
+> Eine Organisation bleibt nur dann handlungsfähig, wenn Zweck, Zukunft, Verantwortung, Arbeit, Regeln, Umwelt und Lernen auch nach Veränderungen zusammenpassen.
 
-Die aktuelle fachliche Beschreibung befindet sich in:
+Der **JUNACO Continuous Integration Loop** ist ein graphbasiertes Organisationsmodell. Er macht sichtbar, warum eine Aufgabe existiert, wer sie in welchem Team und welcher Rolle ausführt, welche Umweltobjekte benötigt werden, welche Regeln gelten, wie Erfolg geprüft wird und welcher frühere Zustand durch eine Änderung abgelöst wurde.
 
-- [JCI_CONTEXT.md](docs/JCI_CONTEXT.md)
+```mermaid
+flowchart LR
+    PiH -->|PROVIDES_CONTEXT_TO| CiV
+    CiV -->|INSCRIBES_PURPOSE_IN| PiF2
+    PiF1s -->|CONTRIBUTES_TO| PiF2
+    PiF1t -->|CONTRIBUTES_TO| PiF1s
+    PiF1o -->|CONTRIBUTES_TO| PiF1t
+    PiF1o -->|DECOMPOSES_INTO| Task
+    Task -->|PRODUCES| Result
+    Verification -->|EVALUATES| Result
+    ChangeEvent -->|TRIGGERS| SyncEvent
+    SyncEvent -->|CREATES_HISTORY| PiH
+```
 
-Die daraus abgeleiteten verbindlichen Spezifikationen sind:
+### Einstieg
 
-- [JCI_ONTOLOGY.md](docs/JCI_ONTOLOGY.md) – Entitäts- und Beziehungskatalog
-- [JCI_GRAPH_RULES.md](docs/JCI_GRAPH_RULES.md) – Kardinalitäten und Invarianten
-- [JCI_SYNC_SPEC.md](docs/JCI_SYNC_SPEC.md) – Änderungs-, Traversierungs- und Synchronisationslogik
-- [JCI_NEO4J_SCHEMA.md](docs/implementations/neo4j/JCI_NEO4J_SCHEMA.md) – Neo4j-Projektion und Validierungsabfragen
-- [Maschinenlesbare Schemas](docs/schemas/) – JSON und JSON-LD für Austauschformate
+- [Dokumentationsübersicht](docs/README.md)
+- [Einführung für neue Leser](docs/guides/JCI_INTRODUCTION.md)
+- [Die JCI-Elemente](docs/guides/JCI_ELEMENTS.md)
+- [Durchgängiges Beispiel](docs/guides/JCI_EXAMPLE.md)
+- [Kanonische Spezifikation](docs/JCI_CONTEXT.md)
 
-Die automatisierten Modellprüfungen liegen unter `tests/` und werden bei Pull Requests sowie Pushes auf `main` ausgeführt.
+### Formale und technische Dokumente
 
-Änderungen an dieser Datei können die Semantik des Modells betreffen und werden deshalb kontrolliert geprüft.
+- [Ontologie](docs/JCI_ONTOLOGY.md)
+- [Graphregeln](docs/JCI_GRAPH_RULES.md)
+- [SYNC-Spezifikation](docs/JCI_SYNC_SPEC.md)
+- [Implementierungsleitfaden](docs/guides/JCI_IMPLEMENTATION_GUIDE.md)
+- [Neo4j-Schema](docs/implementations/neo4j/JCI_NEO4J_SCHEMA.md)
+- [Maschinenlesbare Schemas](docs/schemas/)
+- [Öffentliches JCI-Vokabular](docs/ns/jci/1.0/index.html)
 
-## Mitarbeit
+## English
 
-Vorschläge und Korrekturen sind möglich. Der reguläre Weg ist:
+> An organisation remains viable only when purpose, future, responsibility, work, rules, environment, and learning continue to fit together after change.
 
-1. Issue anlegen,
-2. eigenen Branch erstellen,
-3. Änderung vornehmen,
-4. Pull Request vollständig beschreiben,
-5. automatische und fachliche Prüfung abschließen,
-6. Änderung nach dokumentierter Freigabe in `main` übernehmen.
+The **JUNACO Continuous Integration Loop** is a graph-based organisational model. It makes it possible to trace why a task exists, who performs it in which team and role, which environmental objects are required, which rules apply, how success is verified, and which former state was superseded by a change.
 
-Einzelheiten stehen in:
+### Start here
 
-- [CONTRIBUTING.md](CONTRIBUTING.md)
-- [GOVERNANCE.md](GOVERNANCE.md)
-- [AGENTS.md](AGENTS.md)
+- [Documentation overview](docs/en/README.md)
+- [Introduction](docs/en/guides/JCI_INTRODUCTION.md)
+- [JCI elements](docs/en/guides/JCI_ELEMENTS.md)
+- [End-to-end example](docs/en/guides/JCI_EXAMPLE.md)
+- [English model specification](docs/en/JCI_CONTEXT.md)
 
-## Lizenz und Rechte
+### Formal and technical documents
 
-Die JCI-Modellspezifikation wird unter **CC BY-NC-SA 4.0** bereitgestellt. Kommerzielle Nutzung erfordert grundsätzlich eine gesonderte Vereinbarung mit der JUNACO Organisationsentwicklungs GmbH.
+- [Ontology](docs/en/JCI_ONTOLOGY.md)
+- [Graph rules](docs/en/JCI_GRAPH_RULES.md)
+- [SYNC specification](docs/en/JCI_SYNC_SPEC.md)
+- [Implementation guide](docs/en/guides/JCI_IMPLEMENTATION_GUIDE.md)
+- [Neo4j schema](docs/en/implementations/neo4j/JCI_NEO4J_SCHEMA.md)
+- [Machine-readable schemas](docs/schemas/)
+- [Public JCI vocabulary](docs/ns/jci/1.0/index.html)
 
-- [Lizenz](LICENSE.md)
-- [Rechte- und Quellenhinweise](NOTICE.md)
+## Contribution and rights
 
-Software, technische Implementierungen, The Company Brain und DeepJuni sind durch diese Modelllizenz nicht automatisch erfasst.
+- [Beitragen](CONTRIBUTING.md) · [Contributing](CONTRIBUTING.en.md)
+- [Governance](GOVERNANCE.md) · [Governance in English](GOVERNANCE.en.md)
+- [Lizenz](LICENSE.md) · [Informal English license translation](LICENSE.en.md)
+- [Rechtehinweise](NOTICE.md) · [Rights notice in English](NOTICE.en.md)
 
+The canonical German JCI model specification is licensed under **CC BY-NC-SA 4.0**. Commercial use generally requires a separate agreement with JUNACO Organisationsentwicklungs GmbH. Software and technical implementations require their own explicit software licence.

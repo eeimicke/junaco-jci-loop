@@ -1,0 +1,6 @@
+flowchart LR
+    Task -->|EXECUTED_BY| Assignment[RoleAssignment]
+    Task -->|USES| Object[ERoFObject]
+    Assignment -->|USES| Object
+    Object -->|OWNED_BY| Org[RoFOrg]
+

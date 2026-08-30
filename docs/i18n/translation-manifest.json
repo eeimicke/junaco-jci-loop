@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "1.0",
+  "canonicalLanguage": "de",
+  "translationLanguage": "en",
+  "canonicalModel": "docs/JCI_CONTEXT.md",
+  "pairs": [
+    {"source": "docs/README.md", "target": "docs/en/README.md", "status": "synchronized"},
+    {"source": "docs/JCI_CONTEXT.md", "target": "docs/en/JCI_CONTEXT.md", "status": "synchronized"},
+    {"source": "docs/JCI_ONTOLOGY.md", "target": "docs/en/JCI_ONTOLOGY.md", "status": "synchronized"},
+    {"source": "docs/JCI_GRAPH_RULES.md", "target": "docs/en/JCI_GRAPH_RULES.md", "status": "synchronized"},
+    {"source": "docs/JCI_SYNC_SPEC.md", "target": "docs/en/JCI_SYNC_SPEC.md", "status": "synchronized"},
+    {"source": "docs/implementations/neo4j/JCI_NEO4J_SCHEMA.md", "target": "docs/en/implementations/neo4j/JCI_NEO4J_SCHEMA.md", "status": "synchronized"},
+    {"source": "docs/guides/JCI_INTRODUCTION.md", "target": "docs/en/guides/JCI_INTRODUCTION.md", "status": "synchronized"},
+    {"source": "docs/guides/JCI_ELEMENTS.md", "target": "docs/en/guides/JCI_ELEMENTS.md", "status": "synchronized"},
+    {"source": "docs/guides/JCI_EXAMPLE.md", "target": "docs/en/guides/JCI_EXAMPLE.md", "status": "synchronized"},
+    {"source": "docs/guides/JCI_IMPLEMENTATION_GUIDE.md", "target": "docs/en/guides/JCI_IMPLEMENTATION_GUIDE.md", "status": "synchronized"},
+    {"source": "LICENSE.md", "target": "LICENSE.en.md", "status": "synchronized", "informationalOnly": true},
+    {"source": "NOTICE.md", "target": "NOTICE.en.md", "status": "synchronized", "informationalOnly": true},
+    {"source": "GOVERNANCE.md", "target": "GOVERNANCE.en.md", "status": "synchronized"},
+    {"source": "CONTRIBUTING.md", "target": "CONTRIBUTING.en.md", "status": "synchronized"},
+    {"source": "AGENTS.md", "target": "AGENTS.en.md", "status": "synchronized"}
+  ]
+}

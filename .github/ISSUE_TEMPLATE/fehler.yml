@@ -1,34 +1,33 @@
-name: Dokumentationsfehler
-description: Einen Fehler oder Widerspruch in der bestehenden Dokumentation melden
-title: "[Fehler]: "
+name: Dokumentationsfehler / Documentation error
+description: Fehler oder Widerspruch melden / Report an error or contradiction
+title: "[Fehler / Error]: "
 labels: ["dokumentation"]
 body:
   - type: input
     id: fundstelle
     attributes:
-      label: Fundstelle
-      description: Datei, Kapitel oder Tabellenzeile
+      label: Fundstelle / Location
+      description: Datei, Kapitel oder Tabellenzeile / File, chapter, or table row
     validations:
       required: true
   - type: textarea
     id: fehler
     attributes:
-      label: Beobachteter Fehler
-      description: Was ist falsch, unklar oder widersprüchlich?
+      label: Beobachteter Fehler / Observed error
+      description: Was ist falsch, unklar oder widersprüchlich? / What is incorrect, unclear, or contradictory?
     validations:
       required: true
   - type: textarea
     id: erwartung
     attributes:
-      label: Erwartete Aussage
-      description: Wie sollte die Aussage nach deinem Verständnis lauten?
+      label: Erwartete Aussage / Expected statement
+      description: Wie sollte die Aussage lauten? / How should the statement read?
     validations:
       required: true
   - type: textarea
     id: quellen
     attributes:
-      label: Begründung oder Quellen
-      description: Welche Modellstelle oder externe Quelle stützt die Meldung?
+      label: Begründung oder Quellen / Rationale or sources
+      description: Welche Modellstelle oder externe Quelle stützt die Meldung? / Which model section or external source supports the report?
     validations:
       required: false
-

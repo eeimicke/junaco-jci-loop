@@ -1,45 +1,44 @@
-name: Modellvorschlag
-description: Eine fachliche Ergänzung oder Änderung des JCI-Modells vorschlagen
-title: "[Modellvorschlag]: "
+name: Modellvorschlag / Model proposal
+description: Ergänzung oder Änderung des JCI-Modells vorschlagen / Propose an addition or change to the JCI model
+title: "[Modellvorschlag / Model proposal]: "
 labels: ["modellvorschlag"]
 body:
   - type: markdown
     attributes:
       value: |
-        Ein Vorschlag verändert die kanonische Spezifikation noch nicht. Bitte beschreibe ihn so, dass seine Auswirkungen geprüft werden können.
+        Ein Vorschlag ändert die kanonische Spezifikation noch nicht. / A proposal does not yet change the canonical specification.
   - type: textarea
     id: anlass
     attributes:
-      label: Anlass und Problem
-      description: Welches fachliche Problem soll gelöst werden?
+      label: Anlass und Problem / Reason and problem
+      description: Welches fachliche Problem soll gelöst werden? / Which domain problem should be solved?
     validations:
       required: true
   - type: textarea
     id: vorschlag
     attributes:
-      label: Vorgeschlagene Änderung
-      description: Wie soll das Modell geändert oder präzisiert werden?
+      label: Vorgeschlagene Änderung / Proposed change
+      description: Wie soll das Modell geändert oder präzisiert werden? / How should the model be changed or clarified?
     validations:
       required: true
   - type: textarea
     id: elemente
     attributes:
-      label: Betroffene Elemente und Beziehungen
-      description: Welche JCI-Elemente, Graphobjekte, Beziehungen oder Kardinalitäten sind betroffen?
+      label: Betroffene Elemente und Beziehungen / Affected elements and relationships
+      description: Welche Elemente, Graphobjekte, Beziehungen oder Kardinalitäten sind betroffen? / Which elements, graph objects, relationships, or cardinalities are affected?
     validations:
       required: true
   - type: textarea
     id: auswirkungen
     attributes:
-      label: Auswirkungen und Konflikte
-      description: Welche Folgen bestehen für RaN, RoF, ERoF, SYNC, PiH oder die Rückverfolgbarkeit zu CiV?
+      label: Auswirkungen und Konflikte / Effects and conflicts
+      description: Welche Folgen bestehen für RaN, RoF, ERoF, SYNC, PiH oder die Rückverfolgbarkeit zu CiV? / What are the effects on RaN, RoF, ERoF, SYNC, PiH, or traceability to CiV?
     validations:
       required: true
   - type: textarea
     id: quellen
     attributes:
-      label: Quellen und Rechte
-      description: Nenne Quellen, Urheber und bekannte Nutzungsrechte. Schreibe „keine“, wenn keine fremden Inhalte verwendet wurden.
+      label: Quellen und Rechte / Sources and rights
+      description: Nenne Quellen, Urheber und Nutzungsrechte oder „keine“. / Name sources, authors, and usage rights, or state “none”.
     validations:
       required: true
-

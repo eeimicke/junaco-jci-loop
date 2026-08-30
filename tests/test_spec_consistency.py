@@ -6,6 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
+TRANSLATION_MANIFEST = DOCS / "i18n" / "translation-manifest.json"
 
 ENTITY_TYPES = {
     "PiH", "CiV", "RaN", "SYNC", "PiF2", "PiF1s", "PiF1t", "PiF1o",
@@ -130,6 +131,78 @@ class SpecificationConsistencyTests(unittest.TestCase):
                     expected,
                     column_markers,
                     f"Uneinheitliche Markdown-Tabelle in {path}:{line_number}",
+                )
+
+    def test_translation_manifest_is_complete_and_resolvable(self):
+        manifest = json.loads(TRANSLATION_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(manifest["canonicalLanguage"], "de")
+        self.assertEqual(manifest["translationLanguage"], "en")
+        self.assertEqual(manifest["canonicalModel"], "docs/JCI_CONTEXT.md")
+
+        seen_sources = set()
+        seen_targets = set()
+        for pair in manifest["pairs"]:
+            with self.subTest(pair=pair):
+                self.assertEqual(pair["status"], "synchronized")
+                source = ROOT / pair["source"]
+                target = ROOT / pair["target"]
+                self.assertTrue(source.is_file(), f"Fehlende deutsche Quelle: {source}")
+                self.assertTrue(target.is_file(), f"Fehlende englische Fassung: {target}")
+                self.assertNotIn(pair["source"], seen_sources)
+                self.assertNotIn(pair["target"], seen_targets)
+                seen_sources.add(pair["source"])
+                seen_targets.add(pair["target"])
+
+    def test_translations_preserve_canonical_identifiers(self):
+        manifest = json.loads(TRANSLATION_MANIFEST.read_text(encoding="utf-8"))
+        technical_terms = ENTITY_TYPES | RELATIONSHIPS
+        complete_catalogues = {
+            "docs/JCI_CONTEXT.md",
+            "docs/JCI_ONTOLOGY.md",
+        }
+        for pair in manifest["pairs"]:
+            if pair["source"] not in complete_catalogues:
+                continue
+            source = (ROOT / pair["source"]).read_text(encoding="utf-8")
+            target = (ROOT / pair["target"]).read_text(encoding="utf-8")
+            required = {term for term in technical_terms if term in source}
+            with self.subTest(target=pair["target"]):
+                self.assertFalse(
+                    required - {term for term in technical_terms if term in target},
+                    f"Kanonische Bezeichner fehlen in {pair['target']}",
+                )
+
+    def test_local_markdown_links_resolve(self):
+        link_pattern = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
+        roots = [ROOT / name for name in (
+            "README.md", "LICENSE.md", "NOTICE.md", "GOVERNANCE.md",
+            "CONTRIBUTING.md", "AGENTS.md", "LICENSE.en.md", "NOTICE.en.md",
+            "GOVERNANCE.en.md", "CONTRIBUTING.en.md", "AGENTS.en.md",
+        )]
+        markdown_files = [path for path in roots if path.is_file()]
+        markdown_files.extend(DOCS.rglob("*.md"))
+
+        for path in markdown_files:
+            content = path.read_text(encoding="utf-8")
+            for raw_target in link_pattern.findall(content):
+                target = raw_target.strip().strip("<>").split("#", 1)[0]
+                if not target or re.match(r"^(https?://|mailto:)", target):
+                    continue
+                resolved = (path.parent / target).resolve()
+                with self.subTest(path=path, target=raw_target):
+                    self.assertTrue(resolved.exists(), f"Toter lokaler Link: {path} -> {raw_target}")
+
+    def test_mermaid_sources_use_only_canonical_relationships(self):
+        diagram_dir = DOCS / "diagrams" / "sources"
+        self.assertTrue(diagram_dir.is_dir())
+        for path in diagram_dir.glob("*.mmd"):
+            content = path.read_text(encoding="utf-8")
+            self.assertRegex(content, r"(?m)^flowchart\s+(TD|TB|LR|RL|BT)$")
+            labels = re.findall(r"\|([A-Z][A-Z_]+)\|", content)
+            with self.subTest(diagram=path.name):
+                self.assertFalse(
+                    set(labels) - RELATIONSHIPS,
+                    f"Nicht kanonische Beziehungen in {path.name}",
                 )
 
 
