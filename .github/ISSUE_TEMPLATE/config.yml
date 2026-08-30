@@ -1,6 +1,5 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Allgemeine Informationen zu JUNACO
+  - name: Allgemeine Informationen / General information
     url: https://junaco.de/
-    about: Für Anfragen, die kein konkreter Fehler oder Modellvorschlag sind.
-
+    about: Für allgemeine Anfragen ohne konkreten Fehler oder Modellvorschlag. / For general enquiries without a specific error or model proposal.

@@ -1,0 +1,8 @@
+flowchart TB
+    JCIEntity --> JCIElementInstance
+    JCIEntity --> GraphObject
+    JCIElementInstance --> PiH & CiV & RaN & SYNC & PiF2 & PiF1s & PiF1t & PiF1o
+    GraphObject --> RoFOrg & RoFOrgRelationship & RoFTeam & RoFTeamMember & RoFRole & RoleAssignment
+    GraphObject --> Task & SuccessCriterion & Result & Verification & Evidence & ERoFObject
+    GraphObject --> ChangeEvent & SyncEvent & RaNConflict & HistoricalCorrection
+

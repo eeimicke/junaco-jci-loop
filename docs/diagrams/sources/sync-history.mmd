@@ -1,0 +1,13 @@
+flowchart TD
+    Entity[JCIEntity] -->|CHANGED_BY| ChangeEvent
+    ChangeEvent --> Run[SyncRun technisch]
+    Run --> Check[SYNC prüft Graph und RaN]
+    Check --> Success[SUCCESS]
+    Check --> Conflict[CONFLICT]
+    Check --> Failed[FAILED]
+    Success --> History[PiH erzeugen]
+    Success --> Current[neuen Zustand übernehmen]
+    Success --> SyncEvent
+    Conflict --> SyncEvent
+    Failed --> SyncEvent
+

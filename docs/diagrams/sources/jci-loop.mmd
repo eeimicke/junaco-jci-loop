@@ -1,0 +1,12 @@
+flowchart LR
+    PiH -->|PROVIDES_CONTEXT_TO| CiV
+    CiV -->|INSCRIBES_PURPOSE_IN| PiF2
+    PiF1s -->|CONTRIBUTES_TO| PiF2
+    PiF1t -->|CONTRIBUTES_TO| PiF1s
+    PiF1o -->|CONTRIBUTES_TO| PiF1t
+    PiF1o -->|DECOMPOSES_INTO| Task
+    Task -->|PRODUCES| Result
+    Verification -->|EVALUATES| Result
+    ChangeEvent -->|TRIGGERS| SyncEvent
+    SyncEvent -->|CREATES_HISTORY| PiH
+

@@ -1,0 +1,11 @@
+flowchart TD
+    ChangeEvent --> Applicable[anwendbare RaN bestimmen]
+    Applicable --> Evaluate[Bedingungen auswerten]
+    Evaluate --> Allow[ALLOW]
+    Evaluate --> Deny[DENY]
+    Allow --> Compare[gleiche Entscheidung vergleichen]
+    Deny --> Compare
+    Compare --> Priority[priority prüfen]
+    Priority --> Decision[Entscheidung]
+    Priority --> Conflict[RaNConflict]
+
