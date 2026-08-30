@@ -91,6 +91,34 @@ class SpecificationConsistencyTests(unittest.TestCase):
         ):
             self.assertIn(type_name, self.context)
 
+    def test_neo4j_validates_complete_sync_event_result(self):
+        """The Neo4j projection must enforce every canonical SyncEvent result field."""
+        required_properties = (
+            "startedAt", "completedAt", "outcome", "affectedCount",
+            "changedCount", "historyCount", "correctionCount", "conflictCount",
+        )
+        for property_name in required_properties:
+            with self.subTest(property=property_name):
+                self.assertIn(
+                    f"event.{property_name} IS NULL",
+                    self.neo4j,
+                    f"Explizite Nullprüfung für SyncEvent.{property_name} fehlt",
+                )
+
+        graph_derived_counts = {
+            "affectedCount": "actualAffectedCount",
+            "historyCount": "actualHistoryCount",
+            "correctionCount": "actualCorrectionCount",
+            "conflictCount": "actualConflictCount",
+        }
+        for stored, actual in graph_derived_counts.items():
+            with self.subTest(count=stored):
+                self.assertIn(f"event.{stored} <> {actual}", self.neo4j)
+
+        self.assertIn("deduplizierten Transaktions-Write-Set", self.neo4j)
+        self.assertIn("zählen nicht zu `changedCount`", self.neo4j)
+        self.assertNotIn("[:CHANGES]", self.neo4j)
+
     def test_core_chapters_have_examples(self):
         for chapter in range(3, 13):
             pattern = rf"## {chapter}\..*?(?=\n## {chapter + 1}\.|\Z)"
