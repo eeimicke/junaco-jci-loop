@@ -116,6 +116,7 @@ class SpecificationConsistencyTests(unittest.TestCase):
                 self.assertIn(f"event.{stored} <> {actual}", self.neo4j)
 
         self.assertIn("deduplizierten Transaktions-Write-Set", self.neo4j)
+        self.assertIn("zählen nicht zu `changedCount`", self.neo4j)
         self.assertNotIn("[:CHANGES]", self.neo4j)
 
     def test_core_chapters_have_examples(self):
