@@ -79,6 +79,21 @@ flowchart LR
 
 An active environmental object must be used by at least one role assignment. Ownership alone does not prove interaction. Internal or external status is derived relative to the organisation through `OWNED_BY`.
 
+### Example
+
+The Task `Deploy customer portal` uses the `ERoFObject` `GitHub repository`. Anna performs the Task through her active `Developer` RoleAssignment and also uses this repository. The repository is owned by the observed `RoFOrg` and is therefore an internal environmental object from its perspective.
+
+```text
+Task: Deploy customer portal
+  ├── EXECUTED_BY ──► RoleAssignment: Anna as Developer
+  └── USES ─────────► ERoFObject: GitHub repository
+                           ▲
+RoleAssignment ── USES ────┘
+ERoFObject ── OWNED_BY ──► RoFOrg: Example GmbH
+```
+
+If the repository were owned by a partner organisation, it would be an external environmental object from the perspective of Example GmbH. The determining factor is always the `OWNED_BY` relationship to the organisation being observed.
+
 ## Change objects
 
 - `ChangeEvent`: reason and request for a change.
