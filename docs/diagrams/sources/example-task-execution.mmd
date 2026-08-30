@@ -1,0 +1,7 @@
+flowchart TD
+    Goal[PiF1o] -->|DECOMPOSES_INTO| Parent[COMPOSITE Task]
+    Goal -->|DECOMPOSES_INTO| First[ATOMIC Task A]
+    Goal -->|DECOMPOSES_INTO| Second[ATOMIC Task B]
+    Parent -->|DECOMPOSES_INTO| First
+    Parent -->|DECOMPOSES_INTO| Second
+    Second -->|DEPENDS_ON| First

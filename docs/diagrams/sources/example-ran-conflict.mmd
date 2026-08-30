@@ -1,0 +1,9 @@
+flowchart LR
+    Conflict[RaNConflict: PRIORITY_TIE]
+    Conflict -->|CONFLICTING_RULE| RuleA[RaN A]
+    Conflict -->|CONFLICTING_RULE| RuleB[RaN B]
+    Conflict -->|AFFECTS| Entity[JCIEntity]
+    Conflict -->|DETECTED_BY| Event[SyncEvent]
+    Conflict -->|USES_EVIDENCE| Evidence
+    Resolved[RaNConflict: RESOLVED] -->|RESOLVED_BY| Assignment[RoleAssignment]
+    Resolved -->|RESOLVED_THROUGH| ChangeEvent

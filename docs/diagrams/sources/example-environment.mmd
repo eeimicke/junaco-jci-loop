@@ -1,0 +1,8 @@
+flowchart LR
+    Task -->|EXECUTED_BY| Assignment[RoleAssignment]
+    Task -->|USES| Internal[ERoFObject internal]
+    Assignment -->|USES| Internal
+    Internal -->|OWNED_BY| OrgA[RoFOrg A]
+    Task -->|USES| External[ERoFObject external]
+    Assignment -->|USES| External
+    External -->|OWNED_BY| OrgB[RoFOrg B]

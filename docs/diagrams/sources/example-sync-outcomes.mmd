@@ -1,0 +1,15 @@
+flowchart TD
+    Entity[JCIEntity] -->|CHANGED_BY| ChangeEvent
+    ChangeEvent -. starts .-> Run[SyncRun]
+    Run -. uses .-> Definition[SYNC]
+    Run -. validates .-> Decision{outcome}
+    Decision --> Success[SUCCESS]
+    Decision --> Conflict[CONFLICT]
+    Decision --> Failed[FAILED]
+    Success --> Apply[commit atomically]
+    Conflict --> Rollback[roll back completely]
+    Failed --> Rollback
+    Apply --> Event[SyncEvent]
+    Rollback --> Event
+    ChangeEvent -->|TRIGGERS| Event
+    Event -->|EXECUTES| Definition

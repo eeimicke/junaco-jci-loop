@@ -1,0 +1,11 @@
+flowchart LR
+    Relation[RoFOrgRelationship] -->|SOURCE_ORG| Customer[RoFOrg A]
+    Relation -->|TARGET_ORG| Partner[RoFOrg B]
+    Customer -->|HAS_TEAM| Team[RoFTeam]
+    Team -->|HAS_MEMBER| Member[RoFTeamMember]
+    Member -->|HAS_ROLE| Role[RoFRole]
+    Member -->|HAS_ASSIGNMENT| Assignment[RoleAssignment]
+    Assignment -->|IN_TEAM| Team
+    Assignment -->|ACTIVATES_ROLE| Role
+    Relation -->|REPRESENTED_BY| Assignment
+    Relation -->|REPRESENTED_BY| PartnerAssignment[RoleAssignment B]
