@@ -1,12 +1,12 @@
 flowchart TD
     Entity[JCIEntity] -->|CHANGED_BY| ChangeEvent
-    ChangeEvent --> Run[SyncRun technisch]
-    Run --> Check[SYNC prüft Graph und RaN]
+    ChangeEvent --> Run[technical SyncRun]
+    Run --> Check[SYNC validates graph and RaN]
     Check --> Success[SUCCESS]
     Check --> Conflict[CONFLICT]
     Check --> Failed[FAILED]
-    Success --> History[PiH erzeugen]
-    Success --> Current[neuen Zustand übernehmen]
+    Success --> History[create PiH]
+    Success --> Current[commit new state]
     Success --> SyncEvent
     Conflict --> SyncEvent
     Failed --> SyncEvent

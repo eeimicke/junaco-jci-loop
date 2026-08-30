@@ -20,6 +20,8 @@ Vor jeder inhaltlichen Änderung ist `docs/JCI_CONTEXT.md` vollständig zu lesen
 - Automatische Prüfungen ausführen und festgestellte Konflikte offen dokumentieren.
 - Keine Veröffentlichung, kein Push und kein Merge ohne ausdrücklichen Auftrag.
 - `LICENSE.md`, `NOTICE.md`, `GOVERNANCE.md` und `.github/CODEOWNERS` nur auf ausdrücklichen Auftrag ändern.
+- Bei jeder Änderung einer im Übersetzungsmanifest geführten deutschen Datei die englische Fassung strukturgleich aktualisieren. Kapitel, Überschriftenebenen, Tabellen, Codeblöcke, Beispiele, Regeln und Ausnahmen müssen in derselben Reihenfolge erhalten bleiben.
+- Ein Sprachpaar nur dann als `synchronized` kennzeichnen, wenn die automatische Strukturprüfung und der inhaltliche Abgleich erfolgreich sind; andernfalls `review-required` verwenden.
 
 ## Rechte und Quellen
 
