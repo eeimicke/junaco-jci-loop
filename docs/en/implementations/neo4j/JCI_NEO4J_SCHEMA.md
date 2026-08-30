@@ -40,15 +40,15 @@ The globally unique `JCIEntity.id` makes additional ID constraints for each spec
 
 Neo4j properties do not store nested JSON objects. The canonical structures from `JCI_CONTEXT.md` are therefore projected as canonical JSON character strings without loss of semantics:
 
-| Technical field | Neo4j Property |
-| --------------- | -------------- |
-| `RaN.condition` | `conditionJson` |
-| `SYNC.definition` | `definitionJson` |
-| `Result.value` | `valueJson` |
-| `PiH.stateData` | `stateDataJson` |
-| `PiH.relationshipData` | `relationshipDataJson` |
-| `HistoricalCorrection.previousValue` | `previousValueJson` |
-| `HistoricalCorrection.correctedValue` | `correctedValueJson` |
+| Technical field                       | Neo4j Property         |
+| ------------------------------------- | ---------------------- |
+| `RaN.condition`                       | `conditionJson`        |
+| `SYNC.definition`                     | `definitionJson`       |
+| `Result.value`                        | `valueJson`            |
+| `PiH.stateData`                       | `stateDataJson`        |
+| `PiH.relationshipData`                | `relationshipDataJson` |
+| `HistoricalCorrection.previousValue`  | `previousValueJson`    |
+| `HistoricalCorrection.correctedValue` | `correctedValueJson`   |
 
 The JSON strings use UTF-8, lexicographically sorted object keys, and the canonical data type rules from Section 2.2.7. `PiH.contentHash` is calculated from the technical structures before this Neo4j projection.
 
@@ -97,6 +97,30 @@ FOR (t:Task) REQUIRE t.revision IS NOT NULL;
 
 CREATE INDEX task_kind_index IF NOT EXISTS FOR (t:Task) ON (t.taskKind);
 CREATE INDEX task_status_index IF NOT EXISTS FOR (t:Task) ON (t.status);
+
+CREATE CONSTRAINT sync_event_started_at_exists IF NOT EXISTS
+FOR (e:SyncEvent) REQUIRE e.startedAt IS NOT NULL;
+
+CREATE CONSTRAINT sync_event_completed_at_exists IF NOT EXISTS
+FOR (e:SyncEvent) REQUIRE e.completedAt IS NOT NULL;
+
+CREATE CONSTRAINT sync_event_outcome_exists IF NOT EXISTS
+FOR (e:SyncEvent) REQUIRE e.outcome IS NOT NULL;
+
+CREATE CONSTRAINT sync_event_affected_count_exists IF NOT EXISTS
+FOR (e:SyncEvent) REQUIRE e.affectedCount IS NOT NULL;
+
+CREATE CONSTRAINT sync_event_changed_count_exists IF NOT EXISTS
+FOR (e:SyncEvent) REQUIRE e.changedCount IS NOT NULL;
+
+CREATE CONSTRAINT sync_event_history_count_exists IF NOT EXISTS
+FOR (e:SyncEvent) REQUIRE e.historyCount IS NOT NULL;
+
+CREATE CONSTRAINT sync_event_correction_count_exists IF NOT EXISTS
+FOR (e:SyncEvent) REQUIRE e.correctionCount IS NOT NULL;
+
+CREATE CONSTRAINT sync_event_conflict_count_exists IF NOT EXISTS
+FOR (e:SyncEvent) REQUIRE e.conflictCount IS NOT NULL;
 ```
 
 Neo4j constraints do not fully enforce enum values, cardinalities, and graph-wide cycle rules. These rules are checked by `SYNC` before writing and by validation queries after writing.
@@ -491,20 +515,42 @@ MATCH (event:SyncEvent)
 OPTIONAL MATCH (change:ChangeEvent)-[:TRIGGERS]->(event)
 OPTIONAL MATCH (event)-[:EXECUTES]->(definition:SYNC)
 OPTIONAL MATCH (event)-[:AFFECTS]->(affected:JCIEntity)
-WITH event, count(DISTINCT change) AS changeCount,
+OPTIONAL MATCH (event)-[:CREATES_HISTORY]->(history:PiH)
+OPTIONAL MATCH (event)-[:CREATES_CORRECTION]->(correction:HistoricalCorrection)
+OPTIONAL MATCH (conflict:RaNConflict)-[:DETECTED_BY]->(event)
+WITH event, count(DISTINCT change) AS triggerCount,
      count(DISTINCT definition) AS definitionCount,
-     count(DISTINCT affected) AS actualAffectedCount
-WHERE changeCount <> 1 OR definitionCount <> 1 OR actualAffectedCount < 1
+     count(DISTINCT affected) AS actualAffectedCount,
+     count(DISTINCT history) AS actualHistoryCount,
+     count(DISTINCT correction) AS actualCorrectionCount,
+     count(DISTINCT conflict) AS actualConflictCount
+WHERE triggerCount <> 1 OR definitionCount <> 1 OR actualAffectedCount < 1
+   OR event.startedAt IS NULL OR event.completedAt IS NULL
    OR event.completedAt < event.startedAt
+   OR event.outcome IS NULL
    OR NOT event.outcome IN ['SUCCESS','CONFLICT','FAILED']
+   OR event.affectedCount IS NULL OR event.affectedCount < 1
+   OR event.changedCount IS NULL OR event.changedCount < 0
+   OR event.historyCount IS NULL OR event.historyCount < 0
+   OR event.correctionCount IS NULL OR event.correctionCount < 0
+   OR event.conflictCount IS NULL OR event.conflictCount < 0
    OR event.affectedCount <> actualAffectedCount
-RETURN event.id AS syncEventId, changeCount, definitionCount,
-       event.affectedCount, actualAffectedCount;
+   OR event.historyCount <> actualHistoryCount
+   OR event.correctionCount <> actualCorrectionCount
+   OR event.conflictCount <> actualConflictCount
+RETURN event.id AS syncEventId, triggerCount, definitionCount,
+       event.affectedCount, actualAffectedCount,
+       event.changedCount,
+       event.historyCount, actualHistoryCount,
+       event.correctionCount, actualCorrectionCount,
+       event.conflictCount, actualConflictCount;
 ```
+
+`affectedCount`, `historyCount`, `correctionCount`, and `conflictCount` are fully verifiable from the stored relationships. In contrast, `changedCount` denotes the number of current state changes actually adopted in the same transaction. Because the model deliberately stores no additional `CHANGES` relationship for this purpose, `SYNC` calculates this value from the deduplicated transaction write set immediately before commit. Each existing mutable `JCIEntity` in that set must receive exactly one revision increment and exactly one corresponding `PiH`; newly created entities count as adopted changes but do not yet receive a `PiH`. With `CONFLICT` or `FAILED`, rolled-back write operations do not count. The calculated value is adopted atomically together with the graph state and the final `SyncEvent`.
 
 ## Transaction rule for SYNC
 
-`SYNC` checks hierarchy, dependencies, Task type rules, and applicable `RaN` before adoption. Derived Task statuses are aggregated from the atomic tasks up the parent chain and only then to the affected `PiF1o`. Current states, required `PiH`, new or resolved `RaNConflict` objects, relationships and the final `SyncEvent` are inherited atomically. A conflict or error must not leave a partially updated graph.
+`SYNC` checks hierarchy, dependencies, Task type rules, and applicable `RaN` before adoption. Derived Task statuses are aggregated from the atomic tasks up the parent chain and only then to the affected `PiF1o`. Current states, required `PiH`, new or resolved `RaNConflict` objects, relationships, the deduplicated transaction write set, and the final `SyncEvent` are adopted atomically. Before commit, all five count values are calculated from this write set and the relationships to be stored. A conflict or error must not leave a partially updated graph.
 
 ## Migration and versioning
 
