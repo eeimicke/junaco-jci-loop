@@ -7,6 +7,8 @@ flowchart LR
     PiF1o -->|DECOMPOSES_INTO| Task
     Task -->|PRODUCES| Result
     Verification -->|EVALUATES| Result
-    ChangeEvent -->|TRIGGERS| SyncEvent
+    ChangeEvent -->|TRIGGERS| SyncEvent[SyncEvent after completed run]
+    SyncEvent -->|AFFECTS| JCIEntity[conditionally affected JCIEntity]
     SyncEvent -->|CREATES_HISTORY| PiH
+    CorrectionEvent[ChangeEvent HISTORICAL_CORRECTION] -->|TARGETS_HISTORY| PiH
 

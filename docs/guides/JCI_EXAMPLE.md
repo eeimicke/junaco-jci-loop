@@ -20,6 +20,7 @@ Quelle ── BEZIEHUNG ──► Ziel
 | `Task ── EXECUTED_BY ──► RoleAssignment` | Welche aktive Rolle führt den Task aus? | Welche Tasks führt diese Rollenaktivierung aus? |
 | `Verification ── CHECKS ──► SuccessCriterion` | Welches Kriterium wird geprüft? | Welche Prüfungen bewerten dieses Kriterium? |
 | `SyncEvent ── CREATES_HISTORY ──► PiH` | Welche Historie erzeugte der Lauf? | Durch welchen Lauf entstand dieses `PiH`? |
+| `ChangeEvent ── TARGETS_HISTORY ──► PiH` | Welches `PiH` soll berichtigt werden? | Welche Korrekturaufträge adressieren dieses `PiH`? |
 
 ## 2. Ausgangssituation und Zweck
 
@@ -44,6 +45,23 @@ flowchart LR
 | `PiF1o` | Jede Anfrage erhält innerhalb von 24 Stunden eine qualifizierte Antwort. |
 
 Vom `PiF1o` lässt sich rückwärts bis zu `CiV` und dem historischen Kontext navigieren. So ist erkennbar, warum das operative Ziel existiert.
+
+### 2.1 Vorbedingung: einmaliger Bootstrap
+
+Bevor dieses fachliche Beispiel in einem vollständig leeren Graphen angelegt werden kann, wird einmalig die technische Vertrauenswurzel erzeugt:
+
+```text
+RoFOrg: Beispiel GmbH
+└── RoFTeam: Technische Administration
+    └── RoFTeamMember: JCI-System
+        ├── RoFRole: JCI-Administration
+        └── RoleAssignment: JCI-System als Administration
+            └── bootstrapKey = "ROOT"
+
+SYNC: JCI-Standardprozess
+```
+
+Diese Entitäten werden in einer einzigen Transaktion mit `status = ACTIVE`, `revision = 1` sowie demselben `createdAt` und `updatedAt` angelegt; vorhandene `validFrom`-Werte entsprechen demselben Bootstrapzeitpunkt. Nur das Root-`RoleAssignment` besitzt kein `CREATED_BY`; alle weiteren Bootstrap-Entitäten verweisen auf dieses Root-`RoleAssignment`. Der Bootstrap erzeugt kein `ChangeEvent`, keinen `SyncRun`, kein `SyncEvent` und kein `PiH`. Erst danach legt das Root-`RoleAssignment` die fachlichen Entitäten dieses Beispiels über reguläre `CREATED`-Aufträge an. Ein zweiter Bootstrap ist nicht zulässig.
 
 ## 3. Organisation, Partnerschaft und Rollen
 
@@ -132,7 +150,15 @@ flowchart LR
     Verification -->|CHECKS| Criterion
 ```
 
-Da 18 kleiner oder gleich 24 ist, wird die vollständig erzeugte `Verification` mit dem fachlichen Ergebnis `VALID` abgeschlossen. Eine spätere neue Prüfung kann über `SUPERSEDES` auf die vorherige `Verification` verweisen.
+Da 18 kleiner oder gleich 24 ist, wird die vollständig erzeugte `Verification` mit dem fachlichen Ergebnis `VALID` abgeschlossen. Angenommen, das geprüfte `Result` besitzt `revision = 3` und das geprüfte `SuccessCriterion` `revision = 2`; dann speichert die Prüfung zusätzlich:
+
+```text
+Verification
+├── evaluatedResultRevision = 3
+└── checkedCriterionRevision = 2
+```
+
+Die `Verification` ist nur anwendbar, solange sie nicht ersetzt wurde und die aktuellen Revisionen beider Ziele weiterhin diesen gebundenen Revisionen entsprechen. Wird das Kriterium später auf zwölf Stunden geändert und dadurch zu Revision 3, bleibt die frühere Prüfung unveränderlich erhalten, ist für den neuen Zielzustand aber revisionsveraltet. Eine neue Prüfung bindet die aktuellen Zielrevisionen und kann über `SUPERSEDES` auf die frühere `Verification` verweisen.
 
 ## 7. RaN-Typen und Aufbau
 
@@ -218,19 +244,22 @@ flowchart LR
 
 ## 9. Änderung und SYNC
 
-Später soll die Antwortzeit von 24 auf 12 Stunden verkürzt werden. Anna beantragt die Änderung:
+Später soll die Antwortzeit von 24 auf 12 Stunden verkürzt werden. Anna beantragt die Änderung an einem bereits vorhandenen `PiF1o`:
 
 ```text
 PiF1o      ── CHANGED_BY ───► ChangeEvent
 ChangeEvent ── REQUESTED_BY ──► RoleAssignment: Anna
 ```
 
-`SYNC` ist die gespeicherte und historisierbare Prozessdefinition. `SyncRun` ist der veränderbare technische Laufzustand und kein Graphknoten. `SyncEvent` wird erst nach Abschluss oder kontrolliertem Abbruch unveränderlich gespeichert.
+Weil der Zielknoten bereits existiert, verweist er über `CHANGED_BY` auf das angenommene `ChangeEvent`. Direkt nach der Annahme kann dieses Ereignis noch `TRIGGERS = 0` besitzen: Der Auftrag wartet dann auf den Abschluss seines ersten technischen Versuchs.
+
+`SYNC` ist die gespeicherte und historisierbare Prozessdefinition. `SyncRun` ist der veränderbare technische Laufzustand und kein Graphknoten. Jeder Versuch besitzt eine eindeutige `runId`. `SyncEvent` wird erst nach Abschluss oder kontrolliertem Abbruch unveränderlich gespeichert.
 
 ```mermaid
 flowchart TD
-    Entity[JCIEntity: beantragte Änderung] -->|CHANGED_BY| ChangeEvent
-    ChangeEvent -. startet technisch .-> Run[SyncRun]
+    Entity[JCIEntity: vorhandenes PiF1o] -->|CHANGED_BY| ChangeEvent
+    ChangeEvent -. ausstehend: TRIGGERS = 0 .-> Pending[noch kein abgeschlossenes Ereignis]
+    ChangeEvent -. plant Versuch .-> Run[SyncRun: eindeutige runId]
     Run -. verwendet .-> Definition[SYNC]
     Run -. prüft Modell, Revisionen und RaN .-> Decision{outcome}
     Decision --> Success[SUCCESS]
@@ -241,24 +270,25 @@ flowchart TD
     Failed --> Rollback
     Apply --> Event[SyncEvent]
     Rollback --> Event
-    ChangeEvent -->|TRIGGERS| Event
+    ChangeEvent -->|TRIGGERS| Event[SyncEvent: erst nach Abschluss, runId eindeutig]
     Event -->|EXECUTES| Definition
+    Event -->|AFFECTS| Affected[aufgelöste JCIEntity: verpflichtend bei SUCCESS oder CONFLICT]
 ```
 
-Gestrichelte Pfeile sind technische Prozessschritte, keine gespeicherten Beziehungen.
+Gestrichelte Pfeile sind technische Prozessschritte, keine gespeicherten Beziehungen. Jeder beendete oder kontrolliert abgebrochene Versuch erzeugt genau ein eigenes `SyncEvent` mit derselben `runId` wie sein `SyncRun`. Ein Wiederholungsversuch erzeugt eine neue `runId`, ein neues `SyncEvent` und eine weitere append-only ergänzte `TRIGGERS`-Beziehung.
 
 ## 10. Die drei SYNC-Ausgänge
 
 | Ausgang | Fachliche Änderung | Revision und `PiH` | Abschlussdokumentation |
 | --- | --- | --- | --- |
-| `SUCCESS` | vollständig atomar übernehmen | für jede tatsächlich geänderte vorhandene Entität | `SyncEvent` immer |
-| `CONFLICT` | vollständig zurückrollen | nicht für abgewiesene Zustände | `SyncEvent`, gegebenenfalls `RaNConflict` |
-| `FAILED` | vollständig zurückrollen | nicht für abgewiesene Zustände | `SyncEvent` sofort oder nach technischer Wiederherstellung |
+| `SUCCESS` | vollständig atomar übernehmen | für jede tatsächlich geänderte vorhandene Entität | `SyncEvent`; mindestens ein `AFFECTS`-Ziel |
+| `CONFLICT` | vollständig zurückrollen | nicht für abgewiesene Zustände | `SyncEvent`; mindestens ein `AFFECTS`-Ziel, gegebenenfalls `RaNConflict` |
+| `FAILED` | vollständig zurückrollen | nicht für abgewiesene Zustände | `SyncEvent` sofort oder nach technischer Wiederherstellung; `AFFECTS` darf nur vor erfolgreicher Zielauflösung fehlen |
 
 Das abgeschlossene Ereignis dokumentiert die verwendete Definition und alle betroffenen Entitäten:
 
 ```text
-ChangeEvent ── TRIGGERS ──► SyncEvent
+ChangeEvent ── TRIGGERS ──► SyncEvent: erst nach Abschluss, `runId` eindeutig
 SyncEvent ── EXECUTES ─────► SYNC
 SyncEvent ── AFFECTS ──────► JCIEntity
 ```
@@ -272,21 +302,27 @@ SyncEvent ── CREATES_HISTORY ───────► PiH: PiF1o Revision 3
 
 Wird auch das `SuccessCriterion` geändert, erhält es ein eigenes `PiH`. Ein nur geprüftes, unverändertes `Task` erhält keines.
 
+Für das erstmalige Anlegen einer Entität gilt eine andere Provenienz. Bei einem `ChangeEvent` mit `changeType = CREATED` existiert vor dem erfolgreichen Commit noch kein Zielknoten und deshalb auch keine `CHANGED_BY`-Quelle. Bei `SUCCESS` entstehen der neue Knoten mit `revision = 1`, sein `CREATED_BY` und genau ein `CHANGED_BY` gemeinsam; ein `PiH` entsteht mangels Vorgängerzustand nicht. Bei `CONFLICT` oder `FAILED` bleiben Zielknoten, `CHANGED_BY` und Historie aus.
+
 ## 11. HistoricalCorrection
 
 Ein Fehler in einem vorhandenen `PiH` wird niemals durch Überschreiben berichtigt:
 
 ```mermaid
 flowchart LR
-    Correction[HistoricalCorrection]
-    Correction -->|CORRECTS| History[PiH]
+    ChangeEvent[ChangeEvent: HISTORICAL_CORRECTION] -->|TARGETS_HISTORY| History[PiH]
+    ChangeEvent -. erwartet expectedHistoryViewHash .-> View[wirksame HistoryView]
+    Correction[HistoricalCorrection: baseHistoryViewHash]
+    Correction -->|CORRECTS| History
     Correction -->|CAUSED_BY| ChangeEvent
     Correction -->|CORRECTED_BY| Assignment[RoleAssignment]
     Correction -->|USES_EVIDENCE| Evidence
     SyncEvent -->|CREATES_CORRECTION| Correction
 ```
 
-Eine spätere Korrektur kann über `SUPERSEDES` auf die frühere `HistoricalCorrection` verweisen. Beide bleiben unveränderlich.
+Vor dem Commit berechnet `SYNC` die wirksame `HistoryView` aus dem unveränderten `PiH` und seinen aktiven Korrekturen. Nur wenn deren aktueller Hash mit `expectedHistoryViewHash` des Auftrags übereinstimmt, darf die neue Korrektur mit demselben Wert als `baseHistoryViewHash` entstehen. Die Verarbeitung wird je `PiH` serialisiert; ein veralteter Hash führt zu `CONFLICT` und erzeugt keine Korrektur.
+
+Zwei aktive `HistoricalCorrections` desselben `PiH` dürfen parallel bestehen, wenn ihre `correctedFields` disjunkt sind, beispielsweise `/stateData/name` und `/relationshipData/HAS_MEMBER:OUT:team-7/validUntil`. Überschneiden sich die Felder, muss die neue Korrektur genau eine aktive Vorgängerkorrektur über `SUPERSEDES` vollständig ersetzen und alle weiterhin gültigen Werte übernehmen. Unklare oder mehrfache Überlappungen führen zu `CONFLICT`. Das ursprüngliche `PiH` und alle Korrekturen bleiben unveränderlich.
 
 ## 12. Vollständige Rückverfolgung
 
@@ -301,7 +337,7 @@ Eine spätere Korrektur kann über `SUPERSEDES` auf die frühere `HistoricalCorr
 
 ## 13. Abdeckung aller konkreten Entitäten
 
-Die Gesamtkarte zeigt jeden konkreten Entitätstyp mindestens einmal. Detailregeln und Kardinalitäten bleiben in den vorangehenden kleineren Grafiken und der kanonischen Spezifikation beschrieben.
+Die Gesamtkarte zeigt jeden konkreten Entitätstyp mindestens einmal. Sie fasst mögliche Beziehungen zusammen; bedingte Kanten wie `CHANGED_BY`, `TARGETS_HISTORY` und `AFFECTS` müssen nicht gemeinsam in demselben Veränderungsvorgang vorkommen. Detailregeln und Kardinalitäten bleiben in den vorangehenden kleineren Grafiken und der kanonischen Spezifikation beschrieben.
 
 ```mermaid
 flowchart LR
@@ -334,12 +370,18 @@ flowchart LR
     RaN -->|GOVERNS| Task
     RaNConflict -->|CONFLICTING_RULE| RaN
     RaNConflict -->|DETECTED_BY| SyncEvent
-    Task -->|CHANGED_BY| ChangeEvent
-    ChangeEvent -->|TRIGGERS| SyncEvent
+    Task[Task: bestehendes Änderungsziel] -->|CHANGED_BY| ChangeEvent
+    ChangeEvent -->|TRIGGERS| SyncEvent[SyncEvent: abgeschlossener Lauf]
     SyncEvent -->|EXECUTES| SYNC
+    SyncEvent -->|AFFECTS| Task
     SyncEvent -->|CREATES_HISTORY| PiH
-    SyncEvent -->|CREATES_CORRECTION| HistoricalCorrection
+    CorrectionEvent[ChangeEvent: HISTORICAL_CORRECTION] -->|TARGETS_HISTORY| PiH
+    CorrectionEvent -->|TRIGGERS| CorrectionSyncEvent[SyncEvent: abgeschlossener Korrekturlauf]
+    CorrectionSyncEvent -->|EXECUTES| SYNC
+    CorrectionSyncEvent -->|CREATES_CORRECTION| HistoricalCorrection
     HistoricalCorrection -->|CORRECTS| PiH
+    HistoricalCorrection -->|CAUSED_BY| CorrectionEvent
+    HistoricalCorrection -->|SUPERSEDES| PreviousCorrection[HistoricalCorrection: überlappende aktive Vorgängerin]
 ```
 
 | Bereich | Entitäten |

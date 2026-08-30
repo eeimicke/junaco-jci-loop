@@ -49,6 +49,12 @@ flowchart LR
 
 A `RoleAssignment` means that a particular member activates an existing role in a particular team. The same person can therefore exercise the same role in several teams without duplicating the role or person.
 
+### One-time initialisation
+
+In a completely empty graph, no role assignment initially exists that could act as creator. A one-time atomic bootstrap may therefore create one `RoFOrg`, one `RoFTeam`, one technical `RoFTeamMember`, one `RoFRole`, exactly one `RoleAssignment` with `bootstrapKey = "ROOT"`, and one `SYNC` definition together. All six entities are created directly with `status = ACTIVE`, `revision = 1`, and the same `createdAt` and `updatedAt`; any `validFrom` values equal the same bootstrap timestamp. Only this root `RoleAssignment` may permanently exist without `CREATED_BY`; every other bootstrap entity points to it through `CREATED_BY`.
+
+The bootstrap is permitted only for a completely empty graph. It creates no `ChangeEvent`, `SyncRun`, `SyncEvent`, or `PiH`. After successful completion, a second bootstrap and a second root `RoleAssignment` are prohibited. A data import is not a bootstrap.
+
 ## Work, result, and verification
 
 ```mermaid
@@ -66,6 +72,8 @@ flowchart LR
 - `Result`: What was produced?
 - `Evidence`: What supports the claim?
 - `Verification`: How was the Result evaluated against a criterion?
+
+A `Verification` records not only its relationships to exactly one `Result` and one `SuccessCriterion`, but also the revisions that were actually checked. For example, a verification with `evaluatedResultRevision = 3` and `checkedCriterionRevision = 2` remains applicable only while those exact revisions are current and the verification has not been superseded through `SUPERSEDES`. If either target changes later, the verification remains as evidence but is stale for the current state.
 
 ## Environment
 
@@ -101,6 +109,16 @@ If the repository were owned by a partner organisation, it would be an external 
 - `PiH`: former state of an entity that actually changed.
 - `RaNConflict`: a rule conflict that cannot be decided automatically.
 - `HistoricalCorrection`: correction of a `PiH` without overwriting it.
+
+An accepted `ChangeEvent` may initially have no `TRIGGERS` relationship: `TRIGGERS = 0` denotes the pending state before a technical attempt has ended. Every completed or controlled-aborted `SyncRun` creates exactly one immutable `SyncEvent` with its own unique `runId` and appends exactly one `TRIGGERS` relationship. A retry receives a new `runId` and its own `SyncEvent`.
+
+`CHANGED_BY` and `AFFECTS` are therefore conditional:
+
+- When an existing entity is changed, that entity points to the `ChangeEvent` through `CHANGED_BY`.
+- For `CREATED`, no source entity exists before the successful commit. Only `SUCCESS` creates the new entity with `revision = 1`, `CREATED_BY`, and `CHANGED_BY`; no `PiH` is created. `CONFLICT` or `FAILED` creates neither the target node nor those relationships.
+- A `SyncEvent` with `SUCCESS` or `CONFLICT` has at least one `AFFECTS` target. Only an early `FAILED` attempt that could not yet resolve the target may have no `AFFECTS` relationship.
+
+A historical correction neither changes the `PiH` nor creates another `PiH`. Its `ChangeEvent` instead points through `TARGETS_HISTORY` to exactly the affected `PiH`. Before commit, `SYNC` compares the expected hash of the effective `HistoryView` with the current hash. Active corrections may affect only distinct `correctedFields`; an overlapping correction must fully supersede exactly one active predecessor through `SUPERSEDES`. Otherwise the attempt ends with `CONFLICT`.
 
 The [canonical specification](../../JCI_CONTEXT.md) defines all required fields and cardinalities.
 

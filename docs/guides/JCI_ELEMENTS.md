@@ -47,6 +47,12 @@ flowchart LR
 
 Ein `RoleAssignment` bedeutet: Ein bestimmtes Mitglied aktiviert eine vorhandene Rolle in einem bestimmten Team. Dadurch kann dieselbe Person dieselbe Rolle in mehreren Teams ausüben, ohne die Rolle oder Person zu duplizieren.
 
+### Einmalige Initialisierung
+
+In einem vollständig leeren Graphen gibt es zunächst noch keine Rollenaktivierung, die als Erzeuger dienen kann. Deshalb darf ein einmaliger atomarer Bootstrap eine `RoFOrg`, ein `RoFTeam`, ein technisches `RoFTeamMember`, eine `RoFRole`, genau ein `RoleAssignment` mit `bootstrapKey = "ROOT"` und eine `SYNC`-Definition gemeinsam anlegen. Alle sechs Entitäten entstehen direkt mit `status = ACTIVE`, `revision = 1` sowie demselben `createdAt` und `updatedAt`; vorhandene `validFrom`-Werte entsprechen demselben Bootstrapzeitpunkt. Nur dieses Root-`RoleAssignment` darf dauerhaft ohne `CREATED_BY` bestehen; alle weiteren Bootstrap-Entitäten verweisen mit `CREATED_BY` auf dieses Root-`RoleAssignment`.
+
+Der Bootstrap ist nur bei einem vollständig leeren Graphen zulässig. Er erzeugt weder `ChangeEvent`, `SyncRun`, `SyncEvent` noch `PiH`, und alle erzeugten Entitäten beginnen mit `revision = 1`. Nach erfolgreichem Abschluss sind ein zweiter Bootstrap und ein zweites Root-`RoleAssignment` ausgeschlossen. Ein Datenimport ist kein Bootstrap.
+
 ## Arbeit, Ergebnis und Prüfung
 
 ```mermaid
@@ -64,6 +70,8 @@ flowchart LR
 - `Result`: Was wurde erzeugt?
 - `Evidence`: Womit lässt es sich belegen?
 - `Verification`: Wie wurde das Ergebnis gegen ein Kriterium bewertet?
+
+Eine `Verification` hält nicht nur die Beziehungen zu genau einem `Result` und genau einem `SuccessCriterion` fest, sondern auch deren tatsächlich geprüfte Revisionen. Beispiel: Eine Prüfung mit `evaluatedResultRevision = 3` und `checkedCriterionRevision = 2` ist nur anwendbar, solange genau diese Revisionen aktuell sind und die Prüfung nicht durch `SUPERSEDES` ersetzt wurde. Wird eines der beiden Ziele später geändert, bleibt die Prüfung als Nachweis erhalten, gilt für den aktuellen Zustand aber als revisionsveraltet.
 
 ## Umwelt
 
@@ -99,6 +107,16 @@ Gehörte das Repository stattdessen einer Partnerorganisation, wäre es aus Sich
 - `PiH`: vorheriger Zustand einer tatsächlich geänderten Entität.
 - `RaNConflict`: nicht automatisch entscheidbarer Regelkonflikt.
 - `HistoricalCorrection`: Berichtigung eines `PiH`, ohne dieses zu überschreiben.
+
+Ein angenommenes `ChangeEvent` darf zunächst noch keine `TRIGGERS`-Beziehung besitzen: `TRIGGERS = 0` bezeichnet den ausstehenden Zustand, bevor ein technischer Versuch beendet wurde. Jeder abgeschlossene oder kontrolliert abgebrochene `SyncRun` erzeugt genau ein unveränderliches `SyncEvent` mit eigener eindeutiger `runId` und ergänzt genau eine `TRIGGERS`-Beziehung. Ein erneuter Versuch erhält eine neue `runId` und ein eigenes `SyncEvent`.
+
+`CHANGED_BY` und `AFFECTS` gelten deshalb bedingt:
+
+- Bei der Änderung einer vorhandenen Entität verweist diese über `CHANGED_BY` auf das `ChangeEvent`.
+- Bei `CREATED` gibt es vor dem erfolgreichen Commit noch keine Quellentität. Nur bei `SUCCESS` entstehen die neue Entität mit `revision = 1`, `CREATED_BY` und `CHANGED_BY`; ein `PiH` entsteht nicht. Bei `CONFLICT` oder `FAILED` entstehen weder Zielknoten noch diese Beziehungen.
+- Ein `SyncEvent` mit `SUCCESS` oder `CONFLICT` besitzt mindestens ein `AFFECTS`-Ziel. Nur ein früher `FAILED`-Versuch, der das Ziel noch nicht auflösen konnte, darf kein `AFFECTS` besitzen.
+
+Eine historische Korrektur verändert weder das `PiH` noch erzeugt sie ein neues `PiH`. Das zugehörige `ChangeEvent` verweist stattdessen mit `TARGETS_HISTORY` auf genau das betroffene `PiH`. Vor dem Commit vergleicht `SYNC` den erwarteten Hash der wirksamen `HistoryView` mit dem aktuellen Hash. Aktive Korrekturen dürfen nur unterschiedliche `correctedFields` betreffen; eine überlappende Korrektur muss genau eine aktive Vorgängerkorrektur vollständig über `SUPERSEDES` ersetzen. Andernfalls endet der Versuch mit `CONFLICT`.
 
 Für sämtliche Pflichtfelder und Kardinalitäten ist die [kanonische Spezifikation](../JCI_CONTEXT.md) maßgeblich.
 

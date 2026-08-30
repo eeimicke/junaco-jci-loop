@@ -20,6 +20,7 @@ Source ── RELATIONSHIP ──► Target
 | `Task ── EXECUTED_BY ──► RoleAssignment` | Which active role executes the Task? | Which Tasks does this role assignment execute? |
 | `Verification ── CHECKS ──► SuccessCriterion` | Which criterion is checked? | Which Verifications evaluate this criterion? |
 | `SyncEvent ── CREATES_HISTORY ──► PiH` | Which history did the run create? | Which run created this `PiH`? |
+| `ChangeEvent ── TARGETS_HISTORY ──► PiH` | Which `PiH` is to be corrected? | Which correction requests target this `PiH`? |
 
 ## 2. Initial situation and purpose
 
@@ -44,6 +45,23 @@ flowchart LR
 | `PiF1o` | Every enquiry receives a qualified response within 24 hours. |
 
 Backward navigation from `PiF1o` reaches `CiV` and its historical context, explaining why the operational target exists.
+
+### 2.1 Prerequisite: one-time bootstrap
+
+Before this domain example can be created in a completely empty graph, the technical trust root is created exactly once:
+
+```text
+RoFOrg: Example GmbH
+└── RoFTeam: Technical Administration
+    └── RoFTeamMember: JCI System
+        ├── RoFRole: JCI Administration
+        └── RoleAssignment: JCI System as Administrator
+            └── bootstrapKey = "ROOT"
+
+SYNC: JCI standard process
+```
+
+These entities are created in one transaction with `status = ACTIVE`, `revision = 1`, and the same `createdAt` and `updatedAt`; any `validFrom` values equal the same bootstrap timestamp. Only the root `RoleAssignment` has no `CREATED_BY`; every other bootstrap entity points to that root `RoleAssignment`. The bootstrap creates no `ChangeEvent`, `SyncRun`, `SyncEvent`, or `PiH`. Only afterwards does the root `RoleAssignment` create this example's domain entities through regular `CREATED` requests. A second bootstrap is prohibited.
 
 ## 3. Organisation, partnership, and roles
 
@@ -132,7 +150,15 @@ flowchart LR
     Verification -->|CHECKS| Criterion
 ```
 
-Because 18 is less than or equal to 24, the complete `Verification` is recorded with the domain result `VALID`. A later check can point to the former `Verification` through `SUPERSEDES`.
+Because 18 is less than or equal to 24, the complete `Verification` is recorded with the domain result `VALID`. Assume that the checked `Result` has `revision = 3` and the checked `SuccessCriterion` has `revision = 2`; the verification additionally stores:
+
+```text
+Verification
+├── evaluatedResultRevision = 3
+└── checkedCriterionRevision = 2
+```
+
+The `Verification` is applicable only while it has not been superseded and the current revisions of both targets still match these bound revisions. If the criterion is later changed to twelve hours and thereby reaches revision 3, the earlier verification remains immutable but is stale for the new target state. A new verification binds the current target revisions and may point to the earlier `Verification` through `SUPERSEDES`.
 
 ## 7. RaN types and structure
 
@@ -218,19 +244,22 @@ flowchart LR
 
 ## 9. Change and SYNC
 
-The response target is later tightened from 24 to 12 hours. Anna requests the change:
+The response target is later tightened from 24 to 12 hours. Anna requests a change to an already existing `PiF1o`:
 
 ```text
 PiF1o      ── CHANGED_BY ───► ChangeEvent
 ChangeEvent ── REQUESTED_BY ──► RoleAssignment: Anna
 ```
 
-`SYNC` is the stored and historisable process definition. `SyncRun` is mutable technical runtime state and not a graph node. `SyncEvent` is stored immutably only after completion or controlled termination.
+Because the target node already exists, it points through `CHANGED_BY` to the accepted `ChangeEvent`. Immediately after acceptance, this event may still have `TRIGGERS = 0`: the request is then waiting for its first technical attempt to finish.
+
+`SYNC` is the stored and historisable process definition. `SyncRun` is mutable technical runtime state and not a graph node. Every attempt has a unique `runId`. `SyncEvent` is stored immutably only after completion or controlled termination.
 
 ```mermaid
 flowchart TD
-    Entity[JCIEntity: requested change] -->|CHANGED_BY| ChangeEvent
-    ChangeEvent -. starts technically .-> Run[SyncRun]
+    Entity[JCIEntity: existing PiF1o] -->|CHANGED_BY| ChangeEvent
+    ChangeEvent -. pending: TRIGGERS = 0 .-> Pending[no completed event yet]
+    ChangeEvent -. schedules attempt .-> Run[SyncRun: unique runId]
     Run -. uses .-> Definition[SYNC]
     Run -. validates model, revisions, and RaN .-> Decision{outcome}
     Decision --> Success[SUCCESS]
@@ -241,24 +270,25 @@ flowchart TD
     Failed --> Rollback
     Apply --> Event[SyncEvent]
     Rollback --> Event
-    ChangeEvent -->|TRIGGERS| Event
+    ChangeEvent -->|TRIGGERS| Event[SyncEvent: only after completion, unique runId]
     Event -->|EXECUTES| Definition
+    Event -->|AFFECTS| Affected[resolved JCIEntity: required for SUCCESS or CONFLICT]
 ```
 
-Dashed arrows are technical process steps, not stored relationships.
+Dashed arrows are technical process steps, not stored relationships. Every completed or controlled-aborted attempt creates exactly one `SyncEvent` with the same `runId` as its `SyncRun`. A retry creates a new `runId`, a new `SyncEvent`, and another append-only `TRIGGERS` relationship.
 
 ## 10. The three SYNC outcomes
 
 | Outcome | Domain change | Revision and `PiH` | Completion documentation |
 | --- | --- | --- | --- |
-| `SUCCESS` | commit completely and atomically | for every existing entity that actually changes | always one `SyncEvent` |
-| `CONFLICT` | roll back completely | none for rejected states | `SyncEvent`, optionally `RaNConflict` |
-| `FAILED` | roll back completely | none for rejected states | `SyncEvent` immediately or after technical recovery |
+| `SUCCESS` | commit completely and atomically | for every existing entity that actually changes | `SyncEvent`; at least one `AFFECTS` target |
+| `CONFLICT` | roll back completely | none for rejected states | `SyncEvent`; at least one `AFFECTS` target, optionally `RaNConflict` |
+| `FAILED` | roll back completely | none for rejected states | `SyncEvent` immediately or after technical recovery; `AFFECTS` may be absent only before successful target resolution |
 
 The completed event records the definition used and affected entities:
 
 ```text
-ChangeEvent ── TRIGGERS ──► SyncEvent
+ChangeEvent ── TRIGGERS ──► SyncEvent: only after completion, unique `runId`
 SyncEvent ── EXECUTES ─────► SYNC
 SyncEvent ── AFFECTS ──────► JCIEntity
 ```
@@ -272,21 +302,27 @@ SyncEvent ── CREATES_HISTORY ───────► PiH: PiF1o revision 3
 
 If the `SuccessCriterion` also changes, it receives its own `PiH`. A Task that was only evaluated but remained unchanged receives no history.
 
+Initial entity creation uses different provenance. For a `ChangeEvent` with `changeType = CREATED`, no target node and therefore no `CHANGED_BY` source exists before the successful commit. On `SUCCESS`, the new node with `revision = 1`, its `CREATED_BY`, and exactly one `CHANGED_BY` relationship are created together; no `PiH` exists because there was no predecessor state. On `CONFLICT` or `FAILED`, the target node, `CHANGED_BY`, and history remain absent.
+
 ## 11. HistoricalCorrection
 
 An error in an existing `PiH` is never corrected by overwriting it:
 
 ```mermaid
 flowchart LR
-    Correction[HistoricalCorrection]
-    Correction -->|CORRECTS| History[PiH]
+    ChangeEvent[ChangeEvent: HISTORICAL_CORRECTION] -->|TARGETS_HISTORY| History[PiH]
+    ChangeEvent -. expects expectedHistoryViewHash .-> View[effective HistoryView]
+    Correction[HistoricalCorrection: baseHistoryViewHash]
+    Correction -->|CORRECTS| History
     Correction -->|CAUSED_BY| ChangeEvent
     Correction -->|CORRECTED_BY| Assignment[RoleAssignment]
     Correction -->|USES_EVIDENCE| Evidence
     SyncEvent -->|CREATES_CORRECTION| Correction
 ```
 
-A later correction may point to the former `HistoricalCorrection` through `SUPERSEDES`. Both remain immutable.
+Before commit, `SYNC` calculates the effective `HistoryView` from the immutable `PiH` and its active corrections. Only if its current hash equals the request's `expectedHistoryViewHash` may the new correction be created with the same value as `baseHistoryViewHash`. Processing is serialized per `PiH`; a stale hash produces `CONFLICT` and no correction.
+
+Two active `HistoricalCorrections` for the same `PiH` may coexist when their `correctedFields` are disjoint, for example `/stateData/name` and `/relationshipData/HAS_MEMBER:OUT:team-7/validUntil`. If fields overlap, the new correction must fully replace exactly one active predecessor through `SUPERSEDES` and repeat every value that remains valid. Ambiguous or multiple overlaps produce `CONFLICT`. The original `PiH` and every correction remain immutable.
 
 ## 12. Complete traceability
 
@@ -301,7 +337,7 @@ A later correction may point to the former `HistoricalCorrection` through `SUPER
 
 ## 13. Coverage of all concrete entities
 
-The complete map shows every concrete entity type at least once. Detailed rules and cardinalities remain documented in the smaller diagrams above and in the canonical specification.
+The complete map shows every concrete entity type at least once. It summarizes possible relationships; conditional edges such as `CHANGED_BY`, `TARGETS_HISTORY`, and `AFFECTS` need not occur together in the same change process. Detailed rules and cardinalities remain documented in the smaller diagrams above and in the canonical specification.
 
 ```mermaid
 flowchart LR
@@ -334,12 +370,18 @@ flowchart LR
     RaN -->|GOVERNS| Task
     RaNConflict -->|CONFLICTING_RULE| RaN
     RaNConflict -->|DETECTED_BY| SyncEvent
-    Task -->|CHANGED_BY| ChangeEvent
-    ChangeEvent -->|TRIGGERS| SyncEvent
+    Task[Task: existing change target] -->|CHANGED_BY| ChangeEvent
+    ChangeEvent -->|TRIGGERS| SyncEvent[SyncEvent: completed run]
     SyncEvent -->|EXECUTES| SYNC
+    SyncEvent -->|AFFECTS| Task
     SyncEvent -->|CREATES_HISTORY| PiH
-    SyncEvent -->|CREATES_CORRECTION| HistoricalCorrection
+    CorrectionEvent[ChangeEvent: HISTORICAL_CORRECTION] -->|TARGETS_HISTORY| PiH
+    CorrectionEvent -->|TRIGGERS| CorrectionSyncEvent[SyncEvent: completed correction run]
+    CorrectionSyncEvent -->|EXECUTES| SYNC
+    CorrectionSyncEvent -->|CREATES_CORRECTION| HistoricalCorrection
     HistoricalCorrection -->|CORRECTS| PiH
+    HistoricalCorrection -->|CAUSED_BY| CorrectionEvent
+    HistoricalCorrection -->|SUPERSEDES| PreviousCorrection[HistoricalCorrection: overlapping active predecessor]
 ```
 
 | Area | Entities |

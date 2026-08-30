@@ -22,15 +22,21 @@ flowchart LR
     RoleAssignment -->|USES| ERoFObject
     ERoFObject -->|OWNED_BY| RoFOrg
     Task -->|PRODUCES| Result
-    Verification -->|EVALUATES| Result
+    Verification[Verification binds target revisions] -->|EVALUATES| Result
     Verification -->|CHECKS| SuccessCriterion
     Verification -->|USES_EVIDENCE| Evidence
     RaN -->|GOVERNS| Task
     RaNConflict -->|CONFLICTING_RULE| RaN
     RaNConflict -->|DETECTED_BY| SyncEvent
-    Task -->|CHANGED_BY| ChangeEvent
-    ChangeEvent -->|TRIGGERS| SyncEvent
+    Task[Task existing change target] -->|CHANGED_BY| ChangeEvent
+    ChangeEvent -->|TRIGGERS| SyncEvent[SyncEvent completed run]
     SyncEvent -->|EXECUTES| SYNC
+    SyncEvent -->|AFFECTS| Task
     SyncEvent -->|CREATES_HISTORY| PiH
-    SyncEvent -->|CREATES_CORRECTION| HistoricalCorrection
+    CorrectionEvent[ChangeEvent HISTORICAL_CORRECTION] -->|TARGETS_HISTORY| PiH
+    CorrectionEvent -->|TRIGGERS| CorrectionSyncEvent[SyncEvent completed correction run]
+    CorrectionSyncEvent -->|EXECUTES| SYNC
+    CorrectionSyncEvent -->|CREATES_CORRECTION| HistoricalCorrection
     HistoricalCorrection -->|CORRECTS| PiH
+    HistoricalCorrection -->|CAUSED_BY| CorrectionEvent
+    HistoricalCorrection -->|SUPERSEDES| PreviousCorrection[HistoricalCorrection overlapping active predecessor]

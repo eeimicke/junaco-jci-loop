@@ -52,6 +52,10 @@ jobs:
             exit 1
           fi
 
+      - name: Prüfabhängigkeiten installieren / Install validation dependencies
+        shell: bash
+        run: python3 -m pip install --disable-pip-version-check -r requirements-dev.txt
+
       - name: JCI-Modellregeln und Dokumentkonsistenz prüfen / Validate JCI model rules and document consistency
         shell: bash
         run: python3 -m unittest discover -s tests -v

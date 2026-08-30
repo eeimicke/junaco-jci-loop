@@ -1,13 +1,24 @@
 flowchart TD
-    Entity[JCIEntity] -->|CHANGED_BY| ChangeEvent
-    ChangeEvent --> Run[technical SyncRun]
+    Entity[existing JCIEntity target] -->|CHANGED_BY| ChangeEvent
+    ChangeEvent -. pending means TRIGGERS = 0 .-> Pending[no completed event yet]
+    ChangeEvent --> Run[technical SyncRun with unique runId]
     Run --> Check[SYNC validates graph and RaN]
     Check --> Success[SUCCESS]
     Check --> Conflict[CONFLICT]
     Check --> Failed[FAILED]
-    Success --> History[create PiH]
+    Success -->|only when an existing state is replaced| History[create PiH]
     Success --> Current[commit new state]
-    Success --> SyncEvent
+    Success --> SyncEvent[immutable SyncEvent with the runId]
     Conflict --> SyncEvent
     Failed --> SyncEvent
+    ChangeEvent -->|TRIGGERS| SyncEvent
+    SyncEvent -->|AFFECTS| Affected[resolved JCIEntity required for SUCCESS or CONFLICT]
+    Failed -. may have no AFFECTS only before target resolution .-> SyncEvent
+    Success -. CREATED only .-> NewEntity[new JCIEntity revision 1 and no PiH]
+    NewEntity -->|CHANGED_BY| ChangeEvent
+    CorrectionEvent[ChangeEvent HISTORICAL_CORRECTION] -->|TARGETS_HISTORY| ExistingHistory[PiH immutable]
+    CorrectionEvent -. completed SyncRun .-> CorrectionSyncEvent[SyncEvent]
+    CorrectionEvent -->|TRIGGERS| CorrectionSyncEvent
+    CorrectionSyncEvent -->|CREATES_CORRECTION| Correction[HistoricalCorrection]
+    Correction -->|CORRECTS| ExistingHistory
 

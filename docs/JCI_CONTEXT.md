@@ -174,7 +174,7 @@ Kernelement: RoF
     └── RoleAssignment „Anna als Developer in Entwicklung“
 ```
 
-Grundsätzlich ist jede bereits vorhandene `JCIEntity` historisierbar. Ausgenommen sind `PiH`, `ChangeEvent`, `SyncEvent` und `HistoricalCorrection`: Ein `PiH` ist nach seiner Erzeugung unveränderlich und wird nicht erneut historisiert; Ereignis- und Korrekturobjekte dokumentieren abgeschlossene Vorgänge und werden ebenfalls nicht nachträglich verändert. Das erstmalige Anlegen einer `JCIEntity` erzeugt noch kein `PiH`, weil kein vorheriger Zustand existiert.
+Grundsätzlich ist jede bereits vorhandene `JCIEntity` historisierbar. Ausgenommen sind `PiH`, `ChangeEvent`, `SyncEvent` und `HistoricalCorrection`: Ein `PiH` ist nach seiner Erzeugung unveränderlich und wird nicht erneut historisiert. Ein `ChangeEvent` dokumentiert einen angenommenen Veränderungsauftrag; `SyncEvent` und `HistoricalCorrection` dokumentieren abgeschlossene Tatsachen. Ihre gespeicherten Inhalte und bestehenden Provenienzbeziehungen werden nicht nachträglich verändert. Die beim Abschluss eines technischen `SyncRun` entstehende Beziehung `TRIGGERS` wird ausschließlich append-only ergänzt. Beim erfolgreichen erstmaligen Anlegen darf außerdem genau einmal die Beziehung `CHANGED_BY` von der neu erzeugten Entität zum bereits bestehenden `ChangeEvent` hergestellt werden. Diese Ergänzungen ändern weder `revision` noch `updatedAt` des `ChangeEvent`. Das erstmalige Anlegen einer `JCIEntity` erzeugt noch kein `PiH`, weil kein vorheriger Zustand existiert.
 
 #### 2.2.2 Gemeinsame Eigenschaften aller JCI-Entitäten
 
@@ -193,7 +193,7 @@ Jede gespeicherte `JCIEntity` besitzt eine unveränderliche Identität, einen ko
 
 Bei der Erzeugung gilt `revision = 1` und `updatedAt = createdAt`. Jede unabhängig angeforderte oder beobachtete fachliche Änderung einschließlich eines Statuswechsels erzeugt ein `ChangeEvent` und einen Synchronisationslauf. Deterministisch durch diesen Lauf abgeleitete Folgeänderungen bleiben Bestandteil desselben Veränderungsvorgangs und erzeugen kein rekursives `ChangeEvent`; sie werden durch `SyncEvent`, `AFFECTS`, Revision und Historisierung dokumentiert. Besteht bereits ein Ausgangszustand, wird dieser vor der Übernahme der Änderung als `PiH` festgehalten; anschließend wird `revision` des aktuellen Elements um genau eins erhöht. Rein technische Lesevorgänge verändern weder `updatedAt` noch `revision`.
 
-`PiH`, `ChangeEvent`, `SyncEvent` und `HistoricalCorrection` bleiben dauerhaft bei `revision = 1` und `updatedAt = createdAt`. Sie werden nach ihrer Erzeugung nicht verändert.
+`PiH`, `ChangeEvent`, `SyncEvent` und `HistoricalCorrection` bleiben dauerhaft bei `revision = 1` und `updatedAt = createdAt`. Ihre Eigenschaften werden nach der Erzeugung nicht verändert. Für `ChangeEvent` gelten ausschließlich die in Abschnitt 2.2.1 beschriebenen append-only Provenienzergänzungen.
 
 Die Verantwortung für die Erzeugung wird als Beziehung zu einem konkreten `RoleAssignment` gespeichert und nicht zusätzlich als Akteurs-ID oder Freitext dupliziert:
 
@@ -201,7 +201,7 @@ Die Verantwortung für die Erzeugung wird als Beziehung zu einem konkreten `Role
 JCIEntity ── CREATED_BY ──► RoleAssignment
 ```
 
-Für importierte oder initiale Bootstrap-Daten darf `CREATED_BY` vorübergehend fehlen. Bevor eine solche Entität den Status `ACTIVE` oder einen typabhängigen abgeschlossenen Status erhält, muss die verantwortliche Rollenaktivierung nachgetragen sein. Eine technische Systemidentität wird dafür als reguläres `RoleAssignment` eines technischen `RoFTeamMember` modelliert.
+Für importierte Daten darf `CREATED_BY` vorübergehend fehlen. Bevor eine solche Entität den Status `ACTIVE` oder einen typabhängigen abgeschlossenen Status erhält, muss die verantwortliche Rollenaktivierung nachgetragen sein. Die einzige dauerhafte Ausnahme ist das in Abschnitt 12.7 definierte Root-`RoleAssignment` mit `bootstrapKey = "ROOT"`. Eine technische Systemidentität wird als reguläres `RoleAssignment` eines technischen `RoFTeamMember` modelliert.
 
 #### 2.2.3 Statusmodell
 
@@ -239,6 +239,7 @@ Ein Statuswechsel ist nur zulässig, wenn er in der folgenden Tabelle aufgeführ
 
 | Entitätstyp oder Gruppe | Erlaubter Übergang | `ChangeEvent.changeType` | Zentrale Bedingung |
 | ----------------------- | ------------------ | ------------------------ | ------------------ |
+| sechs Bootstrap-Entitäten nach Abschnitt 12.7 | Bootstrap → `ACTIVE` | – | vollständig leerer Graph; atomarer und vollständig validierter Minimalgraph |
 | veränderliche Fachentität | Erzeugung → `DRAFT` | `CREATED` | Pflichtfelder für einen Entwurf sind vorhanden |
 | veränderliche Fachentität | `DRAFT` → `ACTIVE` | `CHANGED` | alle Pflichtfelder, Akteure und aktiven Kardinalitäten sind erfüllt |
 | veränderliche Fachentität | `DRAFT` → `REVOKED` | `REVOKED` | Entwurf wird verworfen |
@@ -259,7 +260,7 @@ Ein Statuswechsel ist nur zulässig, wenn er in der folgenden Tabelle aufgeführ
 
 Für `CiV`, `RaN`, `SYNC`, `RoFOrg`, `RoFOrgRelationship`, `RoFTeam`, `RoFTeamMember`, `RoFRole`, `RoleAssignment`, `SuccessCriterion`, `Evidence` und `ERoFObject` gelten die Übergänge der veränderlichen Fachentitäten. `Result` darf zusätzlich abgeschlossen werden. Zukunftselemente dürfen zusätzlich erreicht und Tasks abhängigkeitsbedingt blockiert oder abgeschlossen werden.
 
-Direkte Abkürzungen sind nur dort erlaubt, wo die Tabelle ausdrücklich eine Erzeugung in einen unveränderlichen Zielstatus vorsieht. Insbesondere dürfen aktive Fachentitäten nicht durch eine Änderung wieder zu Entwürfen werden. Eine inhaltliche Fortsetzung eines terminalen Zustands wird als neue Entität angelegt und über die dafür vorgesehene Nachfolgebeziehung verbunden.
+Die Bootstrap-Zeile ist eine einmalige technische Vertrauenswurzel und kein `ChangeEvent`. Außer dieser ausdrücklich begrenzten Ausnahme sind direkte Abkürzungen nur dort erlaubt, wo die Tabelle eine Erzeugung in einen unveränderlichen Zielstatus vorsieht. Insbesondere dürfen aktive Fachentitäten nicht durch eine Änderung wieder zu Entwürfen werden. Eine inhaltliche Fortsetzung eines terminalen Zustands wird als neue Entität angelegt und über die dafür vorgesehene Nachfolgebeziehung verbunden.
 
 Prozessartefakte erzeugen keine rekursive Ereigniskette: `ChangeEvent`, `SyncEvent`, `PiH`, `HistoricalCorrection` und ein durch SYNC erkannter offener `RaNConflict` werden innerhalb des bereits laufenden Veränderungsvorgangs erzeugt und lösen für ihre eigene Erzeugung kein weiteres `ChangeEvent` aus. Eine spätere zulässige Änderung eines `RaNConflict` von `OPEN` zu `RESOLVED` ist dagegen ein neuer fachlicher Veränderungsvorgang.
 
@@ -283,16 +284,16 @@ Zusätzlich zu den gemeinsamen Eigenschaften gelten folgende typspezifische Feld
 | `RoFTeam`                         | `teamType: Enum`, `validFrom: DateTime`                                                                                                                                                                              | `validUntil: DateTime`                                                                                                     |
 | `RoFTeamMember`                   | `memberType: Enum`, `displayName: String`                                                                                                                                                                            | `externalReference: String`                                                                                                |
 | `RoFRole`                         | `roleName: String`, `responsibility: String`                                                                                                                                                                         | `roleType: String`                                                                                                         |
-| `RoleAssignment`                  | `validFrom: DateTime`                                                                                                                                                                                                | `validUntil: DateTime`, `allocation: Decimal`                                                                              |
+| `RoleAssignment`                  | `validFrom: DateTime`                                                                                                                                                                                                | `validUntil: DateTime`, `allocation: Decimal`,<br>`bootstrapKey: String`                                                    |
 | `Task`                            | `taskKind: Enum`                                                                                                                                                                                                     | `taskType: String`, `plannedStart: DateTime`,<br>`plannedEnd: DateTime`, `actualStart: DateTime`,<br>`actualEnd: DateTime` |
 | `SuccessCriterion`                | `criterion: String`, `measurementType: Enum`,<br>`requirementLevel: Enum`, `evaluationMode: Enum`,<br>`operator: Enum`, `targetValue: String`                                                                         | `unit: String`                                                                                                             |
 | `Result`                          | `resultType: String`, `value: TypedValue`, `producedAt: DateTime`                                                                                                                                                    | –                                                                                                                          |
-| `Verification`                    | `method: String`, `outcome: Enum`, `verifiedAt: DateTime`                                                                                                                                                            | `reason: String`                                                                                                           |
+| `Verification`                    | `method: String`, `outcome: Enum`, `verifiedAt: DateTime`,<br>`evaluatedResultRevision: Integer`,<br>`checkedCriterionRevision: Integer`                                                                             | `reason: String`                                                                                                           |
 | `Evidence`                        | `evidenceType: String`, `reference: String`, `capturedAt: DateTime`                                                                                                                                                  | `checksum: String`                                                                                                         |
 | `ERoFObject`                      | `objectType: Enum`, `validFrom: DateTime`                                                                                                                                                                             | `validUntil: DateTime`, `externalReference: String`                                                                        |
-| `ChangeEvent`                     | `changeType: Enum`, `occurredAt: DateTime`, `reason: String`                                                                                                                                                         | –                                                                                                                          |
-| `SyncEvent`                       | `startedAt: DateTime`, `completedAt: DateTime`, `outcome: Enum`,<br>`affectedCount: Integer`, `changedCount: Integer`,<br>`historyCount: Integer`, `correctionCount: Integer`,<br>`conflictCount: Integer`            | `errorCode: String`, `errorMessage: String`                                                                                |
-| `HistoricalCorrection`            | `correctionType: Enum`, `reason: String`, `correctedAt: DateTime`,<br>`valueSchemaVersion: String`, `correctedFields: String[]`,<br>`previousValue: TypedValueMap`, `correctedValue: TypedValueMap`                                                                                   | –                                                                                                                          |
+| `ChangeEvent`                     | `changeType: Enum`, `occurredAt: DateTime`, `reason: String`,<br>`idempotencyKey: String`, `targetEntityId: UUID`,<br>`targetEntityType: Enum`, `requestedRevision: Integer oder null`                                                                                                   | –                                                                                                                          |
+| `SyncEvent`                       | `runId: UUID`, `startedAt: DateTime`, `completedAt: DateTime`,<br>`outcome: Enum`, `affectedCount: Integer`, `changedCount: Integer`,<br>`historyCount: Integer`, `correctionCount: Integer`,<br>`conflictCount: Integer` | `errorCode: String`, `errorMessage: String`                                                                                |
+| `HistoricalCorrection`            | `correctionType: Enum`, `reason: String`, `correctedAt: DateTime`,<br>`valueSchemaVersion: String`, `baseHistoryViewHash: String`,<br>`correctedFields: String[]`, `previousValue: TypedValueMap`,<br>`correctedValue: TypedValueMap`                                                    | –                                                                                                                          |
 
 Verbindliche Aufzählungswerte sind:
 
@@ -334,7 +335,7 @@ SyncEvent.outcome        = SUCCESS | CONFLICT | FAILED
 HistoricalCorrection.correctionType = ADDITION | CORRECTION | CLARIFICATION
 ```
 
-`allocation` liegt, sofern angegeben, zwischen `0` und `1`. Zählwerte eines `SyncEvent` sind nicht negativ, `completedAt` liegt nicht vor `startedAt`, und `validUntil` liegt nicht vor `validFrom`. Für neue Erfolgskriterien gelten standardmäßig `requirementLevel = REQUIRED` und `evaluationMode = ALL`. Für übergeordnete Zukunftselemente gilt standardmäßig `contributionMode = ALL`. Für `RaN.priority` gilt: Eine größere Ganzzahl bedeutet höhere Priorität. Der `ruleType` erzeugt keinen automatischen Vorrang.
+`allocation` liegt, sofern angegeben, zwischen `0` und `1`. `bootstrapKey` ist ausschließlich für genau ein Root-`RoleAssignment` zulässig und besitzt dort den unveränderlichen Wert `ROOT`. Die gebundenen Revisionen einer `Verification` sind positive Ganzzahlen. `ChangeEvent.id` entspricht der `requestId` des angenommenen Änderungsauftrags; `idempotencyKey` ist je fachlichem Veränderungsauftrag eindeutig. `SyncEvent.runId` ist je technischem Versuch eindeutig. Zählwerte eines `SyncEvent` sind nicht negativ, `completedAt` liegt nicht vor `startedAt`, und `validUntil` liegt nicht vor `validFrom`. Für neue Erfolgskriterien gelten standardmäßig `requirementLevel = REQUIRED` und `evaluationMode = ALL`. Für übergeordnete Zukunftselemente gilt standardmäßig `contributionMode = ALL`. Für `RaN.priority` gilt: Eine größere Ganzzahl bedeutet höhere Priorität. Der `ruleType` erzeugt keinen automatischen Vorrang.
 
 Für `SuccessCriterion.operator` gelten abhängig vom Messungstyp folgende Kombinationen:
 
@@ -359,7 +360,7 @@ Akteure werden ausschließlich über aktive Rollen im konkreten Teamkontext zuge
 | `HistoricalCorrection`  | `CORRECTED_BY`  | `RoleAssignment` |              `1` |           `0..n` |
 | `RaNConflict`           | `RESOLVED_BY`   | `RoleAssignment` |           `0..1` |           `0..n` |
 
-`CREATED_BY = 0..1` erlaubt ausschließlich Bootstrap- und Importzustände. Für fachlich aktive oder abgeschlossene Entitäten gilt durch zusätzliche Invariante genau ein Erzeuger. `REQUESTED_BY` bezeichnet die Rollenaktivierung, die eine Änderung veranlasst hat. `CORRECTED_BY` bezeichnet die Rollenaktivierung, die für eine historische Korrektur verantwortlich ist.
+`CREATED_BY = 0..1` erlaubt ausschließlich unvollständige Importentwürfe und das eine Root-`RoleAssignment` des initialen Bootstraps. Für alle anderen fachlich aktiven oder abgeschlossenen Entitäten gilt durch zusätzliche Invariante genau ein Erzeuger. `REQUESTED_BY` bezeichnet die Rollenaktivierung, die eine Änderung veranlasst hat. `CORRECTED_BY` bezeichnet die Rollenaktivierung, die für eine historische Korrektur verantwortlich ist.
 
 Nachweise werden ausschließlich als eigenständige `Evidence`-Knoten gespeichert:
 
@@ -408,7 +409,9 @@ properties = Map<String, TypedValue>
 
 Für jede zum Gültigkeitsende bestehende fachliche Kante wird genau ein Snapshot aus Sicht der historisierten Entität gespeichert. Die Liste wird für die Hashbildung nach `relationshipType`, `direction` und `otherEntityId` sortiert. `contentHash` ist der hexadezimale SHA-256-Wert der kanonisch serialisierten Kombination aus `StateSnapshot` und sortierten `RelationshipSnapshots`.
 
-Ein `TypedValueMap` ordnet jedem Eintrag in `correctedFields` genau einen typisierten alten und korrigierten Wert zu. Bei `ADDITION` ist der alte Wert `NULL`. Eine Korrektur darf nur die aufgeführten Pfade verändern; andere Snapshot-Inhalte bleiben wirksam unverändert.
+Ein `TypedValueMap` ordnet jedem Eintrag in `correctedFields` genau einen typisierten alten und korrigierten Wert zu. `correctedFields` enthält eindeutige, lexikografisch sortierte kanonische JSON-Pointer. Eine historische Beziehung wird darin über einen stabilen Schlüssel aus `direction`, `relationshipType` und `otherEntityId` und niemals über einen veränderlichen Arrayindex adressiert. Bei `ADDITION` ist der alte Wert `NULL`. Eine Korrektur darf nur die aufgeführten Pfade verändern; andere Snapshot-Inhalte bleiben wirksam unverändert.
+
+Eine `HistoryView` ist die deterministisch berechnete wirksame historische Sicht aus dem unveränderten `PiH` und allen für dieses `PiH` nicht abgelösten `HistoricalCorrections`. `baseHistoryViewHash` ist der hexadezimale SHA-256-Wert ihrer kanonischen Serialisierung unmittelbar vor der geprüften neuen Korrektur. Dadurch kann `SYNC` feststellen, ob sich die historische Basissicht zwischen Lesen und Commit verändert hat.
 
 **Kurzes Beispiel:** Wird Annas Teambeziehung historisiert, enthält `relationshipData` eine ausgehende oder eingehende Kante mit Typ `HAS_MEMBER`, der Team-ID sowie `validFrom` und `validUntil`. Eine spätere Korrektur benennt genau diesen Beziehungspfad und ersetzt nicht den gesamten Snapshot.
 
@@ -502,6 +505,8 @@ Lesebeispiel für die Ableitung `RoFOrg ── über Teams, Mitglieder und RoleA
 
 Lesebeispiel für `Verification ── EVALUATES ──► Result`: **Ziele je Quelle `1`** bedeutet, dass jede `Verification` genau ein `Result` bewertet. **Quellen je Ziel `0..n`** bedeutet, dass ein `Result` noch durch keine, durch eine oder durch mehrere `Verifications` bewertet werden kann.
 
+Die `Verification` speichert mit `evaluatedResultRevision` und `checkedCriterionRevision` unveränderlich, welche Revisionen der beiden Ziele tatsächlich geprüft wurden. Diese Angaben sind Eigenschaften der Prüfung und keine zusätzlichen Beziehungen.
+
 | Quelle           | Beziehung          | Ziel                 | Ziele je<br>Quelle | Quellen je<br>Ziel |
 | ---------------- | ------------------ | -------------------- | -----------------: | -----------------: |
 | `Task`           | `PRODUCES`         | `Result`             |             `0..n` |                `1` |
@@ -527,23 +532,28 @@ Lesebeispiel für `RaNConflict ── CONFLICTING_RULE ──► RaN`: **Ziele j
 
 #### 2.4.7 Veränderung
 
-Lesebeispiel für `ChangeEvent ── TRIGGERS ──► SyncEvent`: **Ziele je Quelle `1..n`** bedeutet, dass jedes `ChangeEvent` mindestens einen und möglicherweise mehrere abgeschlossene oder kontrolliert abgebrochene Synchronisationsversuche dokumentiert. **Quellen je Ziel `1`** bedeutet, dass jedes abschließend erzeugte `SyncEvent` genau auf ein auslösendes `ChangeEvent` zurückgeht.
+Lesebeispiel für `ChangeEvent ── TRIGGERS ──► SyncEvent`: **Ziele je Quelle `0..n`** bedeutet, dass ein angenommener Veränderungsauftrag bis zum Abschluss seines ersten technischen Versuchs noch kein `SyncEvent` und nach abgeschlossenen Wiederholungsversuchen mehrere `SyncEvents` besitzen kann. **Quellen je Ziel `1`** bedeutet, dass jedes abschließend erzeugte `SyncEvent` genau auf ein auslösendes `ChangeEvent` zurückgeht.
 
 `SYNC`, `SyncRun` und `SyncEvent` haben unterschiedliche Aufgaben: `SYNC` ist die gespeicherte Definition der Synchronisationslogik. `SyncRun` ist der veränderbare technische Laufzustand während der Ausführung. Ein `SyncEvent` wird erst nach Abschluss oder kontrolliertem Abbruch erzeugt, dokumentiert das unveränderliche Ergebnis dieses Versuchs und verweist über `EXECUTES` auf die verwendete Definition. `SyncRun` wird nicht im fachlichen JCI-Graphen gespeichert.
 
 | Quelle                      | Beziehung       | Ziel             | Ziele je<br>Quelle | Quellen je<br>Ziel |
 | --------------------------- | --------------- | ---------------- | -----------------: | -----------------: |
-| historisierbare `JCIEntity` | `CHANGED_BY`    | `ChangeEvent`    |             `0..n` |                `1` |
-| `ChangeEvent`               | `TRIGGERS`      | `SyncEvent`      |             `1..n` |                `1` |
+| historisierbare `JCIEntity` | `CHANGED_BY`    | `ChangeEvent`    |             `0..n` |             `0..1` |
+| `ChangeEvent`               | `TRIGGERS`      | `SyncEvent`      |             `0..n` |                `1` |
 | `ChangeEvent`               | `REQUESTED_BY`  | `RoleAssignment` |                `1` |             `0..n` |
 | `ChangeEvent`               | `USES_EVIDENCE` | `Evidence`       |             `0..n` |             `0..n` |
+| `ChangeEvent`               | `TARGETS_HISTORY` | `PiH`           |             `0..1` |             `0..n` |
 | `SyncEvent`                 | `EXECUTES`      | `SYNC`           |                `1` |             `0..n` |
-| `SyncEvent`                 | `AFFECTS`       | `JCIEntity`      |             `1..n` |             `0..n` |
+| `SyncEvent`                 | `AFFECTS`       | `JCIEntity`      |             `0..n` |             `0..n` |
 | ersetzbare `JCIEntity`      | `REPLACED_BY`   | gleicher konkreter Entitätstyp |       `0..1` |             `0..n` |
 
 Lesebeispiel für `SyncEvent ── EXECUTES ──► SYNC`: **Ziele je Quelle `1`** bedeutet, dass jedes `SyncEvent` genau eine verwendete SYNC-Definition dokumentiert. **Quellen je Ziel `0..n`** bedeutet, dass eine SYNC-Definition noch in keinem, einem oder mehreren abgeschlossenen Synchronisationsversuchen verwendet worden sein kann.
 
 `REPLACED_BY` verbindet eine ersetzte Entität mit ihrem fachlichen Nachfolger. Quelle und Ziel besitzen denselben konkreten `entityType`. Eine Entität mit `status = REPLACED` besitzt genau einen Nachfolger; in allen anderen Status besitzt sie keine ausgehende `REPLACED_BY`-Beziehung. Ein Nachfolger darf mehrere bisherige Entitäten zusammenführen. Die Beziehung darf keine Selbstbezüge oder Zyklen bilden.
+
+Für `CHANGED_BY`, `TARGETS_HISTORY` und `AFFECTS` gelten bedingte Invarianten: Eine normale Änderung besitzt genau eine `CHANGED_BY`-Quelle. Bei `CREATED` fehlt sie bis zum erfolgreichen Anlegen; danach verweist die neue Entität genau einmal auf das `ChangeEvent`. Ein fehlgeschlagener oder konfliktbehafteter Erzeugungsversuch besitzt keine `CHANGED_BY`-Quelle. Ein `ChangeEvent` mit `changeType = HISTORICAL_CORRECTION` besitzt keine `CHANGED_BY`-Quelle, aber genau ein `TARGETS_HISTORY` zu dem unverändert bleibenden `PiH`; alle anderen Änderungstypen besitzen diese Beziehung nicht. Ein `SyncEvent` mit `outcome = SUCCESS` oder `CONFLICT` betrifft mindestens eine bestehende oder neu übernommene Entität. Nur ein `FAILED`-Versuch, der vor erfolgreicher Zielauflösung endet, darf kein `AFFECTS`-Ziel besitzen.
+
+Jedes angenommene `ChangeEvent` muss mindestens einen technischen `SyncRun` einplanen. Solange noch kein Versuch beendet wurde, ist `TRIGGERS = 0` der korrekte gespeicherte Zwischenstand. Jeder beendete oder kontrolliert abgebrochene Versuch ergänzt genau eine `TRIGGERS`-Beziehung append-only; sie wird niemals entfernt oder auf ein anderes `SyncEvent` umgebogen.
 
 **Kurzes Beispiel:** Wird die Regel „Freigabe ab 5.000 Euro“ durch „Freigabe ab 3.000 Euro“ ersetzt, erhält die alte `RaN` den Status `REPLACED` und verweist über `REPLACED_BY` auf die neue `RaN`. Beide bleiben unterschiedliche Entitäten; der frühere Zustand der alten Regel wird zusätzlich als `PiH` festgehalten.
 
@@ -569,7 +579,7 @@ Ein bestehendes `PiH` wird niemals überschrieben. Wird später eine fehlende, f
 
 ##### 2.4.8.1 Ablauf von Veränderung und Historisierung
 
-Die Änderung einer historisierbaren `JCIEntity` wird als `ChangeEvent` erkannt und dokumentiert. Jedes `ChangeEvent` startet mindestens einen technischen `SyncRun`, der genau eine SYNC-Definition ausführt. Diese ermittelt die betroffenen `JCIEntity`-Instanzen und prüft, welcher bestehende Zustand durch die Änderung abgelöst wird. Nach Abschluss oder kontrolliertem Abbruch wird das unveränderliche `SyncEvent` mit dem Ergebnis des Versuchs erzeugt. Die gespeicherte Beziehung `ChangeEvent ── TRIGGERS ──► SyncEvent` bildet diesen fachlichen Zusammenhang ab, ohne den technischen `SyncRun` als JCI-Knoten zu speichern.
+Ein angenommener Veränderungsauftrag wird vor seinem ersten technischen Versuch als unveränderliches `ChangeEvent` dokumentiert. Seine `id` entspricht der `requestId`; Ziel-ID, Zieltyp, erwartete Revision und Idempotenzkennung bleiben dadurch auch dann nachvollziehbar, wenn noch keine Zielentität existiert oder der Versuch scheitert. Jedes `ChangeEvent` plant mindestens einen technischen `SyncRun`, der genau eine SYNC-Definition ausführt. Diese ermittelt die betroffenen `JCIEntity`-Instanzen und prüft, welcher bestehende Zustand durch die Änderung abgelöst wird. Nach Abschluss oder kontrolliertem Abbruch wird das unveränderliche `SyncEvent` mit der eindeutigen `runId` und dem Ergebnis des Versuchs erzeugt. Erst dabei wird die gespeicherte Beziehung `ChangeEvent ── TRIGGERS ──► SyncEvent` append-only ergänzt. Der technische `SyncRun` wird nicht als JCI-Knoten gespeichert.
 
 Bevor der neue Zustand übernommen wird, hält der Synchronisationslauf den bisherigen Zustand des betroffenen Elements einschließlich seiner zu diesem Zeitpunkt gültigen Beziehungen als eigenes `PiH` fest. Anschließend gilt der geänderte Zustand als aktueller Zustand. Ein zusätzlicher `HistoricalSnapshot` ist nicht erforderlich.
 
@@ -580,9 +590,9 @@ aktueller Zustand → ChangeEvent → technischer SyncRun → neuer aktueller Zu
                                                                          └── EXECUTES ──► SYNC
 ```
 
-Beim erstmaligen Anlegen einer `JCIEntity` existiert noch kein vorheriger Zustand. Deshalb erzeugt `changeType = CREATED` noch kein `PiH` dieser Entität. Das Anlegen wird dennoch als `ChangeEvent` dokumentiert und durch `SYNC` verarbeitet.
+Beim erstmaligen Anlegen einer `JCIEntity` existiert noch kein vorheriger Zustand. Deshalb erzeugt `changeType = CREATED` noch kein `PiH` dieser Entität. Bei der Annahme muss die angeforderte Ziel-ID noch frei und `requestedRevision = null` sein. Erst bei `SUCCESS` wird die neue Entität atomar mit `revision = 1`, `CREATED_BY` und ihrer `CHANGED_BY`-Beziehung angelegt. Bei `CONFLICT` oder `FAILED` bleiben Zielknoten, `CHANGED_BY` und Historie aus; das `ChangeEvent` und das abschließende `SyncEvent` dokumentieren den Versuch trotzdem.
 
-Wird eine Abweichung in einem bestehenden `PiH` festgestellt, verarbeitet `SYNC` sie als eigenen Korrekturvorgang. Dabei wird weder das `PiH` verändert noch ein `PiH` des `PiH` erzeugt. Stattdessen entsteht ein unveränderliches `HistoricalCorrection`-Objekt. Ergibt sich daraus zusätzlich eine Änderung am aktuellen Modell, wird diese als getrennter Veränderungsvorgang verarbeitet.
+Wird eine Abweichung in einem bestehenden `PiH` festgestellt, verarbeitet `SYNC` sie als eigenen Korrekturvorgang. Das `ChangeEvent` besitzt dafür `changeType = HISTORICAL_CORRECTION`, genau ein `TARGETS_HISTORY` und keine `CHANGED_BY`-Quelle. Dabei wird weder das `PiH` verändert noch ein `PiH` des `PiH` erzeugt. Bei erfolgreicher Prüfung entsteht ein unveränderliches `HistoricalCorrection`-Objekt, dessen `CORRECTS` dasselbe `PiH` bezeichnet. Ergibt sich daraus zusätzlich eine Änderung am aktuellen Modell, wird diese als getrennter Veränderungsvorgang verarbeitet.
 
 #### 2.4.9 Verbindliche Rückverfolgbarkeit
 
@@ -640,14 +650,14 @@ Die aktuelle `JCIEntity` wird nicht selbst zu `PiH`. Der durch ein `SyncEvent` d
 
 ### 3.2 Entstehung
 
-1. Eine Änderung wird als `ChangeEvent` erfasst.
+1. Ein angenommener Veränderungsauftrag wird als `ChangeEvent` erfasst.
 2. Das `ChangeEvent` startet mindestens einen technischen `SyncRun`.
 3. Der `SyncRun` führt genau eine gespeicherte SYNC-Definition aus.
 4. Die SYNC-Definition ermittelt betroffene Elemente und Beziehungen.
 5. Sie prüft `RaN` und weitere Modellbedingungen.
-6. Der Synchronisationslauf hält den abgelösten Zustand als `PiH` fest.
+6. Vor jeder tatsächlichen Änderung eines vorhandenen Zustands hält der Synchronisationslauf diesen als `PiH` fest.
 7. Der geänderte Zustand wird zum aktuellen Zustand.
-8. Nach Abschluss oder kontrolliertem Abbruch wird genau ein unveränderliches `SyncEvent` für den `SyncRun` erzeugt.
+8. Nach Abschluss oder kontrolliertem Abbruch wird genau ein unveränderliches `SyncEvent` für den `SyncRun` erzeugt und über `TRIGGERS` append-only mit dem `ChangeEvent` verbunden.
 9. Das `SyncEvent` dokumentiert Zeiten, Ergebnis, verwendete SYNC-Definition und Auswirkungen des Synchronisationsversuchs.
 
 ```text
@@ -676,10 +686,11 @@ Ein `SyncEvent` ist kein `PiH`. Es kann jedoch mehrere `PiH` erzeugen, wenn ein 
 
 | Quelle                      | Beziehung              | Ziel                   |  Ziele je Quelle |  Quellen je Ziel |
 | --------------------------- | ---------------------- | ---------------------- | ---------------: | ---------------: |
-| historisierbare `JCIEntity` | `CHANGED_BY`           | `ChangeEvent`          |           `0..n` |              `1` |
-| `ChangeEvent`               | `TRIGGERS`             | `SyncEvent`            |           `1..n` |              `1` |
+| historisierbare `JCIEntity` | `CHANGED_BY`           | `ChangeEvent`          |           `0..n` |           `0..1` |
+| `ChangeEvent`               | `TRIGGERS`             | `SyncEvent`            |           `0..n` |              `1` |
+| `ChangeEvent`               | `TARGETS_HISTORY`      | `PiH`                  |           `0..1` |           `0..n` |
 | `SyncEvent`                 | `EXECUTES`             | `SYNC`                 |              `1` |           `0..n` |
-| `SyncEvent`                 | `AFFECTS`              | `JCIEntity`            |           `1..n` |           `0..n` |
+| `SyncEvent`                 | `AFFECTS`              | `JCIEntity`            |           `0..n` |           `0..n` |
 | historisierbare `JCIEntity` | `HAS_HISTORICAL_STATE` | `PiH`                  |           `0..n` |              `1` |
 | `SyncEvent`                 | `CREATES_HISTORY`      | `PiH`                  |           `0..n` |              `1` |
 | `HistoricalCorrection`      | `CORRECTS`             | `PiH`                  |              `1` |           `0..n` |
@@ -696,16 +707,19 @@ Ein `SyncEvent` ist kein `PiH`. Es kann jedoch mehrere `PiH` erzeugen, wenn ein 
 3. Jedes `PiH` gehört zu genau einer ursprünglichen `JCIEntity`.
 4. Eine historisierbare `JCIEntity` kann mehrere zeitlich über `recordedAt` geordnete `PiH` besitzen.
 5. Ein `PiH` ist nach seiner Erzeugung unveränderlich, wird nicht ergänzt und nicht erneut historisiert.
-6. `ChangeEvent`, `SyncEvent` und `HistoricalCorrection` werden nach ihrer Erzeugung ebenfalls nicht verändert oder historisiert.
-7. Bei `changeType = CREATED` entsteht noch kein `PiH`, weil kein vorheriger Zustand existiert. Das `ChangeEvent` und nach jedem beendeten Synchronisationsversuch ein `SyncEvent` entstehen trotzdem.
+6. Eigenschaften und bestehende Provenienzbeziehungen von `ChangeEvent`, `SyncEvent` und `HistoricalCorrection` werden nach ihrer Erzeugung nicht verändert; die ausdrücklich erlaubten append-only Ergänzungen am `ChangeEvent` lösen keine Revision oder Historisierung aus.
+7. Bei `changeType = CREATED` entsteht noch kein `PiH`, weil kein vorheriger Zustand existiert. Das `ChangeEvent` und nach jedem beendeten Synchronisationsversuch ein `SyncEvent` entstehen trotzdem. Nur bei `SUCCESS` entsteht außerdem die neue Entität mit `revision = 1` und genau einer `CHANGED_BY`-Beziehung.
 8. Eine spätere Erläuterung oder Korrektur wird als neues `HistoricalCorrection`-Objekt gespeichert und darf das bestehende `PiH` nicht überschreiben.
 9. Jede `HistoricalCorrection` berichtigt über `CORRECTS` genau ein `PiH` und gehört über `CREATES_CORRECTION` genau zu einem `SyncEvent`.
-10. Jede `HistoricalCorrection` benötigt über `CAUSED_BY` genau ein `ChangeEvent`, das ihren Anlass und ihre Begründung dokumentiert.
-11. Mehrere Korrekturen eines `PiH` sind zulässig. Löst eine Korrektur eine frühere ab, verweist sie über `SUPERSEDES` auf genau diese vorherige Korrektur.
-12. Eine `HistoricalCorrection` darf nur eine Korrektur desselben `PiH` ablösen. `SUPERSEDES`-Ketten müssen zeitlich vorwärts gerichtet und zyklusfrei sein.
-13. Der fachlich gültige historische Stand ergibt sich aus dem unveränderten `PiH` und seinen nicht abgelösten `HistoricalCorrections`.
-14. Eine historische Korrektur verändert nicht automatisch den aktuellen Zustand der ursprünglichen `JCIEntity`. Ein daraus entstehender aktueller Änderungsbedarf wird als eigener Veränderungsvorgang verarbeitet.
-15. Das über `CAUSED_BY` verbundene `ChangeEvent` muss dasselbe `ChangeEvent` sein, das den über `CREATES_CORRECTION` verbundenen Synchronisationslauf ausgelöst hat.
+10. Jede `HistoricalCorrection` benötigt über `CAUSED_BY` genau ein `ChangeEvent`. Dieses besitzt `changeType = HISTORICAL_CORRECTION`, genau ein `TARGETS_HISTORY` zu demselben `PiH` und keine `CHANGED_BY`-Quelle. `ChangeEvent.reason` dokumentiert die gemeldete Abweichung; `HistoricalCorrection.reason` dokumentiert die nach Prüfung bestätigte Berichtigung.
+11. Mehrere nicht abgelöste Korrekturen eines `PiH` sind nur zulässig, wenn ihre Mengen `correctedFields` paarweise disjunkt sind. Dadurch besitzt jeder historische Pfad höchstens einen wirksamen korrigierten Wert.
+12. Überschneidet eine neue Korrektur die Felder einer wirksamen Korrektur, muss sie genau diese über `SUPERSEDES` ablösen. Wegen der Kardinalität `0..1` darf sie höchstens eine wirksame Korrektur überlappen; andernfalls wird der Auftrag in getrennte Korrekturen aufgeteilt oder endet mit `CONFLICT`.
+13. Eine ablösende Korrektur gehört zum selben `PiH`, übernimmt die vollständige Menge `correctedFields` ihrer Vorgängerin und enthält für weiterhin gültige Felder erneut deren wirksame Werte. `SUPERSEDES`-Ketten sind zeitlich vorwärts gerichtet und zyklusfrei.
+14. `previousValue` entspricht für jeden Pfad exakt der vor der neuen Korrektur wirksamen `HistoryView`; bei `ADDITION` ist dieser Wert `NULL`. `baseHistoryViewHash` entspricht dieser Basissicht.
+15. `SYNC` serialisiert Korrektur-Commits je `PiH` und berechnet die `HistoryView` unmittelbar vor dem Commit erneut. Weicht ihr Hash vom angeforderten `expectedHistoryViewHash` beziehungsweise gespeicherten `baseHistoryViewHash` ab, endet der Versuch mit `CONFLICT`; es entsteht keine `HistoricalCorrection`.
+16. Der fachlich gültige historische Stand ergibt sich deterministisch aus dem unveränderten `PiH` und seinen nicht abgelösten, feldweise disjunkten `HistoricalCorrections`.
+17. Eine historische Korrektur verändert nicht automatisch den aktuellen Zustand der ursprünglichen `JCIEntity`. Ein daraus entstehender aktueller Änderungsbedarf wird als eigener Veränderungsvorgang verarbeitet.
+18. Das über `CAUSED_BY` verbundene `ChangeEvent` muss dasselbe `ChangeEvent` sein, das den über `CREATES_CORRECTION` verbundenen Synchronisationslauf ausgelöst hat.
 
 ### 3.5 Nachträgliche Korrektur
 
@@ -715,7 +729,7 @@ Eine `HistoricalCorrection` wird verwendet, wenn sich eine inhaltliche Abweichun
 Festgestellte historische Abweichung
                   │
                   ▼
-             ChangeEvent
+             ChangeEvent ── TARGETS_HISTORY ──► PiH
                   │
               startet
                   ▼
@@ -742,8 +756,9 @@ Eine `HistoricalCorrection` enthält mindestens:
 | `correctionType`  | Art der Korrektur                                                |
 | `reason`          | fachliche Begründung                                             |
 | `correctedAt`     | Zeitpunkt der Erfassung                                          |
+| `baseHistoryViewHash` | SHA-256 der vor der Korrektur wirksamen historischen Sicht  |
 | `correctedFields` | betroffene Eigenschaften oder Beziehungen                        |
-| `previousValue`   | im `PiH` dokumentierte Angabe                                    |
+| `previousValue`   | vor der Korrektur wirksame Angabe                                |
 | `correctedValue`  | nachträglich als richtig festgestellte Angabe                    |
 
 Zulässige Korrekturarten sind:
@@ -754,7 +769,7 @@ CORRECTION    = fehlerhafte historische Angabe berichtigen
 CLARIFICATION = mehrdeutige historische Angabe erläutern
 ```
 
-Die Eigenschaften eines `HistoricalCorrection`-Objekts beschreiben ausschließlich die Abweichung und ihre Berichtigung. Sie ersetzen weder das korrigierte `PiH` noch bilden sie ungeprüft einen vollständigen neuen historischen Zustand.
+Die Eigenschaften eines `HistoricalCorrection`-Objekts beschreiben ausschließlich die Abweichung und ihre Berichtigung. Sie ersetzen weder das korrigierte `PiH` noch bilden sie ungeprüft einen vollständigen neuen historischen Zustand. Der im Auftrag übermittelte `expectedHistoryViewHash` muss dem beim Start und unmittelbar vor dem Commit berechneten Hash entsprechen. Damit kann nicht unbemerkt eine zweite Korrektur auf derselben veralteten Basissicht übernommen werden.
 
 Die verantwortliche Person wird über `CORRECTED_BY` mit ihrem konkreten `RoleAssignment` verbunden. Optionale Nachweise werden über `USES_EVIDENCE` als eigenständige `Evidence`-Knoten zugeordnet. Weder Akteurs-IDs noch Nachweisreferenzen werden zusätzlich im Korrekturobjekt gespeichert.
 
@@ -789,14 +804,16 @@ PiH: Anna am 10.08.2026
 HistoricalCorrection
   ├── correctionType: ADDITION
   ├── reason: damalige Teamzuordnung war unvollständig dokumentiert
-  ├── previousValue: Team A
-  ├── correctedValue: Team A und Team B
+  ├── baseHistoryViewHash: SHA-256 der bisher wirksamen HistoryView
+  ├── correctedFields: Beziehung HAS_MEMBER zu Team B
+  ├── previousValue: NULL
+  ├── correctedValue: damalige Beziehung zu Team B
   ├── CORRECTED_BY ──► RoleAssignment: zuständige Prüferin
   ├── USES_EVIDENCE ──► Evidence: damalige Teamzuordnung
   └── CORRECTS ──► PiH: Anna am 10.08.2026
 ```
 
-Das ursprüngliche `PiH` zeigt weiterhin die zuerst gespeicherte historische Dokumentation. Für die fachliche Auswertung wird es gemeinsam mit der nicht abgelösten `HistoricalCorrection` gelesen. Ergibt sich daraus eine notwendige Änderung an Annas aktuellem Zustand, wird diese unabhängig davon durch ein neues `ChangeEvent` und `SyncEvent` verarbeitet.
+Das ursprüngliche `PiH` zeigt weiterhin die zuerst gespeicherte historische Dokumentation. Für die fachliche Auswertung wird es gemeinsam mit der nicht abgelösten `HistoricalCorrection` gelesen. Eine weitere wirksame Korrektur darf dasselbe Beziehungsfeld nicht parallel mit einem anderen Wert belegen; sie muss die bestehende Korrektur ausdrücklich ablösen und gegen die inzwischen neue `HistoryView` geprüft werden. Ergibt sich daraus eine notwendige Änderung an Annas aktuellem Zustand, wird diese unabhängig davon durch ein neues `ChangeEvent` und `SyncEvent` verarbeitet.
 
 ---
 
@@ -1179,7 +1196,7 @@ Ein `PiF1o` entsteht durch die operative Konkretisierung eines oder mehrerer `Pi
 
 Jeder Task wird genau einem verantwortlichen `RoFTeam` zugeordnet und als `ATOMIC` oder `COMPOSITE` typisiert. Ein atomarer Task ist unmittelbar ausführbar und wird in `ACTIVE` oder `COMPLETED` durch mindestens ein `RoleAssignment` ausgeführt. Mindestens eines dieser RoleAssignments gehört zum verantwortlichen Team; weitere RoleAssignments aus anderen Teams können unterstützen. Ein zusammengesetzter Task bündelt dagegen mindestens einen untergeordneten Task und besitzt keine eigene Ausführung, Umweltverwendung oder Ergebnisproduktion. Das dem `PiF1o` über `ACCOUNTABLE_MEMBER` zugeordnete Teammitglied darf atomare Tasks ausführen, muss aber nicht zu deren ausführenden Personen gehören.
 
-Tasks können andere Tasks über `DEPENDS_ON` als Voraussetzung benennen. Solange mindestens eine Voraussetzung nicht `COMPLETED` ist, ist der abhängige Task `BLOCKED`. Ein atomarer Task kann `ERoFObjects` verwenden und `Results` erzeugen. Eine `Verification` bewertet ein Result gegen ein zum `PiF1o` gehörendes `SuccessCriterion`. Wird dieselbe Kombination aus Result und Erfolgskriterium erneut geprüft, entsteht eine neue `Verification`, die ihre unmittelbare Vorgängerin über `SUPERSEDES` ablöst.
+Tasks können andere Tasks über `DEPENDS_ON` als Voraussetzung benennen. Solange mindestens eine Voraussetzung nicht `COMPLETED` ist, ist der abhängige Task `BLOCKED`. Ein atomarer Task kann `ERoFObjects` verwenden und `Results` erzeugen. Eine `Verification` bewertet ein abgeschlossenes Result gegen ein aktives, zum selben `PiF1o` gehörendes `SuccessCriterion` und bindet die dabei gelesenen Revisionen beider Ziele. Wird dieselbe Kombination aus Result und Erfolgskriterium erneut geprüft, entsteht eine neue `Verification`, die ihre unmittelbare Vorgängerin über `SUPERSEDES` ablöst.
 
 Wird ein `PiF1o` oder ein verbundenes operatives Graphobjekt geändert, prüft `SYNC` die Auswirkungen auf Zukunftsbeiträge, Erfolgskriterien, Verantwortung, Tasks, Rollenaktivierungen, Umweltobjekte, Ergebnisse und Prüfungen. Nur tatsächlich abgelöste Zustände werden als eigene `PiH` festgehalten.
 
@@ -1247,22 +1264,26 @@ PiF1o
 15. Ein atomarer Task darf `COMPLETED` nur erreichen, wenn alle Voraussetzungen abgeschlossen sind, mindestens ein gültiges ausführendes RoleAssignment zum verantwortlichen Team gehört, relevante `RaN` erfüllt sind und der Abschluss bestätigt wurde. Ein `Result` ist nicht für jeden Task zwingend.
 16. Der Status eines zusammengesetzten Tasks wird aus seinen effektiven direkten Untertasks abgeleitet: ausschließlich `DRAFT` ergibt `DRAFT`; alle `COMPLETED` ergeben `COMPLETED`; mindestens ein `ACTIVE` ergibt `ACTIVE`; eine Mischung aus `DRAFT` und `COMPLETED` ergibt `ACTIVE`; ohne `ACTIVE`, aber mit mindestens einem `BLOCKED`, ergibt sich `BLOCKED`. Ein `REPLACED`-Untertask wird nur dann durch seinen Nachfolger ersetzt, wenn dieser über `REPLACED_BY` verbunden und ebenfalls direkter Untertask desselben Composite-Tasks ist. Ein weiterhin verbundener `REVOKED`-Untertask oder ein `REPLACED`-Untertask ohne so eingebundenen Nachfolger erzeugt einen Konflikt.
 17. Ein atomarer Task kann noch kein, ein oder mehrere `Results` erzeugt haben; jedes Result gehört genau zu einem atomaren Task.
-18. Eine `Verification` bewertet genau ein Result und prüft genau ein `SuccessCriterion`.
-19. Das Prüfergebnis wird auf `Verification` als `VALID`, `INVALID` oder `INCONCLUSIVE` gespeichert.
-20. `Evidence` wird nur als eigener Knoten verwendet, wenn ein Nachweis separat verwaltet, wiederverwendet oder auditiert werden muss.
-21. `PiF1o` ist ein Zustand und niemals selbst ein Task.
-22. Ein PiF1o-Entwurf ist erst fachlich vollständig, wenn Zukunftsbeitrag, Erfolgskriterium, Accountability und Tasks vorhanden sind.
-23. Eine aktuelle `Verification` ist eine abgeschlossene Prüfung, die nicht über `SUPERSEDES` durch eine neuere Prüfung abgelöst wurde.
-24. `SUPERSEDES` verbindet nur Verifications, die dasselbe `Result` bewerten und dasselbe `SuccessCriterion` prüfen. Die Kette ist zeitlich vorwärts gerichtet und zyklusfrei.
-25. Jedes `PiF1o` besitzt mindestens ein `SuccessCriterion` mit `requirementLevel = REQUIRED`.
-26. Ein `PiF1o` darf `ACHIEVED` nur erreichen, wenn alle verpflichtenden Erfolgskriterien erfüllt, alle ihm zugeordneten Tasks `COMPLETED`, alle Task-Abhängigkeiten erfüllt und keine relevante Modell- oder `RaN`-Verletzung besteht.
-27. `ACHIEVED` ist terminal. Eine spätere Ziel- oder Kriterienänderung wird als neues operatives Zukunftselement modelliert.
+18. Eine `Verification` bewertet genau ein Result und prüft genau ein `SuccessCriterion`. Das Result besitzt `status = COMPLETED`; das Kriterium ist `ACTIVE`. Result und Kriterium gehören über den erzeugenden Task beziehungsweise `HAS_SUCCESS_CRITERIA` zu demselben `PiF1o`.
+19. Bei der Erzeugung entsprechen `evaluatedResultRevision` und `checkedCriterionRevision` exakt den in derselben konsistenten Lesesicht gelesenen Revisionen von Result und Kriterium. Unmittelbar vor dem Commit liest `SYNC` beide Revisionen erneut; jede Abweichung führt zu `CONFLICT`, und die `Verification` wird nicht gespeichert.
+20. Das Prüfergebnis wird auf `Verification` als `VALID`, `INVALID` oder `INCONCLUSIVE` gespeichert.
+21. `Evidence` wird nur als eigener Knoten verwendet, wenn ein Nachweis separat verwaltet, wiederverwendet oder auditiert werden muss.
+22. `PiF1o` ist ein Zustand und niemals selbst ein Task.
+23. Ein PiF1o-Entwurf ist erst fachlich vollständig, wenn Zukunftsbeitrag, Erfolgskriterium, Accountability und Tasks vorhanden sind.
+24. Eine anwendbare aktuelle `Verification` ist abgeschlossen, nicht über `SUPERSEDES` abgelöst und ihre beiden gebundenen Revisionen stimmen weiterhin mit den aktuellen Revisionen von Result und Kriterium überein.
+25. Eine spätere Änderung des Results oder Kriteriums verändert die unveränderliche `Verification` nicht. Sie bleibt als Prüftatsache erhalten, ist für den neuen Stand aber nicht mehr anwendbar; bis zu einer neuen Prüfung gilt das betroffene Kriterium insoweit als nicht erfüllt.
+26. `SUPERSEDES` verbindet nur Verifications, die dasselbe `Result` bewerten und dasselbe `SuccessCriterion` prüfen. Die gebundenen Zielrevisionen einer Nachfolgerin dürfen nicht kleiner als diejenigen ihrer Vorgängerin sein; gleiche Revisionen sind für eine erneute Prüfung mit neuer Methode oder Evidence zulässig. Die Kette ist zeitlich vorwärts gerichtet und zyklusfrei.
+27. Für dieselbe Kombination aus Result, SuccessCriterion und den beiden gebundenen Revisionen besteht höchstens eine nicht abgelöste `Verification`.
+28. `verifiedAt` liegt nicht vor `updatedAt` der beiden gebundenen Zielrevisionen.
+29. Jedes `PiF1o` besitzt mindestens ein `SuccessCriterion` mit `requirementLevel = REQUIRED`.
+30. Ein `PiF1o` darf `ACHIEVED` nur erreichen, wenn alle verpflichtenden Erfolgskriterien durch anwendbare aktuelle Verifications erfüllt, alle ihm zugeordneten Tasks `COMPLETED`, alle Task-Abhängigkeiten erfüllt und keine relevante Modell- oder `RaN`-Verletzung besteht.
+31. `ACHIEVED` ist terminal. Eine spätere Ziel- oder Kriterienänderung wird als neues operatives Zukunftselement modelliert.
 
 #### 9.4.1 Aggregation der Erfolgskriterien
 
 Für jedes `SuccessCriterion` gelten `requirementLevel = REQUIRED | OPTIONAL` und `evaluationMode = ALL | ANY`. Ohne ausdrücklich abweichende Festlegung gelten `REQUIRED` und `ALL`.
 
-Bei `evaluationMode = ALL` ist das Kriterium erfüllt, wenn mindestens eine aktuelle `Verification` existiert und alle aktuellen Verifications `outcome = VALID` besitzen. Bei `evaluationMode = ANY` genügt mindestens eine aktuelle Verification mit `outcome = VALID`. `INVALID`, `INCONCLUSIVE` und eine fehlende aktuelle Verification erfüllen ein Kriterium nicht; bei `ALL` verhindert bereits eine davon die Erfüllung.
+Bei `evaluationMode = ALL` ist das Kriterium erfüllt, wenn mindestens eine anwendbare aktuelle `Verification` existiert und alle anwendbaren aktuellen Verifications `outcome = VALID` besitzen. Bei `evaluationMode = ANY` genügt mindestens eine anwendbare aktuelle Verification mit `outcome = VALID`. `INVALID`, `INCONCLUSIVE`, eine fehlende anwendbare Verification oder ausschließlich revisionsveraltete Verifications erfüllen ein Kriterium nicht; bei `ALL` verhindert bereits ein nicht gültiges anwendbares Ergebnis die Erfüllung.
 
 ```text
 ALL: VALID + VALID        = erfüllt
@@ -1270,10 +1291,11 @@ ALL: VALID + INVALID      = nicht erfüllt
 ALL: VALID + INCONCLUSIVE = nicht erfüllt
 ANY: VALID + INVALID      = erfüllt
 ANY: INVALID + INVALID    = nicht erfüllt
-keine aktuelle Verification = nicht erfüllt
+keine anwendbare aktuelle Verification = nicht erfüllt
+nur revisionsveraltete Verifications = nicht erfüllt
 ```
 
-Die Kriterienbedingung eines `PiF1o` ist erfüllt, wenn alle seine `REQUIRED`-Kriterien erfüllt sind. `OPTIONAL`-Kriterien werden ausgewertet und dokumentiert, blockieren den Status `ACHIEVED` aber nicht. Berücksichtigt werden nur Verifications, die Ergebnisse von Tasks desselben `PiF1o` bewerten. Für `ACHIEVED` müssen zusätzlich alle Task- und Modellbedingungen erfüllt sein.
+Die Kriterienbedingung eines `PiF1o` ist erfüllt, wenn alle seine `REQUIRED`-Kriterien erfüllt sind. `OPTIONAL`-Kriterien werden ausgewertet und dokumentiert, blockieren den Status `ACHIEVED` aber nicht. Berücksichtigt werden nur anwendbare aktuelle Verifications, die Ergebnisse von Tasks desselben `PiF1o` bewerten. Für `ACHIEVED` müssen zusätzlich alle Task- und Modellbedingungen erfüllt sein.
 
 Der Messwert einer Verification wird aus dem bewerteten `Result` nach der im Erfolgskriterium festgelegten Methode bestimmt und mit `operator`, `targetValue` und gegebenenfalls `unit` verglichen. `outcome = VALID` ist nur zulässig, wenn dieser Vergleich erfolgreich und durch die angegebene Methode reproduzierbar ist. Ist kein eindeutiger Vergleich möglich, lautet das Ergebnis `INCONCLUSIVE`.
 
@@ -1323,7 +1345,7 @@ PiF1o = Mindestens 95 % der Kundenanfragen werden
                                                └── CHECKS ──► SuccessCriterion
 ```
 
-Jana bleibt für den `PiF1o` accountable, obwohl Ernst und Anna den Task ausführen. Das Team Entwicklung trägt die Verantwortung für den Task; mindestens eines seiner `RoleAssignments` muss an der Ausführung beteiligt sein. Die `Verification` speichert `VALID`, `INVALID` oder `INCONCLUSIVE`. Ein separater `Evidence`-Knoten wird nur angelegt, wenn der Nachweis eigenständig verwaltet werden muss. `SYNC` setzt den `PiF1o` erst dann auf `ACHIEVED`, wenn alle verpflichtenden Erfolgskriterien nach der festgelegten Auswertungsart erfüllt sind.
+Jana bleibt für den `PiF1o` accountable, obwohl Ernst und Anna den Task ausführen. Das Team Entwicklung trägt die Verantwortung für den Task; mindestens eines seiner `RoleAssignments` muss an der Ausführung beteiligt sein. Die `Verification` speichert `VALID`, `INVALID` oder `INCONCLUSIVE` sowie die geprüften Revisionen von Result und Erfolgskriterium. Ändert sich danach eines der beiden Ziele, bleibt die Prüfung erhalten, zählt aber bis zu einer neuen Verification nicht mehr für die Zielerreichung. Ein separater `Evidence`-Knoten wird nur angelegt, wenn der Nachweis eigenständig verwaltet werden muss. `SYNC` setzt den `PiF1o` erst dann auf `ACHIEVED`, wenn alle verpflichtenden Erfolgskriterien nach der festgelegten Auswertungsart erfüllt sind.
 
 ---
 
@@ -1653,22 +1675,23 @@ Die Versionsangaben bestimmen exakt, gegen welche Ontologie, Graphregeln und SYN
 
 ### 12.2 Entstehung
 
-Ein Synchronisationsversuch entsteht durch ein `ChangeEvent`:
+Ein Synchronisationsversuch entsteht aus einem angenommenen Veränderungsauftrag:
 
-1. Eine Änderung an einer historisierbaren `JCIEntity` wird als `ChangeEvent` erfasst.
-2. Das `ChangeEvent` startet mindestens einen technischen `SyncRun`.
+1. Der Auftrag wird vor seiner Ausführung als unveränderliches `ChangeEvent` erfasst. Das gilt für Änderungen vorhandener Entitäten, `CREATED` und `HISTORICAL_CORRECTION`.
+2. Das `ChangeEvent` plant mindestens einen technischen `SyncRun` ein.
 3. Der `SyncRun` verwendet genau eine gespeicherte SYNC-Definition.
 4. Die verwendete `SYNC`-Definition ermittelt alle direkt und indirekt betroffenen Elemente und Beziehungen.
 5. Sie prüft `RaN`, Kardinalitäten und weitere Modellbedingungen.
 6. Sie bestimmt anwendbare `RaN`, prüft ihre Vereinbarkeit und wendet bei einem erkannten Widerspruch die ausdrücklich gespeicherte Priorität an. Gleichstand oder nicht auswertbare Semantik erzeugen einen offenen `RaNConflict`.
 7. Sie unterscheidet zwischen lediglich betroffenen und tatsächlich zu ändernden Elementen.
 8. Bei Task-Änderungen traversiert sie Parent-, Subtask- und Abhängigkeitsbeziehungen, ermittelt betroffene `PiF1o` und leitet Task-Status von den atomaren Tasks nach oben ab.
-9. Bei einer abgeschlossenen Verification bestimmt sie die aktuellen Verifications, wertet die betroffenen Erfolgskriterien aus und aggregiert alle `REQUIRED`-Kriterien des zugehörigen `PiF1o`.
-10. Vor jeder tatsächlichen Änderung wird der bisherige Zustand als eigenes `PiH` vorbereitet.
-11. Bei `SUCCESS` werden die angeforderte fachliche Änderung, zulässige Folgeänderungen, zugehörige `PiH`, Korrekturen, Konfliktauflösungen und Beziehungen gemeinsam atomar übernommen.
-12. Bei `CONFLICT` oder `FAILED` werden die angeforderte fachliche Änderung und alle noch nicht übernommenen Folgeänderungen vollständig zurückgerollt. Dadurch entstehen aus einem nicht übernommenen Zustand weder eine neue Revision noch ein `PiH`.
-13. Nach Abschluss oder kontrolliertem Abbruch wird genau ein unveränderliches `SyncEvent` erzeugt. Ein neu erkannter `RaNConflict` wird ebenfalls als Abschlussdokumentation festgehalten. Diese Dokumentation bleibt erhalten, obwohl die abgewiesene fachliche Änderung nicht übernommen wurde.
-14. Das `SyncEvent` dokumentiert Beginn, Ende, Ergebnis, verwendete SYNC-Definition, geprüfte Elemente, tatsächlich übernommene Änderungen, erzeugte `PiH`, Korrekturen, Regelkonflikte und Fehler.
+9. Bei einer abgeschlossenen `Verification` bestimmt sie die anwendbaren aktuellen Verifications, prüft deren gebundene Zielrevisionen und aggregiert alle `REQUIRED`-Kriterien des zugehörigen `PiF1o`.
+10. Unmittelbar vor dem Commit prüft sie erneut, ob die von einer `Verification` gebundenen Revisionen von `Result` und `SuccessCriterion` noch aktuell sind.
+11. Vor jeder tatsächlichen Änderung einer bereits vorhandenen historisierbaren Entität wird der bisherige Zustand als eigenes `PiH` vorbereitet.
+12. Bei `SUCCESS` werden die angeforderte fachliche Änderung, zulässige Folgeänderungen, zugehörige `PiH`, Korrekturen, Konfliktauflösungen und Beziehungen gemeinsam atomar übernommen.
+13. Bei `CONFLICT` oder `FAILED` werden die angeforderte fachliche Änderung und alle noch nicht übernommenen Folgeänderungen vollständig zurückgerollt. Dadurch entstehen aus einem nicht übernommenen Zustand weder eine neue Revision noch ein `PiH`.
+14. Nach Abschluss oder kontrolliertem Abbruch wird genau ein unveränderliches `SyncEvent` mit eindeutiger `runId` erzeugt und die Beziehung `TRIGGERS` append-only ergänzt. Ein neu erkannter `RaNConflict` wird ebenfalls als Abschlussdokumentation festgehalten.
+15. Das `SyncEvent` dokumentiert Beginn, Ende, Ergebnis, verwendete SYNC-Definition, geprüfte Elemente, tatsächlich übernommene Änderungen, erzeugte `PiH`, Korrekturen, Regelkonflikte und Fehler.
 
 Die Atomarität bezieht sich auf die angeforderte fachliche Änderung und ihre zulässigen Folgeänderungen. Das abschließende `SyncEvent` und erforderliche Konfliktdokumente bilden dagegen die dauerhafte Dokumentation des Versuchs. Bei `SUCCESS` können Fachänderung und Abschlussdokumentation in derselben Transaktion gespeichert werden. Bei `CONFLICT` oder `FAILED` wird zuerst die fachliche Transaktion zurückgerollt und anschließend die Abschlussdokumentation dauerhaft gespeichert.
 
@@ -1684,17 +1707,23 @@ Abschlussdokumentation
         └── dokumentiert bei Bedarf einen RaNConflict
 ```
 
-Bei einer festgestellten Abweichung in einem `PiH` verwendet `SYNC` denselben kontrollierten Ereignisrahmen, erzeugt aber keinen neuen historischen Zustand des `PiH`. Nach erfolgreicher Prüfung erzeugt das `SyncEvent` stattdessen ein `HistoricalCorrection`-Objekt. Dieses verweist auf das unveränderte `PiH` und dokumentiert die Berichtigung.
+Bei `changeType = CREATED` gibt es vor dem erfolgreichen Commit noch keine Quellentität für `CHANGED_BY`. Bei `SUCCESS` entstehen die neue Entität mit `revision = 1`, ihre Erstellungsprovenienz und genau eine `CHANGED_BY`-Beziehung gemeinsam. Bei `CONFLICT` oder `FAILED` bleiben Zielknoten, `CHANGED_BY` und Historie aus.
+
+Bei einer festgestellten Abweichung in einem `PiH` verwendet `SYNC` denselben kontrollierten Ereignisrahmen, erzeugt aber keinen neuen historischen Zustand des `PiH`. Das `ChangeEvent` verweist über `TARGETS_HISTORY` auf genau dieses `PiH` und besitzt keine `CHANGED_BY`-Quelle. Nach erfolgreicher Prüfung erzeugt das `SyncEvent` stattdessen ein `HistoricalCorrection`-Objekt. Dessen `CORRECTS` verweist auf dasselbe unveränderte `PiH`.
 
 ```text
-JCIEntity ── CHANGED_BY ──► ChangeEvent ── startet ──► SyncRun (technisch)
+JCIEntity ── CHANGED_BY ──► ChangeEvent ── plant ──► SyncRun (technisch)
                                                          │
                                                          └── Abschluss/Abbruch ──► SyncEvent
                                                                                      ├── EXECUTES ──► SYNC
                                                                                      ├── AFFECTS ──► JCIEntity
-                                                                                     ├── CREATES_HISTORY ──► PiH
-                                                                                     └── CREATES_CORRECTION ──► HistoricalCorrection
-                                                                                                                  └── CORRECTS ──► PiH
+                                                                                     └── CREATES_HISTORY ──► PiH
+
+ChangeEvent:HISTORICAL_CORRECTION ── TARGETS_HISTORY ──► PiH
+              │
+              └── abgeschlossener SyncRun ──► SyncEvent
+                                                   └── CREATES_CORRECTION ──► HistoricalCorrection
+                                                                                  └── CORRECTS ─────► dasselbe PiH
 ```
 
 ### 12.3 Objekte und Beziehungen
@@ -1713,10 +1742,11 @@ JCIEntity ── CHANGED_BY ──► ChangeEvent ── startet ──► SyncR
 
 | Quelle                      | Beziehung            | Ziel                   |  Ziele je Quelle |  Quellen je Ziel |
 | --------------------------- | -------------------- | ---------------------- | ---------------: | ---------------: |
-| historisierbare `JCIEntity` | `CHANGED_BY`         | `ChangeEvent`          |           `0..n` |              `1` |
-| `ChangeEvent`               | `TRIGGERS`           | `SyncEvent`            |           `1..n` |              `1` |
+| historisierbare `JCIEntity` | `CHANGED_BY`         | `ChangeEvent`          |           `0..n` |           `0..1` |
+| `ChangeEvent`               | `TRIGGERS`           | `SyncEvent`            |           `0..n` |              `1` |
+| `ChangeEvent`               | `TARGETS_HISTORY`    | `PiH`                  |           `0..1` |           `0..n` |
 | `SyncEvent`                 | `EXECUTES`           | `SYNC`                 |              `1` |           `0..n` |
-| `SyncEvent`                 | `AFFECTS`            | `JCIEntity`            |           `1..n` |           `0..n` |
+| `SyncEvent`                 | `AFFECTS`            | `JCIEntity`            |           `0..n` |           `0..n` |
 | `SyncEvent`                 | `CREATES_HISTORY`    | `PiH`                  |           `0..n` |              `1` |
 | `SyncEvent`                 | `CREATES_CORRECTION` | `HistoricalCorrection` |           `0..n` |              `1` |
 | `HistoricalCorrection`      | `CORRECTS`           | `PiH`                  |              `1` |           `0..n` |
@@ -1739,32 +1769,36 @@ PiH und zugehörige HistoricalCorrections bei historischen Abweichungen
 
 ### 12.4 Regeln und Ausnahme
 
-1. Jedes `ChangeEvent` startet mindestens einen technischen `SyncRun`; jeder beendete Versuch erzeugt genau ein `SyncEvent`.
-2. Jedes `SyncEvent` gehört zu genau einem auslösenden `ChangeEvent`.
-3. Jedes `SyncEvent` verweist über `EXECUTES` auf genau die eine gespeicherte SYNC-Definition, die sein `SyncRun` verwendet hat.
-4. Eine SYNC-Definition kann von keinem, einem oder mehreren `SyncEvents` als verwendete Definition dokumentiert werden.
-5. Jedes `SyncEvent` benennt mindestens eine betroffene `JCIEntity`.
-6. Betroffenheit allein erzeugt kein `PiH`. Nur ein tatsächlich abgelöster Zustand wird historisiert.
-7. Ein `SyncEvent` kann kein, ein oder mehrere `PiH` erzeugen.
-8. Bei `changeType = CREATED` entsteht kein `PiH` der neu angelegten `JCIEntity`, weil kein vorheriger Zustand existiert.
-9. Die ausgeführte SYNC-Definition prüft alle für die Änderung relevanten `RaN` und Modellbedingungen.
-10. Eindeutig ableitbare und zulässige Anpassungen können verarbeitet werden. Bei widersprüchlichen anwendbaren `RaN` entscheidet die größere `priority` ausschließlich den konkreten Widerspruch. Gleichstand oder nicht auswertbare Semantik erzeugen einen offenen `RaNConflict` und werden nicht stillschweigend aufgelöst.
-11. `SYNC` ist die gespeicherte Prozessdefinition; `SyncRun` ist der veränderbare technische Laufzustand; `SyncEvent` ist die unveränderliche Abschlussdokumentation. Wird die SYNC-Definition selbst geändert, wird ihr bisheriger Zustand wie bei jeder anderen historisierbaren `JCIEntity` als `PiH` festgehalten.
-12. Jeder durch einen Synchronisationslauf erzeugte historische Zustand bleibt über `CREATES_HISTORY` mit genau einem `SyncEvent` und über `HAS_HISTORICAL_STATE` mit seiner ursprünglichen `JCIEntity` verbunden.
+1. Jedes angenommene `ChangeEvent` plant mindestens einen technischen `SyncRun` ein.
+2. Solange noch kein Versuch beendet wurde, besitzt das `ChangeEvent` noch kein `SyncEvent`; `TRIGGERS = 0` ist dann der korrekte Zwischenstand.
+3. Jeder beendete oder kontrolliert abgebrochene `SyncRun` erzeugt genau ein unveränderliches `SyncEvent` und ergänzt genau eine `TRIGGERS`-Beziehung append-only.
+4. Jedes `SyncEvent` gehört zu genau einem auslösenden `ChangeEvent`, besitzt eine eindeutige `runId` und verweist über `EXECUTES` auf genau die verwendete SYNC-Definition.
+5. Eine SYNC-Definition kann von keinem, einem oder mehreren `SyncEvents` als verwendete Definition dokumentiert werden.
+6. Ein `SyncEvent` mit `SUCCESS` oder `CONFLICT` benennt mindestens eine betroffene `JCIEntity`. Nur ein `FAILED`-Versuch, der vor erfolgreicher Zielauflösung endet, darf kein `AFFECTS`-Ziel besitzen.
+7. Betroffenheit allein erzeugt kein `PiH`. Nur ein tatsächlich abgelöster Zustand wird historisiert.
+8. Ein `SyncEvent` kann kein, ein oder mehrere `PiH` erzeugen. Jedes erzeugte `PiH` bleibt über `CREATES_HISTORY` mit genau diesem `SyncEvent` und über `HAS_HISTORICAL_STATE` mit seiner ursprünglichen `JCIEntity` verbunden.
+9. Bei `changeType = CREATED` müssen die Ziel-ID noch frei und `requestedRevision = null` sein. Nur bei `SUCCESS` entstehen die neue Entität mit `revision = 1`, `CREATED_BY` und genau einer `CHANGED_BY`-Beziehung; ein `PiH` entsteht nicht. Bei `CONFLICT` oder `FAILED` entstehen weder Zielknoten noch `CHANGED_BY` oder Historie.
+10. Die ausgeführte SYNC-Definition prüft alle für die Änderung relevanten `RaN` und Modellbedingungen.
+11. Eindeutig ableitbare und zulässige Anpassungen können verarbeitet werden. Bei widersprüchlichen anwendbaren `RaN` entscheidet die größere `priority` ausschließlich den konkreten Widerspruch. Gleichstand oder nicht auswertbare Semantik erzeugen einen offenen `RaNConflict` und werden nicht stillschweigend aufgelöst.
+12. `SYNC` ist die gespeicherte Prozessdefinition; `SyncRun` ist der veränderbare technische Laufzustand; `SyncEvent` ist die unveränderliche Abschlussdokumentation. Wird die SYNC-Definition selbst geändert, wird ihr bisheriger Zustand wie bei jeder anderen historisierbaren `JCIEntity` als `PiH` festgehalten.
 13. Bei Änderungen einer `RoFOrgRelationship` prüft die ausgeführte SYNC-Definition beide beteiligten `RoFOrg`, die Gültigkeit ihrer vertretenden `RoleAssignments`, relevante `RaN`, verbundene `ERoFObjects` und bei `SUBSIDIARY` die Zyklusfreiheit der Organisationsstruktur.
-14. Eine festgestellte historische Abweichung erzeugt nach erfolgreicher Prüfung ein `HistoricalCorrection`-Objekt und niemals ein neues `PiH` des bestehenden `PiH`.
-15. Jedes durch einen Synchronisationslauf erzeugte `HistoricalCorrection` bleibt über `CREATES_CORRECTION` mit genau einem `SyncEvent`, über `CAUSED_BY` mit genau einem `ChangeEvent` und über `CORRECTS` mit genau einem `PiH` verbunden.
-16. Eine Korrektur des aktuellen Modells wird getrennt von der historischen Korrektur verarbeitet und besitzt einen eigenen Veränderungsvorgang.
-17. Das `ChangeEvent` einer `HistoricalCorrection` muss dasjenige Ereignis sein, das den erzeugenden `SyncEvent` ausgelöst hat.
-18. Ein `SyncEvent` wird erst erzeugt, wenn der technische Versuch abgeschlossen oder kontrolliert abgebrochen wurde und alle Pflichtangaben feststehen.
-19. Ein fachlich oder kontrolliert technisch beendeter Versuch erzeugt genau ein `SyncEvent`. Ist dessen Speicherung vorübergehend technisch unmöglich, wird sie mit derselben `runId`, demselben `ChangeEvent` und derselben Idempotenzkennung nach Wiederherstellung der Schreibfähigkeit nachgeholt.
-20. Ein fehlgeschlagener Versuch erzeugt ein `SyncEvent` mit `outcome = FAILED`; unvollständige fachliche Änderungen dürfen nicht als aktueller Modellzustand verbleiben. Die nachgeholte Speicherung des Ereignisses darf die fehlgeschlagene Fachänderung nicht erneut ausführen.
-21. Wiederholungen desselben Veränderungsauftrags müssen über eine unveränderliche technische Idempotenzkennung erkannt werden. Jeder tatsächlich ausgeführte Versuch erhält ein eigenes `SyncEvent`, darf aber dieselbe fachliche Änderung nicht mehrfach übernehmen.
-22. Bei einer neuen `Verification` prüft `SYNC` die `SUPERSEDES`-Kette, bestimmt alle aktuellen Verifications des Erfolgskriteriums und wertet dessen `evaluationMode` aus.
-23. `SYNC` setzt ein `PiF1o` nur auf `ACHIEVED`, wenn mindestens ein verpflichtendes Kriterium vorhanden, jedes `REQUIRED`-Kriterium erfüllt, alle zugeordneten Tasks `COMPLETED`, alle Task-Abhängigkeiten erfüllt und keine Modell- oder `RaN`-Verletzung vorhanden ist. Optionale Kriterien blockieren den Übergang nicht.
-24. Fehlende Verifications, `INVALID`, `INCONCLUSIVE` oder ein Regelkonflikt verhindern die automatische Erreichung. `SYNC` meldet den Grund und ändert den Status nicht.
-25. Bei Task-Änderungen prüft `SYNC` Task-Typ, Hierarchie, Parent, Subtasks, Voraussetzungen, abhängige Tasks und alle dadurch betroffenen `PiF1o`. Abgeleitete Task-Status werden von unten nach oben bestimmt und wie jede fachliche Änderung historisiert.
-26. Ein offener `RaNConflict` blockiert alle automatischen Änderungen, deren Zulässigkeit von seiner Auflösung abhängt. Ein gelöster Konflikt bleibt mit dem erkennenden `SyncEvent`, dem auflösenden `ChangeEvent` und dem verantwortlichen `RoleAssignment` nachvollziehbar.
+14. Ein `ChangeEvent` für `HISTORICAL_CORRECTION` besitzt genau ein `TARGETS_HISTORY`, keine `CHANGED_BY`-Quelle und `requestedRevision = 1`. Das später über `CORRECTS` verbundene `PiH` muss mit diesem Ziel identisch sein.
+15. Eine festgestellte historische Abweichung erzeugt nach erfolgreicher Prüfung ein `HistoricalCorrection`-Objekt und niemals ein neues `PiH` des bestehenden `PiH`.
+16. Jedes durch einen Synchronisationslauf erzeugte `HistoricalCorrection` bleibt über `CREATES_CORRECTION` mit genau einem `SyncEvent`, über `CAUSED_BY` mit dessen auslösendem `ChangeEvent` und über `CORRECTS` mit genau einem unveränderten `PiH` verbunden.
+17. Vor einer historischen Korrektur berechnet `SYNC` die wirksame `HistoryView`, vergleicht ihren Hash mit `expectedHistoryViewHash` und serialisiert den Commit je `PiH`. Ein veralteter Hash erzeugt `CONFLICT` und keine Korrektur.
+18. Mehrere aktive Korrekturen desselben `PiH` dürfen nur disjunkte `correctedFields` besitzen. Eine überlappende Korrektur muss genau eine aktive Vorgängerkorrektur vollständig über `SUPERSEDES` ersetzen; unklare oder mehrfache Überlappungen erzeugen `CONFLICT`.
+19. Eine Korrektur des aktuellen Modells wird getrennt von der historischen Korrektur verarbeitet und besitzt einen eigenen Veränderungsvorgang.
+20. Ein `SyncEvent` wird erst erzeugt, wenn der technische Versuch abgeschlossen oder kontrolliert abgebrochen wurde und alle Pflichtangaben feststehen.
+21. Ist die Speicherung des abschließenden `SyncEvent` vorübergehend technisch unmöglich, wird sie mit derselben `runId`, demselben `ChangeEvent` und derselben Idempotenzkennung nachgeholt.
+22. Ein fehlgeschlagener Versuch erzeugt ein `SyncEvent` mit `outcome = FAILED`; unvollständige fachliche Änderungen dürfen nicht als aktueller Modellzustand verbleiben. Die nachgeholte Speicherung des Ereignisses darf die fehlgeschlagene Fachänderung nicht erneut ausführen.
+23. Wiederholungen desselben Veränderungsauftrags müssen über die unveränderliche `idempotencyKey` erkannt werden. Jeder tatsächlich ausgeführte Versuch erhält eine eigene `runId` und ein eigenes `SyncEvent`, darf aber dieselbe fachliche Änderung nicht mehrfach übernehmen.
+24. Eine neue `Verification` bindet über `evaluatedResultRevision` und `checkedCriterionRevision` genau die geprüften Revisionen. `SYNC` prüft diese Werte zunächst in einer konsistenten Sicht und unmittelbar vor dem Commit erneut.
+25. Eine `Verification` ist nur anwendbar, wenn sie nicht ersetzt wurde und die aktuellen Revisionen ihres `Result` und `SuccessCriterion` weiterhin den gebundenen Revisionen entsprechen. Eine spätere Änderung eines Prüfziels macht die frühere Verification revisionsveraltet.
+26. Bei einer neuen `Verification` prüft `SYNC` die `SUPERSEDES`-Kette, bestimmt alle anwendbaren aktuellen Verifications des Erfolgskriteriums und wertet dessen `evaluationMode` aus.
+27. `SYNC` setzt ein `PiF1o` nur auf `ACHIEVED`, wenn mindestens ein verpflichtendes Kriterium vorhanden, jedes `REQUIRED`-Kriterium erfüllt, alle zugeordneten Tasks `COMPLETED`, alle Task-Abhängigkeiten erfüllt und keine Modell- oder `RaN`-Verletzung vorhanden ist. Optionale Kriterien blockieren den Übergang nicht.
+28. Fehlende, revisionsveraltete oder nicht anwendbare Verifications, `INVALID`, `INCONCLUSIVE` oder ein Regelkonflikt verhindern die automatische Erreichung. `SYNC` meldet den Grund und ändert den Status nicht.
+29. Bei Task-Änderungen prüft `SYNC` Task-Typ, Hierarchie, Parent, Subtasks, Voraussetzungen, abhängige Tasks und alle dadurch betroffenen `PiF1o`. Abgeleitete Task-Status werden von unten nach oben bestimmt und wie jede fachliche Änderung historisiert.
+30. Ein offener `RaNConflict` blockiert alle automatischen Änderungen, deren Zulässigkeit von seiner Auflösung abhängt. Ein gelöster Konflikt bleibt mit dem erkennenden `SyncEvent`, dem auflösenden `ChangeEvent` und dem verantwortlichen `RoleAssignment` nachvollziehbar.
 
 ### 12.5 Beispiel
 
@@ -1791,7 +1825,7 @@ Der technische `SyncRun` verwendet die SYNC-Definition `JCI-Standardprozess 1.0`
 
 ### 12.6 Technologieunabhängiges Austauschformat
 
-JCI verwendet UTF-8-kodierte JSON-Dokumente für Änderungsaufträge und SYNC-Ergebnisse. Jedes Dokument besitzt `schemaVersion = "1.0"`. UUIDs werden als Zeichenketten, Zeitpunkte nach ISO 8601 mit Zeitzone und fachliche Werte als `TypedValue` übertragen.
+JCI verwendet UTF-8-kodierte JSON-Dokumente für Änderungsaufträge und SYNC-Ergebnisse. Die hier beschriebene, gegenüber Version 1.0 inkompatibel präzisierte Form besitzt `schemaVersion = "1.1"`. UUIDs werden als Zeichenketten, Zeitpunkte nach ISO 8601 mit Zeitzone und fachliche Werte als `TypedValue` übertragen.
 
 Ein `JCIChangeRequest` enthält mindestens:
 
@@ -1800,15 +1834,32 @@ schemaVersion
 requestId
 idempotencyKey
 requestedAt
-requestedRevision = Integer | null bei CREATED
+requestedRevision = null bei CREATED | Integer >= 1 bei allen anderen Typen
 changeType
 target = {id, entityType}
 requestedByRoleAssignmentId
 reason
-operations[]
 ```
 
-Eine Operation verwendet `op = ADD | REPLACE | REMOVE | CONNECT | DISCONNECT`. Eigenschaftsoperationen besitzen einen eindeutigen `path` und gegebenenfalls `value: TypedValue`. Beziehungsoperationen besitzen `relationshipType`, `direction`, `otherEntityId` und optional eine typisierte Property-Map. `CONNECT` und `DISCONNECT` dürfen ausschließlich Beziehungen aus dem kanonischen Katalog verwenden.
+Für alle Änderungstypen außer `HISTORICAL_CORRECTION` ist zusätzlich `operations[]` mit mindestens einer Operation verpflichtend. Eine Operation verwendet `op = ADD | REPLACE | REMOVE | CONNECT | DISCONNECT`. Eigenschaftsoperationen besitzen einen eindeutigen `path` und gegebenenfalls `value: TypedValue`. Beziehungsoperationen besitzen `relationshipType`, `direction`, `otherEntityId` und optional eine typisierte Property-Map. `CONNECT` und `DISCONNECT` dürfen ausschließlich Beziehungen aus dem kanonischen Katalog verwenden.
+
+Für `changeType = HISTORICAL_CORRECTION` bezeichnet `target` genau das unveränderliche `PiH`, `requestedRevision` ist `1` und an die Stelle von `operations[]` tritt genau ein strukturiertes `historicalCorrection`-Objekt:
+
+```text
+historicalCorrection = {
+  correctionType = ADDITION | CORRECTION | CLARIFICATION,
+  reason,
+  valueSchemaVersion,
+  expectedHistoryViewHash,
+  correctedFields[],
+  previousValue,
+  correctedValue
+}
+```
+
+`correctedFields` enthält eindeutige, lexikografisch sortierte kanonische JSON-Pointer. `previousValue` und `correctedValue` sind `TypedValueMaps` mit genau derselben Schlüsselmenge. `expectedHistoryViewHash` bindet den Auftrag an die wirksame historische Sicht, die vor dem Commit erneut geprüft wird. Eine historische Korrektur darf keine generischen Operationen enthalten, weil das adressierte `PiH` selbst niemals verändert wird.
+
+Beim Speichern wird `requestId` zur `ChangeEvent.id`, während `idempotencyKey`, Ziel-ID, Zieltyp und `requestedRevision` unverändert in das `ChangeEvent` übernommen werden. Dadurch bleibt auch ein gescheiterter oder noch nicht abgeschlossener Auftrag eindeutig adressierbar.
 
 Ein `JCISyncResult` enthält mindestens:
 
@@ -1831,25 +1882,53 @@ errors[]
 
 Transportreferenzen wie `requestedByRoleAssignmentId` werden beim Speichern in die kanonische Beziehung `REQUESTED_BY` überführt und nicht als zusätzliches Fachfeld am Knoten behalten. Das JSON-Dokument bleibt als Eingabenachweis über ein `Evidence` referenzierbar.
 
+Für `JCISyncResult` gilt: Bei `SUCCESS` oder `CONFLICT` ist `affectedCount >= 1`. Nur ein `FAILED`-Ergebnis, dessen Lauf vor erfolgreicher Zielauflösung endet, darf `affectedCount = 0` und eine leere `affectedEntityIds`-Liste besitzen. Die Zähler müssen jeweils exakt der Länge beziehungsweise der Zahl der im Graphen erzeugten Beziehungen und Objekte entsprechen.
+
 Vollständige Graph- oder Ontologieexporte verwenden JSON-LD 1.1. Jede Entität besitzt `@id = "urn:jci:<UUID>"` und ihren konkreten Typ in `@type`. Beziehungen verwenden ausschließlich die kanonischen Beziehungsnamen; Beziehungseigenschaften werden als eigenständige JSON-LD-Beziehungsobjekte übertragen. Der Export enthält die verwendeten Versionen von Kontext, Ontologie und Graphregeln.
 
 Die verbindlichen maschinenlesbaren Schemas liegen unter `docs/schemas/`.
 
 **Kurzes Beispiel:** Eine Änderung der Task-Bezeichnung wird als `REPLACE` auf dem Pfad `/name` übertragen. Die Rollen-ID im Transport wird zu `REQUESTED_BY`; nach erfolgreicher Verarbeitung nennt das Ergebnis das erzeugte `SyncEvent` und den historischen Zustand des vorherigen Task-Namens.
 
+### 12.7 Initialer Bootstrap
+
+Der initiale Bootstrap löst ausschließlich das Vertrauenswurzelproblem eines vollständig leeren Graphen. Er ist kein normaler Veränderungsauftrag und darf genau einmal in einer atomaren Transaktion ausgeführt werden.
+
+Der Bootstrap erzeugt mindestens:
+
+```text
+RoFOrg
+└── RoFTeam
+    └── technisches RoFTeamMember
+        ├── RoFRole
+        └── RoleAssignment mit bootstrapKey = "ROOT"
+
+aktive SYNC-Definition
+```
+
+Alle erforderlichen RoF-Beziehungen werden in derselben Transaktion angelegt. Die sechs Bootstrap-Entitäten `RoFOrg`, `RoFTeam`, technisches `RoFTeamMember`, `RoFRole`, Root-`RoleAssignment` und `SYNC` werden unmittelbar mit `status = ACTIVE`, `revision = 1` sowie demselben Wert für `createdAt` und `updatedAt` erzeugt. Wo der konkrete Typ oder eine Bootstrap-Beziehung `validFrom` besitzt, entspricht auch dieser Wert demselben Bootstrapzeitpunkt. Dies ist die einzige Ausnahme von der Regel, dass veränderliche Fachentitäten zunächst als `DRAFT` entstehen: Ohne aktive Organisation, Rolle, Rollenaktivierung und SYNC-Definition könnte die Vertrauenswurzel keinen ersten regulären Auftrag ausführen.
+
+Nur dieses eine Root-`RoleAssignment` darf dauerhaft ohne `CREATED_BY` bestehen, weil vor ihm noch kein handelnder Akteur existiert. Alle weiteren Bootstrap-Entitäten verweisen mit `CREATED_BY` auf das Root-`RoleAssignment`. Für den Bootstrap entstehen weder `ChangeEvent`, technischer `SyncRun`, `SyncEvent` noch `PiH`.
+
+Der Bootstrap ist nur zulässig, wenn noch keine `JCIEntity` vorhanden ist. Die Eindeutigkeit von `bootstrapKey = "ROOT"`, die Vollständigkeit des Minimalgraphen und die Aktivierbarkeit der SYNC-Definition werden vor dem Commit geprüft. Bei einem Fehler wird die gesamte Transaktion zurückgerollt; ein unvollständiger Bootstrap darf nicht sichtbar bleiben. Nach erfolgreichem Commit sind Wiederholung und ein zweites Root-`RoleAssignment` verboten und alle weiteren Änderungen laufen ausschließlich über den normalen SYNC-Prozess.
+
+Ein Datenimport ist kein Bootstrap. Importierte Entitäten ohne belegbare Erstellungsprovenienz bleiben `DRAFT`, bis ein regulärer, durch ein `RoleAssignment` angeforderter Synchronisationslauf ihre Provenienz und Modellgültigkeit bestätigt.
+
+**Kurzes Beispiel:** In einer leeren Datenbank legt das Deployment einmalig die Organisation „Junaco“, ein technisches Administrationsteam, ein technisches Mitglied, seine Administrationsrolle, das Root-`RoleAssignment` und die aktive SYNC-Definition gemeinsam an. Erst danach kann dieses Root-`RoleAssignment` einen normalen `CREATED`-Auftrag für die erste fachliche Entität stellen.
+
 ## 13. Abschluss
 
 Der JUNACO Continuous Integration Loop verbindet Zweck, Zukunft, Verantwortung, Arbeit, Umwelt, Regeln, Prüfung und historische Entwicklung in einem gemeinsamen fachlichen Graphen.
 
-`JCIEntity` bildet den abstrakten Oberbegriff aller gespeicherten Instanzen. Acht der zehn Kernelemente besitzen eigene gespeicherte `JCIElementInstances`. `RoF` und `ERoF` bleiben fachliche Modellräume ohne eigenen Knoten und werden durch ihre konkreten Graphobjekte und Beziehungen sichtbar. `PiH`, `ChangeEvent`, `SyncEvent` und `HistoricalCorrection` bleiben unveränderlich und werden nicht erneut historisiert.
+`JCIEntity` bildet den abstrakten Oberbegriff aller gespeicherten Instanzen. Acht der zehn Kernelemente besitzen eigene gespeicherte `JCIElementInstances`. `RoF` und `ERoF` bleiben fachliche Modellräume ohne eigenen Knoten und werden durch ihre konkreten Graphobjekte und Beziehungen sichtbar. `PiH`, `ChangeEvent`, `SyncEvent` und `HistoricalCorrection` bleiben inhaltlich unveränderlich und werden nicht erneut historisiert. Nur klar definierte Provenienzbeziehungen werden beim erfolgreichen Anlegen beziehungsweise beim Abschluss eines technischen Laufs append-only ergänzt.
 
 `CiV` begründet, warum eine Zukunft gewollt ist. `PiF2` bis `PiF1o` beschreiben diese Zukunft auf langfristiger, strategischer, taktischer und operativer Ebene. Die gespeicherten `CONTRIBUTES_TO`-Beziehungen führen dabei vom konkreteren zum übergeordneten Zukunftszustand und erlauben einen gerichteten `n:m`-Graphen.
 
-Ein `PiF1o` beschreibt einen erreichbaren operativen Zustand. Er besitzt mindestens ein verpflichtendes Erfolgskriterium und genau ein verantwortliches `RoFTeamMember`. Zusammengesetzte Tasks strukturieren die Arbeit; atomare Tasks werden über teambezogene `RoleAssignments` ausgeführt, verwenden konkrete `ERoFObjects` und können `Results` erzeugen. Task-Abhängigkeiten bestimmen die zulässige Ausführungsreihenfolge. Aktuelle `Verifications` bewerten Ergebnisse gegen die festgelegten Erfolgskriterien. Erst wenn alle `REQUIRED`-Kriterien erfüllt, alle Tasks abgeschlossen und alle Abhängigkeiten erfüllt sind, darf `SYNC` den terminalen Status `ACHIEVED` setzen.
+Ein `PiF1o` beschreibt einen erreichbaren operativen Zustand. Er besitzt mindestens ein verpflichtendes Erfolgskriterium und genau ein verantwortliches `RoFTeamMember`. Zusammengesetzte Tasks strukturieren die Arbeit; atomare Tasks werden über teambezogene `RoleAssignments` ausgeführt, verwenden konkrete `ERoFObjects` und können `Results` erzeugen. Task-Abhängigkeiten bestimmen die zulässige Ausführungsreihenfolge. Anwendbare aktuelle `Verifications` bewerten dabei ausdrücklich gebundene Revisionen von Ergebnissen und Erfolgskriterien. Erst wenn alle `REQUIRED`-Kriterien erfüllt, alle Tasks abgeschlossen und alle Abhängigkeiten erfüllt sind, darf `SYNC` den terminalen Status `ACHIEVED` setzen.
 
 Der RoF-Modellraum stellt den Organisations-, Team-, Mitglieder- und Rollenkontext bereit. Mutter-, Tochter- und Partnerunternehmen bleiben jeweils eigenständige `RoFOrg`; ihre Stellung zueinander wird durch eine personengebundene `RoFOrgRelationship` beschrieben. `SUBSIDIARY` kann rekursive, aber zyklusfreie Mutter-Tochter-Strukturen bilden. `PARTNERSHIP` verbindet unabhängige Organisationen und gehört zur ERoF-Perspektive beider Seiten. Der ERoF-Modellraum beschreibt darüber hinaus die relevante Umwelt, wobei konkrete Umweltinteraktionen immer über handelnde Rollenaktivierungen nachvollziehbar bleiben. `RaN` wirkt als regelnder Querschnitt auf die jeweils geregelten Zukunfts-, Arbeits-, Organisations-, Rollen- und Umweltbereiche. Bei einem tatsächlichen Regelwiderspruch hat die größere ausdrücklich gespeicherte Priorität Vorrang; Gleichstände und nicht auswertbare Semantik bleiben als `RaNConflict` bis zu einer menschlich veranlassten und durch `SYNC` bestätigten Auflösung nachvollziehbar.
 
-`SYNC` ist die gespeicherte Definition der Synchronisationslogik. Das auslösende `ChangeEvent` startet mindestens einen technischen `SyncRun`. Erst dessen Abschluss oder kontrollierter Abbruch erzeugt ein unveränderliches `SyncEvent`, das über `EXECUTES` auf die verwendete SYNC-Definition verweist. Nur wenn ein vorhandener Zustand tatsächlich abgelöst wird, hält der Synchronisationslauf diesen bisherigen Zustand als eigenes `PiH` fest. Betroffenheit allein erzeugt keinen historischen Zustand; Konflikte werden gemeldet und nicht stillschweigend aufgelöst. Eine später festgestellte Abweichung in einem `PiH` wird als unveränderliches `HistoricalCorrection`-Objekt ergänzt. Das ursprüngliche `PiH` bleibt unverändert, und eine daraus folgende Änderung am aktuellen Modell wird getrennt verarbeitet.
+`SYNC` ist die gespeicherte Definition der Synchronisationslogik. Ein angenommenes `ChangeEvent` plant mindestens einen technischen `SyncRun`; bis zum Abschluss des ersten Versuchs darf es noch kein `SyncEvent` besitzen. Erst Abschluss oder kontrollierter Abbruch erzeugen ein unveränderliches `SyncEvent` mit eigener `runId`, das über `EXECUTES` auf die verwendete SYNC-Definition verweist. Nur wenn ein vorhandener Zustand tatsächlich abgelöst wird, hält der Synchronisationslauf diesen bisherigen Zustand als eigenes `PiH` fest. Betroffenheit allein erzeugt keinen historischen Zustand; Konflikte werden gemeldet und nicht stillschweigend aufgelöst. Eine später festgestellte Abweichung in einem `PiH` wird über `TARGETS_HISTORY` adressiert und als unveränderliches `HistoricalCorrection`-Objekt ergänzt. Das ursprüngliche `PiH` bleibt unverändert, und eine daraus folgende Änderung am aktuellen Modell wird getrennt verarbeitet. Der einmalige atomare Bootstrap schafft in einem leeren Graphen ausschließlich die Vertrauenswurzel; danach gilt ausnahmslos der normale SYNC-Prozess.
 
 ```text
 PiH ── PROVIDES_CONTEXT_TO ──► CiV ── INSCRIBES_PURPOSE_IN ──► PiF2
@@ -1876,7 +1955,8 @@ ChangeEvent ── TRIGGERS ──► SyncEvent ── AFFECTS ──► JCIEnti
                                       ├── EXECUTES ──► SYNC
                                       └── CREATES_HISTORY ──► PiH
 
-SyncEvent ── CREATES_CORRECTION ──► HistoricalCorrection ── CORRECTS ──► PiH
+ChangeEvent:HISTORICAL_CORRECTION ── TARGETS_HISTORY ──► PiH
+SyncEvent ── CREATES_CORRECTION ──► HistoricalCorrection ── CORRECTS ──► dasselbe PiH
                                                 └── SUPERSEDES ──► frühere HistoricalCorrection
 ```
 

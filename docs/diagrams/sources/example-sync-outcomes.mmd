@@ -1,6 +1,7 @@
 flowchart TD
-    Entity[JCIEntity] -->|CHANGED_BY| ChangeEvent
-    ChangeEvent -. starts .-> Run[SyncRun]
+    Entity[existing JCIEntity target] -->|CHANGED_BY| ChangeEvent
+    ChangeEvent -. pending means TRIGGERS = 0 .-> Pending[no completed event yet]
+    ChangeEvent -. plans one attempt .-> Run[SyncRun with unique runId]
     Run -. uses .-> Definition[SYNC]
     Run -. validates .-> Decision{outcome}
     Decision --> Success[SUCCESS]
@@ -11,5 +12,9 @@ flowchart TD
     Failed --> Rollback
     Apply --> Event[SyncEvent]
     Rollback --> Event
-    ChangeEvent -->|TRIGGERS| Event
+    ChangeEvent -->|TRIGGERS| Event[SyncEvent after completion]
     Event -->|EXECUTES| Definition
+    Event -->|AFFECTS| Affected[resolved JCIEntity required for SUCCESS or CONFLICT]
+    Failed -. may have no AFFECTS only before target resolution .-> Event
+    Apply -. CREATED only .-> NewEntity[new JCIEntity revision 1 and no PiH]
+    NewEntity -->|CHANGED_BY| ChangeEvent
