@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/eeimicke/junaco-jci-loop/main/docs/schemas/jci-sync-result.schema.json",
+  "title": "JCISyncResult 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "requestId", "runId", "syncEventId", "outcome",
+    "completedAt", "affectedCount", "changedCount", "historyCount",
+    "correctionCount", "conflictCount", "affectedEntityIds", "conflictIds", "errors"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "requestId": {"type": "string", "format": "uuid"},
+    "runId": {"type": "string", "format": "uuid"},
+    "syncEventId": {"type": "string", "format": "uuid"},
+    "outcome": {"enum": ["SUCCESS", "CONFLICT", "FAILED"]},
+    "completedAt": {"type": "string", "format": "date-time"},
+    "affectedCount": {"type": "integer", "minimum": 0},
+    "changedCount": {"type": "integer", "minimum": 0},
+    "historyCount": {"type": "integer", "minimum": 0},
+    "correctionCount": {"type": "integer", "minimum": 0},
+    "conflictCount": {"type": "integer", "minimum": 0},
+    "affectedEntityIds": {
+      "type": "array", "uniqueItems": true,
+      "items": {"type": "string", "format": "uuid"}
+    },
+    "conflictIds": {
+      "type": "array", "uniqueItems": true,
+      "items": {"type": "string", "format": "uuid"}
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message"],
+        "properties": {
+          "code": {"type": "string", "minLength": 1},
+          "message": {"type": "string", "minLength": 1},
+          "entityId": {"type": "string", "format": "uuid"}
+        }
+      }
+    }
+  }
+}

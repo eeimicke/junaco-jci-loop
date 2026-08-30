@@ -10,6 +10,16 @@ Die aktuelle fachliche Beschreibung befindet sich in:
 
 - [JCI_CONTEXT.md](docs/JCI_CONTEXT.md)
 
+Die daraus abgeleiteten verbindlichen Spezifikationen sind:
+
+- [JCI_ONTOLOGY.md](docs/JCI_ONTOLOGY.md) – Entitäts- und Beziehungskatalog
+- [JCI_GRAPH_RULES.md](docs/JCI_GRAPH_RULES.md) – Kardinalitäten und Invarianten
+- [JCI_SYNC_SPEC.md](docs/JCI_SYNC_SPEC.md) – Änderungs-, Traversierungs- und Synchronisationslogik
+- [JCI_NEO4J_SCHEMA.md](docs/implementations/neo4j/JCI_NEO4J_SCHEMA.md) – Neo4j-Projektion und Validierungsabfragen
+- [Maschinenlesbare Schemas](docs/schemas/) – JSON und JSON-LD für Austauschformate
+
+Die automatisierten Modellprüfungen liegen unter `tests/` und werden bei Pull Requests sowie Pushes auf `main` ausgeführt.
+
 Änderungen an dieser Datei können die Semantik des Modells betreffen und werden deshalb kontrolliert geprüft.
 
 ## Mitarbeit

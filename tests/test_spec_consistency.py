@@ -1,0 +1,137 @@
+import json
+import re
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+DOCS = ROOT / "docs"
+
+ENTITY_TYPES = {
+    "PiH", "CiV", "RaN", "SYNC", "PiF2", "PiF1s", "PiF1t", "PiF1o",
+    "RoFOrg", "RoFOrgRelationship", "RoFTeam", "RoFTeamMember", "RoFRole",
+    "RoleAssignment", "Task", "SuccessCriterion", "Result", "Verification",
+    "Evidence", "ERoFObject", "ChangeEvent", "SyncEvent", "RaNConflict",
+    "HistoricalCorrection",
+}
+
+RELATIONSHIPS = {
+    "PROVIDES_CONTEXT_TO", "INSCRIBES_PURPOSE_IN", "CONTRIBUTES_TO",
+    "HAS_SUCCESS_CRITERIA", "ACCOUNTABLE_MEMBER", "DECOMPOSES_INTO",
+    "DEPENDS_ON", "RESPONSIBLE_TEAM", "EXECUTED_BY", "USES", "PRODUCES",
+    "EVALUATES", "CHECKS", "USES_EVIDENCE", "SUPERSEDES", "HAS_TEAM",
+    "HAS_MEMBER", "HAS_ROLE", "HAS_ASSIGNMENT", "IN_TEAM", "ACTIVATES_ROLE",
+    "SOURCE_ORG", "TARGET_ORG", "REPRESENTED_BY", "OWNED_BY", "GOVERNS",
+    "APPLIES_IN", "CONFLICTING_RULE", "AFFECTS", "DETECTED_BY", "RESOLVED_BY",
+    "RESOLVED_THROUGH", "CREATED_BY", "REQUESTED_BY", "CORRECTED_BY",
+    "CHANGED_BY", "TRIGGERS", "EXECUTES", "REPLACED_BY",
+    "HAS_HISTORICAL_STATE", "CREATES_HISTORY", "CORRECTS", "CAUSED_BY",
+    "CREATES_CORRECTION",
+}
+
+
+def read(name: str) -> str:
+    return (DOCS / name).read_text(encoding="utf-8")
+
+
+class SpecificationConsistencyTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.context = read("JCI_CONTEXT.md")
+        cls.ontology = read("JCI_ONTOLOGY.md")
+        cls.rules = read("JCI_GRAPH_RULES.md")
+        cls.sync = read("JCI_SYNC_SPEC.md")
+        cls.neo4j = read("implementations/neo4j/JCI_NEO4J_SCHEMA.md")
+
+    def test_every_entity_is_in_context_and_ontology(self):
+        for entity in ENTITY_TYPES:
+            with self.subTest(entity=entity):
+                self.assertIn(f"`{entity}`", self.context)
+                self.assertRegex(self.ontology, rf"\b{re.escape(entity)}\b")
+
+    def test_every_relationship_is_canonical_and_implemented(self):
+        combined_implementation = self.ontology + self.rules + self.sync + self.neo4j
+        for relationship in RELATIONSHIPS:
+            with self.subTest(relationship=relationship):
+                self.assertIn(relationship, self.context)
+                self.assertIn(relationship, combined_implementation)
+
+    def test_required_structured_types_exist(self):
+        for type_name in (
+            "TypedValue", "StateSnapshot", "RelationshipSnapshot",
+            "TypedValueMap", "RuleExpression", "SyncDefinition",
+        ):
+            self.assertIn(type_name, self.context)
+
+    def test_core_chapters_have_examples(self):
+        for chapter in range(3, 13):
+            pattern = rf"## {chapter}\..*?(?=\n## {chapter + 1}\.|\Z)"
+            match = re.search(pattern, self.context, flags=re.S)
+            self.assertIsNotNone(match, f"Kapitel {chapter} fehlt")
+            self.assertIn("Beispiel", match.group(0), f"Kapitel {chapter} hat kein Beispiel")
+
+    def test_resolved_open_items_are_not_listed(self):
+        stale = (
+            "Priorisierung konkurrierender `RaN`",
+            "vollständige Traversierungsmatrix je Entitäts- und Beziehungstyp",
+            "semantische Abbruchgrenzen für sehr große Graphen",
+            "technische Repräsentation komplexer historischer Eigenschaften",
+        )
+        for phrase in stale:
+            self.assertNotIn(phrase, self.sync + self.neo4j)
+
+    def test_no_merge_markers(self):
+        for path in DOCS.rglob("*.md"):
+            content = path.read_text(encoding="utf-8")
+            self.assertNotRegex(content, r"(?m)^(<<<<<<<|=======|>>>>>>>)")
+
+    def test_machine_readable_schemas_are_valid_json(self):
+        expected = {
+            "jci-change-request.schema.json",
+            "jci-sync-result.schema.json",
+            "jci-context.jsonld",
+        }
+        schema_dir = DOCS / "schemas"
+        self.assertTrue(expected.issubset({path.name for path in schema_dir.iterdir()}))
+        for name in expected:
+            with self.subTest(schema=name):
+                data = json.loads((schema_dir / name).read_text(encoding="utf-8"))
+                self.assertIsInstance(data, dict)
+                self.assertIn("@context" if name.endswith(".jsonld") else "$schema", data)
+
+    def test_public_jsonld_namespace_matches_vocabulary_page(self):
+        namespace = "https://eeimicke.github.io/junaco-jci-loop/ns/jci/1.0#"
+        context = json.loads((DOCS / "schemas/jci-context.jsonld").read_text(encoding="utf-8"))
+        self.assertEqual(context["@context"]["@vocab"], namespace)
+        self.assertEqual(context["@context"]["jci"], namespace)
+
+        vocabulary_page = DOCS / "ns/jci/1.0/index.html"
+        self.assertTrue(vocabulary_page.is_file())
+        page = vocabulary_page.read_text(encoding="utf-8")
+        self.assertIn(namespace, page)
+        for term in ENTITY_TYPES | RELATIONSHIPS:
+            with self.subTest(vocabulary_term=term):
+                self.assertIn(f"<code>{term}</code>", page)
+
+    def test_markdown_tables_have_consistent_column_counts(self):
+        for path in DOCS.rglob("*.md"):
+            expected = None
+            for line_number, line in enumerate(
+                path.read_text(encoding="utf-8").splitlines(), start=1
+            ):
+                is_table_row = line.lstrip().startswith("|") and line.rstrip().endswith("|")
+                if not is_table_row:
+                    expected = None
+                    continue
+                column_markers = line.count("|")
+                if expected is None:
+                    expected = column_markers
+                self.assertEqual(
+                    expected,
+                    column_markers,
+                    f"Uneinheitliche Markdown-Tabelle in {path}:{line_number}",
+                )
+
+
+if __name__ == "__main__":
+    unittest.main()
