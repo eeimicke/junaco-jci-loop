@@ -1,24 +1,37 @@
-# Informal English rights and sources notice
-
-> Convenience translation only. `NOTICE.md`, `LICENSE.md`, and the official licence text remain authoritative.
+# Rights and source notices
 
 ## JCI model
 
-Copyright © 2026 JUNACO Organisationsentwicklungs GmbH.
+Copyright © 2026 JUNACO Organization Development GmbH.
 
-The JCI model specification in `docs/JCI_CONTEXT.md` is licensed under CC BY-NC-SA 4.0 subject to `LICENSE.md`.
+The specification of the **JUNACO Continuous Integration Model for Organizations** and the resulting **JCI Loop** contained in `docs/JCI_CONTEXT.md` is licensed under **CC BY-NC-SA 4.0**. The regulations in [LICENSE.md](LICENSE.md) and the legally binding license text linked there are decisive.
 
-## Origin and scientific foundation
+Recommended Attribution:
 
-JCI builds on Stafford Beer's Viable System Model and the Intrinsic Value Based System Model developed by Ernst Eimicke under his former name Ernst Rother. Jana Eimicke and Julian Ulbricht participated in its practical further development at JUNACO.
+> JUNACO Continuous Integration Model for Organizations – JCI Loop, © 2026 JUNACO Organizationsentwicklungs GmbH, licensed under CC BY-NC-SA 4.0.
 
-The master's thesis remains an independent work. It and its third-party quotations, diagrams, and other content are not relicensed by this repository.
+## Origin and scientific basis
 
-Source: https://monami.hs-mittweida.de/frontdoor/deliver/index/docId/6494/file/Masterarbeit_komplett.pdf
+The JCI model is based on the Viable System Model by Stafford Beer and the Intrinsic Value Based System Model developed by Ernst Eimicke under his former name Ernst Rother in a master's thesis. In practice at JUNACO Organizationsentwicklungs GmbH, the model was further developed into today's JCI model with the participation of Jana Eimicke and Julian Ulbricht.
 
-## Exclusions
+The master's thesis is an independent scientific work by Ernst Eimicke. They and any third-party quotes, images and other third-party content contained therein are not relicensed by the license of this repository.
 
-The model licence grants no automatic rights to software without an explicit software licence, The Company Brain, DeepJuni, customer or personal data, third-party content, or names, logos, and marks beyond required attribution.
+Source of the master's thesis:
 
-The terms **JUNACO**, **JCI**, **JCI Loop**, **The Company Brain**, and **DeepJuni** may not be used in a manner implying endorsement or ownership beyond permitted attribution.
+https://monami.hs-mittweida.de/frontdoor/deliver/index/docId/6494/file/Masterarbeit_komplett.pdf
 
+## Delimitation
+
+The license of the JCI model does not grant rights to:
+
+- Software or technical implementations without your own express license,
+- the applications **The Company Brain** and **DeepJuni**,
+- customer, personal or organizational data,
+- third party content,
+- Names, logos or brands beyond the necessary attribution.
+
+Commercial use of the JCI model generally requires a separate agreement with JUNACO Organization Development GmbH. Details can be found in [LICENSE.md](LICENSE.md).
+
+## No transfer of trademark rights
+
+The copyright license does not transfer any trademark, trademark or name rights. The names **JUNACO**, **JCI**, **JCI Loop**, **The Company Brain** and **DeepJuni** may only be used to the extent necessary for proper attribution or otherwise expressly permitted.

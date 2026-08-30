@@ -11,7 +11,7 @@ Read `docs/JCI_CONTEXT.md` completely before any content change. It is the canon
 - Never silently invent, remove, or reinterpret core elements, graph objects, relationships, or cardinalities.
 - Identify affected elements, relationships, and rules before semantic change.
 - Report conflicts with the canonical specification before changing the model.
-- Check impacts on all ten core elements and preserve Task-to-`CiV` traceability.
+- Check impacts on `CiV`, `PiF2`, `PiF1s`, `PiF1t`, `PiF1o`, `RaN`, `RoF`, `ERoF`, `SYNC`, and `PiH`, and preserve Task-to-`CiV` traceability.
 - Do not replace human model decisions with automated assumptions.
 
 ## Change discipline
@@ -20,6 +20,8 @@ Read `docs/JCI_CONTEXT.md` completely before any content change. It is the canon
 - Explain domain changes and execute automated checks.
 - Do not publish, push, or merge without explicit instruction.
 - Change `LICENSE.md`, `NOTICE.md`, `GOVERNANCE.md`, and `.github/CODEOWNERS` only on explicit instruction.
+- Whenever a German file listed in the translation manifest changes, update its English version with structural equivalence. Chapters, heading levels, tables, code blocks, examples, rules, and exceptions must remain in the same order.
+- Mark a language pair as `synchronized` only after the automated structural check and the semantic review succeed; otherwise use `review-required`.
 
 ## Rights and sources
 

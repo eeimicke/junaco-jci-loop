@@ -1,11 +1,11 @@
 flowchart TD
-    ChangeEvent --> Applicable[anwendbare RaN bestimmen]
-    Applicable --> Evaluate[Bedingungen auswerten]
+    ChangeEvent --> Applicable[determine applicable RaN]
+    Applicable --> Evaluate[evaluate conditions]
     Evaluate --> Allow[ALLOW]
     Evaluate --> Deny[DENY]
-    Allow --> Compare[gleiche Entscheidung vergleichen]
+    Allow --> Compare[compare same decision]
     Deny --> Compare
-    Compare --> Priority[priority prüfen]
-    Priority --> Decision[Entscheidung]
+    Compare --> Priority[check priority]
+    Priority --> Decision[decision]
     Priority --> Conflict[RaNConflict]
 

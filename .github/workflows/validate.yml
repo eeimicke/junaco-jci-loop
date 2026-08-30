@@ -1,4 +1,4 @@
-name: Repository prüfen
+name: Repository prüfen / Validate repository
 
 on:
   pull_request:
@@ -13,10 +13,10 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - name: Repository auschecken
+      - name: Repository auschecken / Check out repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Pflichtdateien und unerwünschte Dateien prüfen
+      - name: Pflichtdateien und unerwünschte Dateien prüfen / Check required and unwanted files
         shell: bash
         run: |
           set -euo pipefail
@@ -32,31 +32,31 @@ jobs:
           )
 
           for file in "${required[@]}"; do
-            test -s "$file" || { echo "Pflichtdatei fehlt oder ist leer: $file"; exit 1; }
+            test -s "$file" || { echo "Pflichtdatei fehlt oder ist leer / Required file is missing or empty: $file"; exit 1; }
           done
 
           if find . -type f \( -name '.env' -o -name '.env.*' \) -not -path './.git/*' | grep -q .; then
-            echo "Eine nicht zulässige .env-Datei wurde gefunden."
+            echo "Eine nicht zulässige .env-Datei wurde gefunden / A prohibited .env file was found."
             exit 1
           fi
 
           if grep -RInE '^(<<<<<<<|=======|>>>>>>>)' . --exclude-dir=.git; then
-            echo "Nicht aufgelöste Konfliktmarker wurden gefunden."
+            echo "Nicht aufgelöste Konfliktmarker wurden gefunden / Unresolved conflict markers were found."
             exit 1
           fi
 
           oversized="$(find . -type f -not -path './.git/*' -size +5M -print)"
           if test -n "$oversized"; then
-            echo "Dateien über 5 MB sind nicht ohne ausdrückliche Prüfung zulässig:"
+            echo "Dateien über 5 MB sind nicht ohne ausdrückliche Prüfung zulässig / Files over 5 MB require explicit review:"
             echo "$oversized"
             exit 1
           fi
 
-      - name: JCI-Modellregeln und Dokumentkonsistenz prüfen
+      - name: JCI-Modellregeln und Dokumentkonsistenz prüfen / Validate JCI model rules and document consistency
         shell: bash
         run: python3 -m unittest discover -s tests -v
 
-      - name: Pull-Request-Beschreibung prüfen
+      - name: Pull-Request-Beschreibung prüfen / Validate pull request description
         if: github.event_name == 'pull_request'
         shell: bash
         env:
@@ -64,19 +64,19 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${PR_BODY//[[:space:]]/}" || {
-            echo "Die Pull-Request-Beschreibung darf nicht leer sein."
+            echo "Die Pull-Request-Beschreibung darf nicht leer sein / The pull request description must not be empty."
             exit 1
           }
           grep -Fq "## Anlass und Ziel" <<< "$PR_BODY" || {
-            echo "Der Abschnitt 'Anlass und Ziel' fehlt."
+            echo "Der Abschnitt 'Anlass und Ziel' fehlt / The section 'Reason and objective' is missing."
             exit 1
           }
           grep -Fq "## Modellprüfung" <<< "$PR_BODY" || {
-            echo "Der Abschnitt 'Modellprüfung' fehlt."
+            echo "Der Abschnitt 'Modellprüfung' fehlt / The section 'Model review' is missing."
             exit 1
           }
           grep -Fq "## Rechte und Quellen" <<< "$PR_BODY" || {
-            echo "Der Abschnitt 'Rechte und Quellen' fehlt."
+            echo "Der Abschnitt 'Rechte und Quellen' fehlt / The section 'Rights and sources' is missing."
             exit 1
           }
 

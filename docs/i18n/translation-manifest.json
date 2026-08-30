@@ -18,6 +18,8 @@
     {"source": "NOTICE.md", "target": "NOTICE.en.md", "status": "synchronized", "informationalOnly": true},
     {"source": "GOVERNANCE.md", "target": "GOVERNANCE.en.md", "status": "synchronized"},
     {"source": "CONTRIBUTING.md", "target": "CONTRIBUTING.en.md", "status": "synchronized"},
-    {"source": "AGENTS.md", "target": "AGENTS.en.md", "status": "synchronized"}
+    {"source": "AGENTS.md", "target": "AGENTS.en.md", "status": "synchronized"},
+    {"source": "docs/i18n/README.md", "target": "docs/i18n/README.en.md", "status": "synchronized"},
+    {"source": "docs/diagrams/sources/README.md", "target": "docs/diagrams/sources/README.en.md", "status": "synchronized"}
   ]
 }

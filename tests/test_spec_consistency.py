@@ -35,6 +35,33 @@ def read(name: str) -> str:
     return (DOCS / name).read_text(encoding="utf-8")
 
 
+def heading_signature(content: str) -> list[tuple[int, str | None]]:
+    """Return heading levels and stable numeric section identifiers."""
+    signature = []
+    for hashes, title in re.findall(r"(?m)^(#{1,6})\s+(.+?)\s*$", content):
+        number = re.match(r"(\d+(?:\.\d+)*)\b", title)
+        signature.append((len(hashes), number.group(1) if number else None))
+    return signature
+
+
+def table_signature(content: str) -> list[tuple[int, tuple[int, ...]]]:
+    """Return row and column counts for each Markdown table in document order."""
+    tables = []
+    current = []
+    for line in content.splitlines() + [""]:
+        if line.lstrip().startswith("|") and line.rstrip().endswith("|"):
+            current.append(line.count("|") - 1)
+        elif current:
+            tables.append((len(current), tuple(current)))
+            current = []
+    return tables
+
+
+def fenced_block_signature(content: str) -> list[str]:
+    """Return fence languages in their original document order."""
+    return re.findall(r"(?m)^```([^\s`]*)\s*$", content)[::2]
+
+
 class SpecificationConsistencyTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -143,7 +170,7 @@ class SpecificationConsistencyTests(unittest.TestCase):
         seen_targets = set()
         for pair in manifest["pairs"]:
             with self.subTest(pair=pair):
-                self.assertEqual(pair["status"], "synchronized")
+                self.assertIn(pair["status"], {"synchronized", "review-required"})
                 source = ROOT / pair["source"]
                 target = ROOT / pair["target"]
                 self.assertTrue(source.is_file(), f"Fehlende deutsche Quelle: {source}")
@@ -153,16 +180,43 @@ class SpecificationConsistencyTests(unittest.TestCase):
                 seen_sources.add(pair["source"])
                 seen_targets.add(pair["target"])
 
+    def test_synchronized_translations_are_structurally_equivalent(self):
+        manifest = json.loads(TRANSLATION_MANIFEST.read_text(encoding="utf-8"))
+        for pair in manifest["pairs"]:
+            if pair["status"] != "synchronized":
+                continue
+            source = (ROOT / pair["source"]).read_text(encoding="utf-8")
+            target = (ROOT / pair["target"]).read_text(encoding="utf-8")
+            with self.subTest(pair=pair):
+                self.assertEqual(heading_signature(source), heading_signature(target))
+                self.assertEqual(table_signature(source), table_signature(target))
+                self.assertEqual(fenced_block_signature(source), fenced_block_signature(target))
+
+    def test_reader_facing_markdown_is_manifested_or_declared_bilingual(self):
+        manifest = json.loads(TRANSLATION_MANIFEST.read_text(encoding="utf-8"))
+        manifested = {
+            entry[key]
+            for entry in manifest["pairs"]
+            for key in ("source", "target")
+        }
+        deliberate_single_files = {
+            "README.md",
+            ".github/pull_request_template.md",
+        }
+        markdown = {
+            path.relative_to(ROOT).as_posix()
+            for path in ROOT.rglob("*.md")
+            if ".git" not in path.parts
+        }
+        self.assertFalse(
+            markdown - manifested - deliberate_single_files,
+            "Markdown-Dateien ohne Übersetzungspaar oder erklärte Ausnahme",
+        )
+
     def test_translations_preserve_canonical_identifiers(self):
         manifest = json.loads(TRANSLATION_MANIFEST.read_text(encoding="utf-8"))
         technical_terms = ENTITY_TYPES | RELATIONSHIPS
-        complete_catalogues = {
-            "docs/JCI_CONTEXT.md",
-            "docs/JCI_ONTOLOGY.md",
-        }
         for pair in manifest["pairs"]:
-            if pair["source"] not in complete_catalogues:
-                continue
             source = (ROOT / pair["source"]).read_text(encoding="utf-8")
             target = (ROOT / pair["target"]).read_text(encoding="utf-8")
             required = {term for term in technical_terms if term in source}
