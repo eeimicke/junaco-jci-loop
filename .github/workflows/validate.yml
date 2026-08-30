@@ -52,6 +52,10 @@ jobs:
             exit 1
           fi
 
+      - name: JCI-Modellregeln und Dokumentkonsistenz prüfen
+        shell: bash
+        run: python3 -m unittest discover -s tests -v
+
       - name: Pull-Request-Beschreibung prüfen
         if: github.event_name == 'pull_request'
         shell: bash

@@ -1,0 +1,16 @@
+{
+  "@context": {
+    "@version": 1.1,
+    "@vocab": "https://eeimicke.github.io/junaco-jci-loop/ns/jci/1.0#",
+    "jci": "https://eeimicke.github.io/junaco-jci-loop/ns/jci/1.0#",
+    "id": "@id",
+    "type": "@type",
+    "entityId": "@id",
+    "entityType": "@type",
+    "createdAt": {"@id": "jci:createdAt", "@type": "http://www.w3.org/2001/XMLSchema#dateTime"},
+    "updatedAt": {"@id": "jci:updatedAt", "@type": "http://www.w3.org/2001/XMLSchema#dateTime"},
+    "validFrom": {"@id": "jci:validFrom", "@type": "http://www.w3.org/2001/XMLSchema#dateTime"},
+    "validUntil": {"@id": "jci:validUntil", "@type": "http://www.w3.org/2001/XMLSchema#dateTime"},
+    "revision": {"@id": "jci:revision", "@type": "http://www.w3.org/2001/XMLSchema#integer"}
+  }
+}
