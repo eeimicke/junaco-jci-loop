@@ -51,13 +51,13 @@ Ein `RoleAssignment` bedeutet: Ein bestimmtes Mitglied aktiviert eine vorhandene
 
 ```mermaid
 flowchart LR
-    PiF1o -->|HAS_SUCCESS_CRITERIA| Criterion[SuccessCriterion]
     PiF1o -->|DECOMPOSES_INTO| Task
     Task -->|EXECUTED_BY| Assignment[RoleAssignment]
     Task -->|PRODUCES| Result
     Verification -->|EVALUATES| Result
-    Verification -->|CHECKS| Criterion
     Verification -->|USES_EVIDENCE| Evidence
+    Verification -->|CHECKS| Criterion[SuccessCriterion]
+    PiF1o -->|HAS_SUCCESS_CRITERIA| Criterion
 ```
 
 - `Task`: Was wird getan?
@@ -76,6 +76,21 @@ flowchart LR
 ```
 
 Ein aktives Umweltobjekt muss von mindestens einer Rollenaktivierung verwendet werden. Eigentum allein belegt keine Interaktion. Ob ein Objekt intern oder extern ist, wird relativ zur betrachteten Organisation aus `OWNED_BY` abgeleitet.
+
+### Beispiel
+
+Der Task `Kundenportal bereitstellen` verwendet das `ERoFObject` `GitHub-Repository`. Anna führt den Task in ihrer aktivierten Rolle `Developer` aus und verwendet dabei ebenfalls dieses Repository. Das Repository gehört der betrachteten `RoFOrg` und ist deshalb aus ihrer Sicht ein internes Umweltobjekt.
+
+```text
+Task: Kundenportal bereitstellen
+  ├── EXECUTED_BY ──► RoleAssignment: Anna als Developer
+  └── USES ─────────► ERoFObject: GitHub-Repository
+                           ▲
+RoleAssignment ── USES ────┘
+ERoFObject ── OWNED_BY ──► RoFOrg: Beispiel GmbH
+```
+
+Gehörte das Repository stattdessen einer Partnerorganisation, wäre es aus Sicht der Beispiel GmbH ein externes Umweltobjekt. Entscheidend ist immer die Beziehung `OWNED_BY` zur betrachteten Organisation.
 
 ## Veränderungsobjekte
 
