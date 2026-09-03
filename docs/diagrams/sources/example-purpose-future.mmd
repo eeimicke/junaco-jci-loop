@@ -1,6 +1,10 @@
 flowchart LR
     History[PiH] -->|PROVIDES_CONTEXT_TO| Values[CiV]
+    Values -->|HELD_BY| Holder[RoFOrg, RoFTeam, or human RoFTeamMember]
+    Values -->|INFORMED_BY| SourceValue[another CiV]
     Values -->|INSCRIBES_PURPOSE_IN| LongTerm[PiF2]
+    Rule[RaN] -->|PROTECTS| Values
+    Rule -->|PROTECTS| LongTerm
     Strategic[PiF1s] -->|CONTRIBUTES_TO| LongTerm
     Tactical[PiF1t] -->|CONTRIBUTES_TO| Strategic
     Operational[PiF1o] -->|CONTRIBUTES_TO| Tactical

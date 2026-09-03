@@ -40,13 +40,13 @@ Die gespeicherten Kanten bilden die fachliche Provenienz ab. Die technischen Pfe
 
 Ein technischer `SyncRun` benötigt mindestens:
 
-| Eingabe             | Bedeutung                                   |
-| ------------------- | ------------------------------------------- |
-| `runId`             | eindeutige technische Laufkennung           |
-| `idempotencyKey`    | Kennung des fachlichen Veränderungsauftrags |
-| `changeEventId`     | auslösendes `ChangeEvent`                   |
-| `syncDefinitionId`  | zu verwendende aktive `SYNC`-Definition     |
-| `startedAt`         | Beginn des Versuchs                         |
+| Eingabe             | Bedeutung                                    |
+| ------------------- | -------------------------------------------- |
+| `runId`             | eindeutige technische Laufkennung            |
+| `idempotencyKey`    | Kennung des fachlichen Veränderungsauftrags  |
+| `changeEventId`     | auslösendes `ChangeEvent`                    |
+| `syncDefinitionId`  | zu verwendende aktive `SYNC`-Definition      |
+| `startedAt`         | Beginn des Versuchs                          |
 | `requestedRevision` | erwartete Revision oder `null` bei `CREATED` |
 
 Das bereits vor dem Lauf gespeicherte `ChangeEvent` besitzt mindestens:
@@ -109,32 +109,32 @@ Da `DEPENDS_ON` PiF1o-Grenzen überschreiten darf, kann eine Task-Änderung mehr
 
 Die folgende Matrix definiert die fachliche Mindesttraversierung. „Aufwärts“ bezeichnet den WHY-Pfad zur übergeordneten Zukunft und zu `CiV`; „abwärts“ bezeichnet beitragende Zukunftselemente bis zur operativen Umsetzung. Inverse Lesarten verwenden dieselbe gespeicherte Kante in Gegenrichtung.
 
-| Geänderter Typ | Direkt prüfen | Indirekt weiterverfolgen |
-| -------------- | ------------- | ------------------------ |
-| `CiV` | verbundene `PiF2`, Kontext gebende `PiH`, anwendbare `RaN` | abwärts über alle Zukunftsebenen bis Tasks, Result, Verification, RoF und ERoF |
-| `PiF2` | begründende `CiV`, beitragende `PiF1s`, `RaN` | abwärts bis `PiF1o` und operative Graphobjekte |
-| `PiF1s` | Ziel-`PiF2`, beitragende `PiF1t`, `RaN` | aufwärts bis `CiV`, abwärts bis operative Graphobjekte |
-| `PiF1t` | Ziel-`PiF1s`, beitragende `PiF1o`, `RaN` | aufwärts bis `CiV`, abwärts bis Tasks und Prüfung |
-| `PiF1o` | Ziel-`PiF1t`, Kriterien, Accountable, alle Tasks, `RaN` | vollständiger WHY-Pfad, Task-Graph, Results, Verifications, Teams, Rollen und ERoF |
-| `Task` | Parent, Subtasks, Voraussetzungen, abhängige Tasks, PiF1o, Team, Ausführende, ERoFObjects, Results, `RaN` | alle dadurch erreichten Task- und PiF1o-Graphen sowie deren Zukunfts- und Prüfpfade |
-| `SuccessCriterion` | zugehöriges `PiF1o`, prüfende anwendbare aktuelle Verifications, `RaN` | Results und Tasks der Verifications; anschließend PiF1o-Aggregation und Zukunftskette |
-| `Result` | erzeugender Task, aktuelle und abgelöste Verifications, `RaN` | PiF1o, Kriterien, Task-Graph und höhere Zukunftsebenen |
-| `Verification` | Result, Kriterium, deren gebundene Revisionen, Vorgänger/Nachfolger, Evidence | erzeugender Task, PiF1o, alle anwendbaren aktuellen Verifications, Kriterien und höhere Zukunftsebenen |
-| `Evidence` | alle eingehenden `USES_EVIDENCE`, `RaN` | jeweils deren fachliche Zielpfade; Evidence selbst entscheidet keinen Status |
-| `RaN` | `GOVERNS`, `APPLIES_IN`, offene Konflikte | alle geregelten Ziele und deren abhängige Pfade gemäß dieser Matrix |
-| `RaNConflict` | Konfliktregeln, betroffene Entitäten, erkennendes SyncEvent, Auflösungsbezüge | bei Auflösung alle betroffenen Entitäten und Regeln erneut vollständig prüfen |
-| `RoFOrg` | Teams, Organisationsbeziehungen, eigene ERoFObjects, `RaN` | Mitglieder, Rollenaktivierungen, Tasks, PiF1o und fremde Organisationsseite |
-| `RoFOrgRelationship` | beide Organisationen, vertretende RoleAssignments, `RaN` | Teams, Mitglieder, ERoF und bei `SUBSIDIARY` gesamte Vorfahren-/Nachfahrenstruktur |
-| `RoFTeam` | Organisation, Mitglieder, RoleAssignments, verantwortete Tasks, `RaN` | PiF1o, Task-Graph, ERoFObjects und Organisationsbeziehungen der Beteiligten |
-| `RoFTeamMember` | Teams, Rollen, Assignments, accountable PiF1o, `RaN` | ausgeführte Tasks, ERoFObjects, Organisationen und Zukunftspfade |
-| `RoFRole` | besitzende Mitglieder, aktivierende Assignments, `RaN` | Teams, Tasks, ERoFObjects und betroffene Organisationen |
-| `RoleAssignment` | Mitglied, Team, Rolle, Tasks, ERoFObjects, Organisationsvertretungen, `RaN` | Organisation, PiF1o, Task-Graph und Umwelt aller direkten Verwendungen |
-| `ERoFObject` | verwendende Assignments und Tasks, Eigentümer, `RaN` | Teams, Mitglieder, Organisationen, PiF1o und Zukunftspfade der Tasks |
-| `SYNC` | verwendende SyncEvents und gültige Vorgängerdefinition | die neue Definition wird durch die bisher aktive Definition geprüft; keine rückwirkende Änderung alter SyncEvents |
-| `ChangeEvent` | Zielkoordinaten, optionale `CHANGED_BY`-Quelle, `TARGETS_HISTORY`, Requester, Evidence, ausgelöste SyncEvents | nur innerhalb des bestehenden Veränderungsvorgangs; kein rekursives ChangeEvent |
-| `SyncEvent` | ChangeEvent, ausgeführte SYNC-Definition, betroffene Entitäten, erzeugte Historie/Korrekturen/Konflikte | unveränderlich; nur Konsistenz seiner gespeicherten Bezüge prüfen |
-| `PiH` | ursprüngliche Entität, erzeugendes SyncEvent, Korrekturen, Kontextverwendung | unveränderlich; Abweichungen ausschließlich als HistoricalCorrection behandeln |
-| `HistoricalCorrection` | PiH, ChangeEvent, SyncEvent, Korrektor, Evidence, `baseHistoryViewHash`, Vorgänger/Nachfolger | unveränderlich; wirksame `HistoryView` bestimmen und eine aktuelle Modellkorrektur als getrennten Vorgang behandeln |
+| Geänderter Typ         | Direkt prüfen                                                                                                 | Indirekt weiterverfolgen                                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `CiV`                  | drei Dimensionen, `HELD_BY`, `INFORMED_BY`, schützende `RaN`, verbundene `PiF2`, Kontext gebende `PiH`        | zu Herkunfts-CiV, Werteträger und geschützten PiF2; abwärts bis zu allen geregelten Umsetzungselementen             |
+| `PiF2`                 | begründende `CiV`, gemeinsamer Werteträger, schützende `RaN`, beitragende `PiF1s`                             | zu geschützten CiV; abwärts bis `PiF1o` und allen geregelten Umsetzungselementen                                    |
+| `PiF1s`                | Ziel-`PiF2`, beitragende `PiF1t`, `RaN`                                                                       | aufwärts bis `CiV`, abwärts bis operative Graphobjekte                                                              |
+| `PiF1t`                | Ziel-`PiF1s`, beitragende `PiF1o`, `RaN`                                                                      | aufwärts bis `CiV`, abwärts bis Tasks und Prüfung                                                                   |
+| `PiF1o`                | Ziel-`PiF1t`, Kriterien, Accountable, alle Tasks, `RaN`                                                       | vollständiger WHY-Pfad, Task-Graph, Results, Verifications, Teams, Rollen und ERoF                                  |
+| `Task`                 | Parent, Subtasks, Voraussetzungen, abhängige Tasks, PiF1o, Team, Ausführende, ERoFObjects, Results, `RaN`     | alle dadurch erreichten Task- und PiF1o-Graphen sowie deren Zukunfts- und Prüfpfade                                 |
+| `SuccessCriterion`     | zugehöriges `PiF1o`, prüfende anwendbare aktuelle Verifications, `RaN`                                        | Results und Tasks der Verifications; anschließend PiF1o-Aggregation und Zukunftskette                               |
+| `Result`               | erzeugender Task, aktuelle und abgelöste Verifications, `RaN`                                                 | PiF1o, Kriterien, Task-Graph und höhere Zukunftsebenen                                                              |
+| `Verification`         | Result, Kriterium, deren gebundene Revisionen, Vorgänger/Nachfolger, Evidence                                 | erzeugender Task, PiF1o, alle anwendbaren aktuellen Verifications, Kriterien und höhere Zukunftsebenen              |
+| `Evidence`             | alle eingehenden `USES_EVIDENCE`, `RaN`                                                                       | jeweils deren fachliche Zielpfade; Evidence selbst entscheidet keinen Status                                        |
+| `RaN`                  | `PROTECTS`, `GOVERNS`, `APPLIES_IN`, offene Konflikte                                                         | alle geschützten CiV und PiF2, alle geregelten Umsetzungselemente und deren abhängige Pfade gemäß dieser Matrix     |
+| `RaNConflict`          | Konfliktregeln, betroffene Entitäten, erkennendes SyncEvent, Auflösungsbezüge                                 | bei Auflösung alle betroffenen Entitäten und Regeln erneut vollständig prüfen                                       |
+| `RoFOrg`               | Teams, Organisationsbeziehungen, eigene ERoFObjects, `RaN`                                                    | Mitglieder, Rollenaktivierungen, Tasks, PiF1o und fremde Organisationsseite                                         |
+| `RoFOrgRelationship`   | beide Organisationen, vertretende RoleAssignments, `RaN`                                                      | Teams, Mitglieder, ERoF und bei `SUBSIDIARY` gesamte Vorfahren-/Nachfahrenstruktur                                  |
+| `RoFTeam`              | Organisation, Mitglieder, RoleAssignments, verantwortete Tasks, `RaN`                                         | PiF1o, Task-Graph, ERoFObjects und Organisationsbeziehungen der Beteiligten                                         |
+| `RoFTeamMember`        | Teams, Rollen, Assignments, accountable PiF1o, `RaN`                                                          | ausgeführte Tasks, ERoFObjects, Organisationen und Zukunftspfade                                                    |
+| `RoFRole`              | besitzende Mitglieder, aktivierende Assignments, `RaN`                                                        | Teams, Tasks, ERoFObjects und betroffene Organisationen                                                             |
+| `RoleAssignment`       | Mitglied, Team, Rolle, Tasks, ERoFObjects, Organisationsvertretungen, `RaN`                                   | Organisation, PiF1o, Task-Graph und Umwelt aller direkten Verwendungen                                              |
+| `ERoFObject`           | verwendende Assignments und Tasks, Eigentümer, `RaN`                                                          | Teams, Mitglieder, Organisationen, PiF1o und Zukunftspfade der Tasks                                                |
+| `SYNC`                 | verwendende SyncEvents und gültige Vorgängerdefinition                                                        | die neue Definition wird durch die bisher aktive Definition geprüft; keine rückwirkende Änderung alter SyncEvents   |
+| `ChangeEvent`          | Zielkoordinaten, optionale `CHANGED_BY`-Quelle, `TARGETS_HISTORY`, Requester, Evidence, ausgelöste SyncEvents | nur innerhalb des bestehenden Veränderungsvorgangs; kein rekursives ChangeEvent                                     |
+| `SyncEvent`            | ChangeEvent, ausgeführte SYNC-Definition, betroffene Entitäten, erzeugte Historie/Korrekturen/Konflikte       | unveränderlich; nur Konsistenz seiner gespeicherten Bezüge prüfen                                                   |
+| `PiH`                  | ursprüngliche Entität, erzeugendes SyncEvent, Korrekturen, Kontextverwendung                                  | unveränderlich; Abweichungen ausschließlich als HistoricalCorrection behandeln                                      |
+| `HistoricalCorrection` | PiH, ChangeEvent, SyncEvent, Korrektor, Evidence, `baseHistoryViewHash`, Vorgänger/Nachfolger                 | unveränderlich; wirksame `HistoryView` bestimmen und eine aktuelle Modellkorrektur als getrennten Vorgang behandeln |
 
 Bei einer Beziehungsänderung beginnt `SYNC` an beiden Endpunkten und verwendet für beide deren Matrixzeile. Bei `REPLACED_BY`, `SUPERSEDES`, `DEPENDS_ON`, `DECOMPOSES_INTO`, `CONTRIBUTES_TO` und `SUBSIDIARY` wird die jeweilige Kette bis zu ihrem Ende traversiert und auf Zyklen geprüft.
 
@@ -146,9 +146,13 @@ Die Traversierung führt eine Besuchsmenge aus `entityId`, gelesener `revision`,
 
 ### 5.3 Prüfung
 
-Vor jeder fachlichen Auswertung prüft `SYNC` den Statusübergang gegen Abschnitt 2.2.4 von `JCI_CONTEXT.md`. Ein nicht aufgeführter Übergang endet mit `outcome = CONFLICT`; der aktuelle Zustand bleibt unverändert. Terminale Zustände werden nicht wieder geöffnet. Eine Fortsetzung wird als neue Entität angelegt.
+Vor jeder fachlichen Auswertung prüft `SYNC` den Statusübergang gegen Abschnitt 2.2.4 von [`JCI_CONTEXT.md`](JCI_CONTEXT.md). Ein nicht aufgeführter Übergang endet mit `outcome = CONFLICT`; der aktuelle Zustand bleibt unverändert. Terminale Zustände werden nicht wieder geöffnet. Eine Fortsetzung wird als neue Entität angelegt.
 
 Vor der Aktivierung oder dem Abschluss eines atomaren Tasks prüft `SYNC` außerdem die Rückverfolgbarkeit: Der WHY-Pfad muss über `PiF1o`, `PiF1t`, `PiF1s` und `PiF2` zu mindestens einem `CiV` führen. Der WHO-Pfad muss ausführendes `RoleAssignment`, Mitglied, Rolle, verantwortliches Team und Organisation eindeutig ergeben. Ein fehlender Pflichtpfad verhindert den Statuswechsel.
+
+Bei jeder Erzeugung oder Änderung eines CiV prüft `SYNC`, dass genau ein Wert mit den drei nicht leeren Dimensionen `notCiV`, `selfCiV` und `toServeCiV` vorliegt, genau ein zulässiger `HELD_BY`-Werteträger existiert und kein technisches Mitglied als persönlicher Scope dient. `INFORMED_BY` darf keine Selbstbeziehung bilden und wird niemals aus Namen, Mitgliedschaften oder Zugehörigkeiten abgeleitet. Für jedes verbundene `PiF2` müssen alle unmittelbar begründenden CiV denselben Werteträger besitzen. Eine Wertentscheidung oder Dimensionsübernahme erfordert menschliche Bestätigung und wird von `SYNC` nicht selbst erzeugt.
+
+Bei jeder Erzeugung, Aktivierung oder Änderung eines RaN prüft `SYNC` `PROTECTS` getrennt von `GOVERNS`: Ein aktives RaN schützt mindestens ein CiV und ein PiF2, regelt mindestens ein zulässiges Umsetzungselement und erfüllt die beidseitige Kohärenz über `INSCRIBES_PURPOSE_IN`. Die Schutzobjekte müssen organisatorisch zu `scopeType`, `APPLIES_IN` und bei `ENTITY` zu den WHY-Pfaden der geregelten Ziele passen. Ein `GOVERNS` zu `PiF2` ist unzulässig. `SYNC` prüft menschlich beantragte Schutzkanten, erzeugt oder errät sie aber nicht selbst.
 
 Bei `changeType = REPLACED` prüft `SYNC`, dass genau ein typgleicher Nachfolger über `REPLACED_BY` angegeben ist. Bei allen anderen Status darf die zu ändernde Entität keine ausgehende `REPLACED_BY`-Beziehung besitzen. Selbstbezüge und Zyklen werden abgewiesen.
 
@@ -166,6 +170,8 @@ Für jede mögliche Änderung werden mindestens geprüft:
 - Rollen- und Teamkontext,
 - zeitliche Überdeckung von Teammitgliedschaft, Rollenbesitz und Rollenaktivierung,
 - organisationsbezogene Eigentums- und Umweltperspektive,
+- CiV-Dimensionen, eindeutiger Werteträger, ausdrückliche `INFORMED_BY`-Herkunft und gemeinsamer PiF2-Scope,
+- RaN-Schutzkanten, geschützte CiV-PiF2-Kohärenz, zulässige `GOVERNS`-Umsetzungstypen und Schutzscope,
 - personengebundene ERoF-Nutzung,
 - Organisationsregeln einschließlich `SUBSIDIARY`-Zyklusfreiheit,
 - unveränderliche Entitätstypen,
@@ -228,16 +234,17 @@ Nach jeder Änderung eines Zukunftselements wertet `SYNC` die Zukunftskette von 
 
 Für jede von Regeln betroffene Entscheidung führt `SYNC` aus:
 
-1. Anhand von `governedTypes`, `scopeType` und gegebenenfalls `APPLIES_IN` alle potenziell einschlägigen aktiven und zeitlich gültigen `RaN` bestimmen; `GOVERNS` für die aktuellen konkreten Ziele abgleichen und erforderliche Zielkanten vorbereiten.
-2. Jede normalisierte Condition reproduzierbar auswerten. Nicht katalogisierte oder mehrdeutige Pfade ergeben `UNEVALUABLE`.
-3. Aus `effect` und Bedingung pro Regel `ALLOW`, `DENY` oder `NO_DECISION` ableiten.
-4. Eine einzelne Regelverletzung als `DENY` behandeln und die Entscheidung blockieren, ohne allein einen `RaNConflict` zu erzeugen.
-5. Nur Regeln mit demselben `decisionKey`, überlappendem Scope und gemeinsamem Ziel auf widersprüchliche Ergebnisse vergleichen.
-6. Für jeden tatsächlichen Widerspruch aus `ALLOW` und `DENY` die Prioritäten vergleichen.
-7. Bei unterschiedlichen Prioritäten ausschließlich im Widerspruch der größeren Zahl Vorrang geben.
-8. Bei gleicher höchster einschlägiger Priorität einen offenen `RaNConflict` mit `conflictType = PRIORITY_TIE` und einem aus ChangeEvent, sortierter Konfliktmenge und Entscheidung abgeleiteten `conflictKey` vorbereiten.
-9. Bei nicht eindeutig bewertbarer Anwendbarkeit oder Vereinbarkeit einen offenen `RaNConflict` mit `conflictType = UNEVALUABLE` und entsprechendem `conflictKey` vorbereiten.
-10. Automatische Änderungen blockieren, deren Zulässigkeit vom offenen Konflikt abhängt.
+1. Für jedes aktive RaN mindestens ein geschütztes CiV, ein geschütztes PiF2, ihre Kohärenz über `INSCRIBES_PURPOSE_IN` und die organisatorische Vereinbarkeit mit dem Scope prüfen. Fehlende oder widersprüchliche Schutzbeziehungen blockieren die Aktivierung oder Entscheidung; `SYNC` ergänzt sie nicht automatisch.
+2. Anhand von `governedTypes`, `scopeType` und gegebenenfalls `APPLIES_IN` alle potenziell einschlägigen aktiven und zeitlich gültigen `RaN` bestimmen; `GOVERNS` für die aktuellen konkreten Umsetzungselemente abgleichen und erforderliche Zielkanten vorbereiten.
+3. Jede normalisierte Condition reproduzierbar auswerten. Nicht katalogisierte oder mehrdeutige Pfade ergeben `UNEVALUABLE`.
+4. Aus `effect` und Bedingung pro Regel `ALLOW`, `DENY` oder `NO_DECISION` ableiten.
+5. Eine einzelne Regelverletzung als `DENY` behandeln und die Entscheidung blockieren, ohne allein einen `RaNConflict` zu erzeugen.
+6. Nur Regeln mit demselben `decisionKey`, überlappendem Scope und gemeinsamem Ziel auf widersprüchliche Ergebnisse vergleichen.
+7. Für jeden tatsächlichen Widerspruch aus `ALLOW` und `DENY` die Prioritäten vergleichen.
+8. Bei unterschiedlichen Prioritäten ausschließlich im Widerspruch der größeren Zahl Vorrang geben.
+9. Bei gleicher höchster einschlägiger Priorität einen offenen `RaNConflict` mit `conflictType = PRIORITY_TIE` und einem aus ChangeEvent, sortierter Konfliktmenge und Entscheidung abgeleiteten `conflictKey` vorbereiten.
+10. Bei nicht eindeutig bewertbarer Anwendbarkeit oder Vereinbarkeit einen offenen `RaNConflict` mit `conflictType = UNEVALUABLE` und entsprechendem `conflictKey` vorbereiten.
+11. Automatische Änderungen blockieren, deren Zulässigkeit vom offenen Konflikt abhängt.
 
 Ein niedriger priorisiertes `RaN` wird durch den Vorrang nicht aufgehoben und bleibt für vereinbare sowie andere Entscheidungen anwendbar. `ruleType` wird nicht als Rangfolge verwendet.
 
@@ -382,7 +389,7 @@ Technische Diagnosedaten sind kein Ersatz für das abschließende `SyncEvent`. E
 
 ## 11. Austauschformat
 
-`JCIChangeRequest` und `JCISyncResult` verwenden das in Abschnitt 12.6 von `JCI_CONTEXT.md` festgelegte, gegenüber 1.0 inkompatibel präzisierte Austauschformat mit `schemaVersion = "1.1"`. Die verbindlichen JSON-Schemas liegen unter `docs/schemas/`. Ein SyncRun lehnt Dokumente mit unbekannter `schemaVersion`, zusätzlichen nicht erlaubten Feldern oder ungültigen Inhalten vor jeder Graphänderung ab.
+`JCIChangeRequest` und `JCISyncResult` verwenden das in Abschnitt 12.6 von [`JCI_CONTEXT.md`](JCI_CONTEXT.md) festgelegte, gegenüber 1.0 inkompatibel präzisierte Austauschformat mit `schemaVersion = "1.1"`. Die verbindlichen JSON-Schemas liegen unter `docs/schemas/`. Ein SyncRun lehnt Dokumente mit unbekannter `schemaVersion`, zusätzlichen nicht erlaubten Feldern oder ungültigen Inhalten vor jeder Graphänderung ab.
 
 Ein angenommener `JCIChangeRequest` enthält mindestens `requestId`, `idempotencyKey`, `requestedAt`, `requestedRevision`, `changeType`, `target`, `requestedByRoleAssignmentId` und `reason`. Beim Speichern gilt:
 

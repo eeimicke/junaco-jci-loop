@@ -2,7 +2,7 @@
 
 ## 1. Zweck
 
-Dieses Dokument regelt, wie Änderungen an der Spezifikation des JCI-Modells vorgeschlagen, geprüft und übernommen werden. Die kanonische fachliche Quelle ist `docs/JCI_CONTEXT.md`.
+Dieses Dokument regelt, wie Änderungen an der Spezifikation des JCI-Modells vorgeschlagen, geprüft und übernommen werden. Die kanonische fachliche Quelle ist [`docs/JCI_CONTEXT.md`](docs/JCI_CONTEXT.md).
 
 ## 2. Verantwortlichkeit im Einzelbetrieb
 
@@ -12,8 +12,8 @@ Eine zweite menschliche Freigabe ist im Einzelbetrieb nicht verpflichtend. Ein a
 
 ## 3. Änderungsklassen
 
-| Klasse               | Bedeutung                                                       | Erforderliche Prüfung                         |
-| -------------------- | --------------------------------------------------------------- | --------------------------------------------- |
+| Klasse               | Bedeutung                                                        | Erforderliche Prüfung                         |
+| -------------------- | ---------------------------------------------------------------- | --------------------------------------------- |
 | Redaktionell         | Rechtschreibung, Formatierung oder Links ohne Bedeutungsänderung | Formale Prüfung und Selbstkontrolle           |
 | Präzisierung         | Verständlichere Beschreibung bei unveränderter Semantik          | Abgleich mit der gesamten Spezifikation       |
 | Semantische Änderung | Änderung von Elementen, Beziehungen, Kardinalitäten oder Regeln  | Vollständige Modell- und Abhängigkeitsprüfung |

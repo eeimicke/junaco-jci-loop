@@ -4,7 +4,7 @@
 
 ## Zweck
 
-Dieser Leitfaden ordnet die Implementierungsschritte ein. Verbindlich bleiben `JCI_CONTEXT.md`, `JCI_ONTOLOGY.md`, `JCI_GRAPH_RULES.md` und `JCI_SYNC_SPEC.md`.
+Dieser Leitfaden ordnet die Implementierungsschritte ein. Verbindlich bleiben [`JCI_CONTEXT.md`](../JCI_CONTEXT.md), [`JCI_ONTOLOGY.md`](../JCI_ONTOLOGY.md), [`JCI_GRAPH_RULES.md`](../JCI_GRAPH_RULES.md) und [`JCI_SYNC_SPEC.md`](../JCI_SYNC_SPEC.md).
 
 ## 1. Einmaligen Bootstrap ausführen
 
@@ -16,15 +16,21 @@ Vor dem Commit sind der leere Ausgangsgraph, die Vollständigkeit des Minimalgra
 
 Jeder Knoten erhält den abstrakten Typ `JCIEntity` und genau einen konkreten `entityType`. Gemeinsame Pflichtfelder sind UUID, Name, Zeitangaben, positive Revision und typgerechter Status. Neu erzeugte Entitäten beginnen mit `revision = 1`. `RoF` und `ERoF` werden nicht als eigene Knoten angelegt.
 
+Ein `CiV` speichert genau einen Wert mit den Pflichtfeldern `notCiV`, `selfCiV` und `toServeCiV`. Sein Scope ist ausschließlich die eine `HELD_BY`-Beziehung zu `RoFOrg`, `RoFTeam` oder einem menschlichen `RoFTeamMember`; `purpose`, `values` und `scope` werden am CiV nicht gespeichert. `INFORMED_BY` dokumentiert nur ausdrücklich bestätigte Herkunft. Alle ein `PiF2` unmittelbar begründenden CiV müssen denselben Werteträger besitzen.
+
 Eine `Verification` speichert zusätzlich `evaluatedResultRevision` und `checkedCriterionRevision`. Sie ist nur anwendbar, wenn sie nicht ersetzt wurde und beide gebundenen Revisionen den aktuellen Revisionen ihres `Result` und `SuccessCriterion` entsprechen. Beispiel: Ändert sich ein Kriterium von Revision 2 auf 3, darf eine auf Revision 2 gebundene Prüfung nicht mehr zur aktuellen Zielerreichung beitragen.
 
 ## 3. Beziehungen validieren
 
 Nur kanonische Beziehungstypen sind zulässig. Vor Aktivierung werden Richtung, Endpunkttypen, Kardinalitäten, zeitliche Gültigkeit und zusätzliche Invarianten geprüft. Inverse Lesarten erzeugen keine zweite Kante.
 
+Ein aktives `RaN` besitzt mindestens ein `PROTECTS` zu `CiV`, mindestens ein `PROTECTS` zu einem von diesem CiV begründeten `PiF2` und mindestens ein `GOVERNS` zu einem zulässigen Umsetzungselement. Zulässige Umsetzungstypen umfassen die Zukunftsebenen `PiF1s` bis `PiF1o`, Arbeit, Erfolg und Prüfung, Organisation, Rollen und Umwelt. `PiF2` ist kein `GOVERNS`-Ziel. Schutzbeziehungen werden nur nach menschlicher Bestätigung gespeichert und nicht durch `SYNC` abgeleitet.
+
+Bei der Migration einer bestehenden `GOVERNS`-Kante zu `PiF2` wird zunächst ein `PROTECTS`-Kandidat zum PiF2 vorbereitet. Ein berechtigtes `RoleAssignment` bestätigt mindestens ein durch dieses PiF2 verbundenes CiV als ebenfalls geschützt und verbindet die konkreten Umsetzungselemente über `GOVERNS`. Erst nach erfolgreicher SYNC-Prüfung wird die alte Kante entfernt. Eine automatische CiV-Auswahl ist unzulässig.
+
 ## 4. Änderungsauftrag annehmen
 
-Ein Auftrag wird gegen `schemas/jci-change-request.schema.json` geprüft. Das Schema kontrolliert Transportform und Datentypen. Nach der Annahme wird das `ChangeEvent` eindeutig gespeichert und ein technischer Versuch eingeplant. Bis ein Versuch abgeschlossen ist, darf das `ChangeEvent` noch keine `TRIGGERS`-Beziehung besitzen.
+Ein Auftrag wird gegen [`schemas/jci-change-request.schema.json`](../schemas/jci-change-request.schema.json) geprüft. Das Schema kontrolliert Transportform und Datentypen. Nach der Annahme wird das `ChangeEvent` eindeutig gespeichert und ein technischer Versuch eingeplant. Bis ein Versuch abgeschlossen ist, darf das `ChangeEvent` noch keine `TRIGGERS`-Beziehung besitzen.
 
 Die Provenienz hängt vom Änderungstyp ab:
 
@@ -74,14 +80,15 @@ Ein Korrekturauftrag übermittelt `expectedHistoryViewHash` und lexikografisch s
 2. Schema und Pflichtfelder
 3. ID, Typ, erwartete Revision und Statusübergang
 4. Beziehungstypen und Kardinalitäten einschließlich bedingter `CHANGED_BY`- und `AFFECTS`-Kanten
-5. WHY-, WHO- und Umweltpfade
-6. Zielrevisionen und Anwendbarkeit von `Verification`
-7. Task- und Zukunftsaggregation
-8. anwendbare `RaN`, Priorität und Konflikte
-9. vorbereitete Revisionen und `PiH` beziehungsweise Hash und Feldkonflikte einer historischen Korrektur
-10. atomare Übernahme oder vollständiges Zurückrollen
-11. unveränderliches `SyncEvent` mit eindeutiger `runId`
-12. Zählwerte und Ergebnisdokument
+5. CiV-Dimensionen, `HELD_BY`, `INFORMED_BY` und gemeinsamer PiF2-Scope
+6. WHY-, WHO- und Umweltpfade
+7. Zielrevisionen und Anwendbarkeit von `Verification`
+8. Task- und Zukunftsaggregation
+9. `PROTECTS`-Kohärenz, `GOVERNS`-Zieltypen, anwendbare `RaN`, Priorität und Konflikte
+10. vorbereitete Revisionen und `PiH` beziehungsweise Hash und Feldkonflikte einer historischen Korrektur
+11. atomare Übernahme oder vollständiges Zurückrollen
+12. unveränderliches `SyncEvent` mit eindeutiger `runId`
+13. Zählwerte und Ergebnisdokument
 
 ## 9. Tests
 

@@ -2,7 +2,7 @@
 
 ## Kanonische Quelle
 
-Vor jeder inhaltlichen Änderung ist `docs/JCI_CONTEXT.md` vollständig zu lesen. Dieses Dokument ist die aktuelle kanonische Spezifikation des JUNACO Continuous Integration Model for Organisations und des JCI Loop.
+Vor jeder inhaltlichen Änderung ist [`docs/JCI_CONTEXT.md`](docs/JCI_CONTEXT.md) vollständig zu lesen. Dieses Dokument ist die aktuelle kanonische Spezifikation des JUNACO Continuous Integration Model for Organisations und des JCI Loop.
 
 ## Fachliche Regeln
 
@@ -19,7 +19,7 @@ Vor jeder inhaltlichen Änderung ist `docs/JCI_CONTEXT.md` vollständig zu lesen
 - Fachliche Änderungen im Pull Request begründen.
 - Automatische Prüfungen ausführen und festgestellte Konflikte offen dokumentieren.
 - Keine Veröffentlichung, kein Push und kein Merge ohne ausdrücklichen Auftrag.
-- `LICENSE.md`, `NOTICE.md`, `GOVERNANCE.md` und `.github/CODEOWNERS` nur auf ausdrücklichen Auftrag ändern.
+- [`LICENSE.md`](LICENSE.md), [`NOTICE.md`](NOTICE.md), [`GOVERNANCE.md`](GOVERNANCE.md) und [`.github/CODEOWNERS`](.github/CODEOWNERS) nur auf ausdrücklichen Auftrag ändern.
 - Bei jeder Änderung einer im Übersetzungsmanifest geführten deutschen Datei die englische Fassung strukturgleich aktualisieren. Kapitel, Überschriftenebenen, Tabellen, Codeblöcke, Beispiele, Regeln und Ausnahmen müssen in derselben Reihenfolge erhalten bleiben.
 - Ein Sprachpaar nur dann als `synchronized` kennzeichnen, wenn die automatische Strukturprüfung und der inhaltliche Abgleich erfolgreich sind; andernfalls `review-required` verwenden.
 
@@ -28,5 +28,5 @@ Vor jeder inhaltlichen Änderung ist `docs/JCI_CONTEXT.md` vollständig zu lesen
 - Drittinhalte, Zitate und Quellen eindeutig kennzeichnen.
 - Keine Rechte an fremden Inhalten unterstellen.
 - Externe Modellbeiträge erst nach dokumentierter Rechteklärung übernehmen.
-- Die in `LICENSE.md` festgelegte Abgrenzung zwischen JCI-Modell, Masterarbeit, Software, Anwendungen und Drittinhalten beachten.
+- Die in [`LICENSE.md`](LICENSE.md) festgelegte Abgrenzung zwischen JCI-Modell, Masterarbeit, Software, Anwendungen und Drittinhalten beachten.
 

@@ -19,12 +19,12 @@ ENTITY_TYPES = {
 }
 
 RELATIONSHIPS = {
-    "PROVIDES_CONTEXT_TO", "INSCRIBES_PURPOSE_IN", "CONTRIBUTES_TO",
+    "PROVIDES_CONTEXT_TO", "HELD_BY", "INFORMED_BY", "INSCRIBES_PURPOSE_IN", "CONTRIBUTES_TO",
     "HAS_SUCCESS_CRITERIA", "ACCOUNTABLE_MEMBER", "DECOMPOSES_INTO",
     "DEPENDS_ON", "RESPONSIBLE_TEAM", "EXECUTED_BY", "USES", "PRODUCES",
     "EVALUATES", "CHECKS", "USES_EVIDENCE", "SUPERSEDES", "HAS_TEAM",
     "HAS_MEMBER", "HAS_ROLE", "HAS_ASSIGNMENT", "IN_TEAM", "ACTIVATES_ROLE",
-    "SOURCE_ORG", "TARGET_ORG", "REPRESENTED_BY", "OWNED_BY", "GOVERNS",
+    "SOURCE_ORG", "TARGET_ORG", "REPRESENTED_BY", "OWNED_BY", "PROTECTS", "GOVERNS",
     "APPLIES_IN", "CONFLICTING_RULE", "AFFECTS", "DETECTED_BY", "RESOLVED_BY",
     "RESOLVED_THROUGH", "CREATED_BY", "REQUESTED_BY", "CORRECTED_BY",
     "CHANGED_BY", "TRIGGERS", "EXECUTES", "REPLACED_BY",
@@ -85,6 +85,66 @@ class SpecificationConsistencyTests(unittest.TestCase):
             with self.subTest(relationship=relationship):
                 self.assertIn(relationship, self.context)
                 self.assertIn(relationship, combined_implementation)
+
+    def test_civ_dimensions_holder_and_pif2_scope_are_projected(self):
+        """The new one-value CiV model must remain visible in every normative layer."""
+        jsonld = read("schemas/jci-context.jsonld")
+        vocabulary = read("ns/jci/1.0/index.html")
+        normative = self.context + self.ontology + self.rules + self.sync + self.neo4j
+
+        for field in ("notCiV", "selfCiV", "toServeCiV"):
+            with self.subTest(civ_field=field):
+                self.assertIn(field, self.context)
+                self.assertIn(field, self.ontology)
+                self.assertIn(field, self.rules)
+                self.assertIn(field, self.sync)
+                self.assertIn(field, self.neo4j)
+                self.assertIn(f'"{field}"', jsonld)
+                self.assertIn(f"<code>{field}</code>", vocabulary)
+
+        self.assertIn("exactly one `HELD_BY`", read("en/JCI_CONTEXT.md"))
+        self.assertIn("genau ein `HELD_BY`", self.context)
+        self.assertIn("memberType = HUMAN", normative)
+        self.assertIn("size(holders) <> 1", self.neo4j)
+        self.assertIn("value = source", self.neo4j)
+        self.assertIn("size(values) < 1 OR size(holders) <> 1", self.neo4j)
+
+    def test_ran_protects_values_and_future_and_governs_implementation(self):
+        """RaN protection and implementation governance must remain distinct."""
+        english_context = read("en/JCI_CONTEXT.md")
+        english_ontology = read("en/JCI_ONTOLOGY.md")
+        english_rules = read("en/JCI_GRAPH_RULES.md")
+        english_sync = read("en/JCI_SYNC_SPEC.md")
+        english_neo4j = read("en/implementations/neo4j/JCI_NEO4J_SCHEMA.md")
+        jsonld = read("schemas/jci-context.jsonld")
+        vocabulary = read("ns/jci/1.0/index.html")
+
+        for document in (
+            self.context, self.ontology, self.rules, self.sync, self.neo4j,
+            english_context, english_ontology, english_rules, english_sync,
+            english_neo4j,
+        ):
+            with self.subTest(document_id=id(document)):
+                self.assertIn("PROTECTS", document)
+
+        self.assertIn('"PROTECTS"', jsonld)
+        self.assertIn("<code>PROTECTS</code>", vocabulary)
+
+        for target_type in (
+            "PiF1s", "PiF1t", "PiF1o", "Task", "SuccessCriterion",
+            "Result", "Verification", "Evidence", "RoFOrg",
+            "RoFOrgRelationship", "RoFTeam", "RoFTeamMember", "RoFRole",
+            "RoleAssignment", "ERoFObject",
+        ):
+            with self.subTest(governed_type=target_type):
+                self.assertIn(target_type, self.ontology)
+                self.assertIn(target_type, self.neo4j)
+
+        self.assertIn("'CiV' IN labels(target)]) < 1", self.neo4j)
+        self.assertIn("'PiF2' IN labels(target)]) < 1", self.neo4j)
+        self.assertIn("incoherentProtectedTargetId", self.neo4j)
+        self.assertIn("menschlich", self.sync.lower())
+        self.assertIn("human", english_sync.lower())
 
     def test_required_structured_types_exist(self):
         for type_name in (
@@ -343,6 +403,116 @@ class SpecificationConsistencyTests(unittest.TestCase):
                     f"Uneinheitliche Markdown-Tabelle in {path}:{line_number}",
                 )
 
+    def test_markdown_tables_follow_aligned_layout_standard(self):
+        """All Markdown tables use one column-aligned, renderer-safe GFM layout."""
+        separator = re.compile(r"^(:)?-{3,}(:)?$")
+
+        for path in ROOT.rglob("*.md"):
+            in_fence = False
+            lines = path.read_text(encoding="utf-8").splitlines()
+            line_index = 0
+            while line_index < len(lines):
+                line = lines[line_index]
+                if re.match(r"^\s*(```|~~~)", line):
+                    in_fence = not in_fence
+                    line_index += 1
+                    continue
+                if in_fence or not (
+                    line.lstrip().startswith("|") and line.rstrip().endswith("|")
+                ):
+                    line_index += 1
+                    continue
+
+                first_line_number = line_index + 1
+                table_lines = []
+                while line_index < len(lines):
+                    candidate = lines[line_index]
+                    if not (
+                        candidate.lstrip().startswith("|")
+                        and candidate.rstrip().endswith("|")
+                    ):
+                        break
+                    table_lines.append(candidate)
+                    line_index += 1
+
+                rows = [
+                    [cell.strip() for cell in re.split(r"(?<!\\)\|", row.strip()[1:-1])]
+                    for row in table_lines
+                ]
+                self.assertGreaterEqual(
+                    len(rows),
+                    2,
+                    f"Unvollständige Markdown-Tabelle in {path}:{first_line_number}",
+                )
+                separator_matches = [separator.fullmatch(cell) for cell in rows[1]]
+                self.assertTrue(
+                    all(separator_matches),
+                    f"Ungültige Trennzeile in {path}:{first_line_number + 1}",
+                )
+
+                widths = []
+                for column_index, match in enumerate(separator_matches):
+                    colon_count = int(bool(match.group(1))) + int(bool(match.group(2)))
+                    content_width = max(
+                        len(row[column_index])
+                        for row_index, row in enumerate(rows)
+                        if row_index != 1
+                    )
+                    widths.append(max(content_width, 3 + colon_count))
+
+                expected = []
+                for row_index, row in enumerate(rows):
+                    formatted_cells = []
+                    for column_index, cell in enumerate(row):
+                        width = widths[column_index]
+                        if row_index == 1:
+                            match = separator_matches[column_index]
+                            left = ":" if match.group(1) else ""
+                            right = ":" if match.group(2) else ""
+                            cell = left + "-" * (width - len(left) - len(right)) + right
+                        formatted_cells.append(cell.ljust(width))
+                    expected.append("| " + " | ".join(formatted_cells) + " |")
+
+                self.assertEqual(
+                    expected,
+                    table_lines,
+                    f"Nicht ausgerichtetes Tabellenlayout in {path}:{first_line_number}",
+                )
+
+    def test_vocabulary_tables_are_responsive(self):
+        vocabulary_page = DOCS / "ns/jci/1.0/index.html"
+        page = vocabulary_page.read_text(encoding="utf-8")
+        self.assertIn(".table-wrap {", page)
+        self.assertIn("overflow-x: auto", page)
+        self.assertEqual(page.count('<div class="table-wrap"'), page.count("<table>"))
+
+    def test_local_file_references_are_clickable(self):
+        """File-like references must always use relative Markdown links."""
+        reference_pattern = re.compile(
+            r"(?<!\[)`([^`]+\.(?:md|mmd|json|jsonld|html|py|txt|yml|yaml)|\.github/CODEOWNERS)`(?!\]\()",
+            flags=re.IGNORECASE,
+        )
+
+        for path in ROOT.rglob("*.md"):
+            if ".git" in path.parts:
+                continue
+            in_fence = False
+            for line_number, line in enumerate(
+                path.read_text(encoding="utf-8").splitlines(), start=1
+            ):
+                if re.match(r"^\s*(```|~~~)", line):
+                    in_fence = not in_fence
+                    continue
+                if in_fence:
+                    continue
+
+                for match in reference_pattern.finditer(line):
+                    reference = match.group(1)
+                    self.fail(
+                        f"Lokaler Dateiverweis ist nicht klickbar: "
+                        f"{path}:{line_number} -> {reference}"
+                    )
+
     def test_translation_manifest_is_complete_and_resolvable(self):
         manifest = json.loads(TRANSLATION_MANIFEST.read_text(encoding="utf-8"))
         self.assertEqual(manifest["canonicalLanguage"], "de")
@@ -411,13 +581,9 @@ class SpecificationConsistencyTests(unittest.TestCase):
 
     def test_local_markdown_links_resolve(self):
         link_pattern = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
-        roots = [ROOT / name for name in (
-            "README.md", "LICENSE.md", "NOTICE.md", "GOVERNANCE.md",
-            "CONTRIBUTING.md", "AGENTS.md", "LICENSE.en.md", "NOTICE.en.md",
-            "GOVERNANCE.en.md", "CONTRIBUTING.en.md", "AGENTS.en.md",
-        )]
-        markdown_files = [path for path in roots if path.is_file()]
-        markdown_files.extend(DOCS.rglob("*.md"))
+        markdown_files = [
+            path for path in ROOT.rglob("*.md") if ".git" not in path.parts
+        ]
 
         for path in markdown_files:
             content = path.read_text(encoding="utf-8")

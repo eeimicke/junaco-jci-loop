@@ -16,7 +16,7 @@ Diese Seite führt vom verständlichen Einstieg zur formalen und technischen Spe
 
 ## Sprachregel
 
-`docs/JCI_CONTEXT.md` ist die kanonische Spezifikation. Die englischen Dokumente sind kontrollierte Übersetzungen. Bei einer Abweichung gilt vorläufig die deutsche Fassung, bis die Übersetzung korrigiert und erneut geprüft wurde.
+[`docs/JCI_CONTEXT.md`](JCI_CONTEXT.md) ist die kanonische Spezifikation. Die englischen Dokumente sind kontrollierte Übersetzungen. Bei einer Abweichung gilt vorläufig die deutsche Fassung, bis die Übersetzung korrigiert und erneut geprüft wurde.
 
 Technische Artefakte wie JSON-Schemas, JSON-LD-Kontext, Tests und Workflows existieren nur einmal. Ihre IDs und kanonischen JCI-Begriffe sind sprachunabhängig.
 

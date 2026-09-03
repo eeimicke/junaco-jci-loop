@@ -13,6 +13,8 @@ The **JCI Loop** describes these relationships in a common graph and makes chang
 ```mermaid
 flowchart LR
     PiH -->|PROVIDES_CONTEXT_TO| CiV
+    CiV -->|HELD_BY| ValueHolder[RoFOrg, RoFTeam, or human]
+    CiV -->|INFORMED_BY| SourceCiV[another CiV]
     CiV -->|INSCRIBES_PURPOSE_IN| PiF2
     PiF1s -->|CONTRIBUTES_TO| PiF2
     PiF1t -->|CONTRIBUTES_TO| PiF1s
@@ -24,7 +26,7 @@ flowchart LR
     SyncEvent -->|CREATES_HISTORY| PiH
 ```
 
-`CiV` describes purpose and values. `PiF2` to `PiF1o` translate this purpose into increasingly concrete future states. Tasks realize the operational state. Results are checked. `RaN` limits decisions, `RoF` assigns responsibility and `ERoF` describes the relevant environment. `SYNC` tracks changes; superseded states remain as `PiH`.
+Each `CiV` describes one value through the NOT, SELF, and TO SERVE dimensions. `HELD_BY` assigns it to exactly one organization, team, or human. A `PiF2` is developed from explicitly selected CiV; `PiF2` through `PiF1o` make the intended future increasingly concrete. Through `PROTECTS`, `RaN` protects the CiV and PiF2 and governs their concrete implementation through `GOVERNS`. Tasks realize the operational state. Results are checked. `RoF` assigns responsibility and `ERoF` describes the relevant environment. `SYNC` tracks changes; superseded states remain as `PiH`.
 
 ## What makes JCI special
 
@@ -32,7 +34,7 @@ flowchart LR
 - **WHY path:** You can go back from a Task to the value-related purpose.
 - **WHO path:** Execution, team, member, role and organization remain clear.
 - **Testable Goals:** A `PiF1o` has success criteria; Results and verifications remain separate.
-- **Rules as a cross-section:** `RaN` can allow, require or prohibit specific decisions.
+- **Value protection as a cross-section:** `RaN` protects CiV and PiF2 and may allow, require, or prohibit concrete implementation decisions.
 - **Historization:** Only actually superseded states are preserved as immutable `PiH`.
 - **Controlled Change:** `SYNC` checks effects, conflicts, revisions and consequential changes.
 

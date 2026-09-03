@@ -4,3 +4,7 @@ flowchart RL
     PiF1t -->|CONTRIBUTES_TO| PiF1s
     PiF1s -->|CONTRIBUTES_TO| PiF2
     CiV -->|INSCRIBES_PURPOSE_IN| PiF2
+    RaN -->|PROTECTS| CiV
+    RaN -->|PROTECTS| PiF2
+    CiV -->|HELD_BY| Holder[RoF scope]
+    CiV -->|INFORMED_BY| SourceCiV[another CiV]

@@ -413,7 +413,125 @@ def valid_correction_value_maps(
     return correction_type in {"CORRECTION", "CLARIFICATION"}
 
 
+def valid_civ_model(
+    *,
+    value_id: str,
+    not_civ: str,
+    self_civ: str,
+    to_serve_civ: str,
+    holder_id: str,
+    holder_type: str,
+    holder_member_type: str | None = None,
+    informed_by_ids: list[str] | None = None,
+    pif2_holder_sets: list[list[str]] | None = None,
+) -> bool:
+    """Prüft die drei CiV-Dimensionen und den abgeleiteten Scope."""
+    if not all(part.strip() for part in (not_civ, self_civ, to_serve_civ)):
+        return False
+    if not holder_id or holder_type not in {"RoFOrg", "RoFTeam", "RoFTeamMember"}:
+        return False
+    if holder_type == "RoFTeamMember" and holder_member_type != "HUMAN":
+        return False
+    if value_id in (informed_by_ids or []):
+        return False
+    return all(set(holders) == {holder_id} for holders in (pif2_holder_sets or []))
+
+
+RAN_GOVERNED_TYPES = {
+    "PiF1s", "PiF1t", "PiF1o", "Task", "SuccessCriterion", "Result",
+    "Verification", "Evidence", "RoFOrg", "RoFOrgRelationship", "RoFTeam",
+    "RoFTeamMember", "RoFRole", "RoleAssignment", "ERoFObject",
+}
+
+
+def valid_ran_protection(
+    *,
+    status: str,
+    protected_civ_ids: list[str],
+    protected_pif2_ids: list[str],
+    inscriptions: set[tuple[str, str]],
+    governed_types: list[str],
+    human_confirmed: bool = True,
+    scope_compatible: bool = True,
+) -> bool:
+    """Prüft Schutzgegenstand, Kohärenz und konkrete RaN-Umsetzung."""
+    if status not in {"DRAFT", "ACTIVE"}:
+        return False
+    if not set(governed_types).issubset(RAN_GOVERNED_TYPES):
+        return False
+    if status == "DRAFT":
+        return True
+    if not (
+        protected_civ_ids
+        and protected_pif2_ids
+        and governed_types
+        and human_confirmed
+        and scope_compatible
+    ):
+        return False
+    return (
+        all(
+            any((civ_id, pif2_id) in inscriptions for pif2_id in protected_pif2_ids)
+            for civ_id in protected_civ_ids
+        )
+        and all(
+            any((civ_id, pif2_id) in inscriptions for civ_id in protected_civ_ids)
+            for pif2_id in protected_pif2_ids
+        )
+    )
+
+
 class ModelRuleTests(unittest.TestCase):
+    def test_active_ran_protects_coherent_civ_and_pif2_pair(self):
+        """Eine aktive RaN schützt WHY und regelt dessen konkrete Umsetzung."""
+        base = {
+            "status": "ACTIVE",
+            "protected_civ_ids": ["civ-security"],
+            "protected_pif2_ids": ["pif2-trusted-platform"],
+            "inscriptions": {("civ-security", "pif2-trusted-platform")},
+            "governed_types": ["Task", "Verification", "RoFRole"],
+        }
+        self.assertTrue(valid_ran_protection(**base))
+        self.assertFalse(valid_ran_protection(**(base | {"protected_civ_ids": []})))
+        self.assertFalse(valid_ran_protection(**(base | {"protected_pif2_ids": []})))
+        self.assertFalse(valid_ran_protection(**(base | {"governed_types": []})))
+        self.assertFalse(valid_ran_protection(**(base | {"inscriptions": set()})))
+        self.assertFalse(valid_ran_protection(**(base | {"governed_types": ["PiF2"]})))
+        self.assertFalse(valid_ran_protection(**(base | {"human_confirmed": False})))
+        self.assertFalse(valid_ran_protection(**(base | {"scope_compatible": False})))
+
+        # Nicht jeder CiV eines PiF2 muss durch dieselbe RaN geschützt werden.
+        self.assertTrue(valid_ran_protection(**(base | {
+            "inscriptions": {
+                ("civ-security", "pif2-trusted-platform"),
+                ("civ-clarity", "pif2-trusted-platform"),
+            },
+        })))
+
+    def test_civ_dimensions_holder_and_derived_pif2_scope(self):
+        """Ein Wert ist dreidimensional, eindeutig getragen und scope-konsistent."""
+        base = {
+            "value_id": "civ-clarity-org",
+            "not_civ": "Entscheidungen bleiben nicht absichtlich unklar.",
+            "self_civ": "Wir machen Entscheidungen nachvollziehbar.",
+            "to_serve_civ": "Kunden erhalten verlässliche Orientierung.",
+            "holder_id": "org-junaco",
+            "holder_type": "RoFOrg",
+            "informed_by_ids": ["civ-clarity-member-anna"],
+            "pif2_holder_sets": [["org-junaco", "org-junaco"]],
+        }
+        self.assertTrue(valid_civ_model(**base))
+        self.assertFalse(valid_civ_model(**(base | {"self_civ": ""})))
+        self.assertFalse(valid_civ_model(**(base | {"informed_by_ids": ["civ-clarity-org"]})))
+        self.assertFalse(valid_civ_model(**(base | {"pif2_holder_sets": [["org-junaco", "team-board"]]})))
+        self.assertFalse(valid_civ_model(**(base | {
+            "holder_type": "RoFTeamMember", "holder_member_type": "TECHNICAL",
+        })))
+        self.assertTrue(valid_civ_model(**(base | {
+            "holder_id": "member-anna", "holder_type": "RoFTeamMember",
+            "holder_member_type": "HUMAN", "pif2_holder_sets": [["member-anna"]],
+        })))
+
     def test_terminal_statuses_cannot_reopen(self):
         """
         JCI-Einordnung:
