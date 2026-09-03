@@ -14,13 +14,13 @@ Source ── RELATIONSHIP ──► Target
 
 `Task ── PRODUCES ──► Result` asks forward: “Which Result does this Task produce?” Backward navigation asks: “Which Task produced this Result?” The backward question does not create another stored edge.
 
-| Stored direction | Forward question | Backward question |
-| --- | --- | --- |
-| `PiF1o ── DECOMPOSES_INTO ──► Task` | Which Tasks realise the target? | To which operational target does the Task belong? |
-| `Task ── EXECUTED_BY ──► RoleAssignment` | Which active role executes the Task? | Which Tasks does this role assignment execute? |
-| `Verification ── CHECKS ──► SuccessCriterion` | Which criterion is checked? | Which Verifications evaluate this criterion? |
-| `SyncEvent ── CREATES_HISTORY ──► PiH` | Which history did the run create? | Which run created this `PiH`? |
-| `ChangeEvent ── TARGETS_HISTORY ──► PiH` | Which `PiH` is to be corrected? | Which correction requests target this `PiH`? |
+| Stored direction                              | Forward question                     | Backward question                                 |
+| --------------------------------------------- | ------------------------------------ | ------------------------------------------------- |
+| `PiF1o ── DECOMPOSES_INTO ──► Task`           | Which Tasks realise the target?      | To which operational target does the Task belong? |
+| `Task ── EXECUTED_BY ──► RoleAssignment`      | Which active role executes the Task? | Which Tasks does this role assignment execute?    |
+| `Verification ── CHECKS ──► SuccessCriterion` | Which criterion is checked?          | Which Verifications evaluate this criterion?      |
+| `SyncEvent ── CREATES_HISTORY ──► PiH`        | Which history did the run create?    | Which run created this `PiH`?                     |
+| `ChangeEvent ── TARGETS_HISTORY ──► PiH`      | Which `PiH` is to be corrected?      | Which correction requests target this `PiH`?      |
 
 ## 2. Initial situation and purpose
 
@@ -28,21 +28,22 @@ Example GmbH wants to answer customer enquiries reliably. Earlier complaints abo
 
 ```mermaid
 flowchart LR
-    History[PiH: earlier customer complaints] -->|PROVIDES_CONTEXT_TO| Values[CiV: customer-focused and reliable]
-    Values -->|INSCRIBES_PURPOSE_IN| LongTerm[PiF2: reliable partner]
+    History[PiH: earlier customer complaints] -->|PROVIDES_CONTEXT_TO| Value[CiV: Reliability]
+    Value -->|HELD_BY| Org[RoFOrg: Example Ltd]
+    Value -->|INSCRIBES_PURPOSE_IN| LongTerm[PiF2: reliable partner]
     Strategic[PiF1s: digital learning service] -->|CONTRIBUTES_TO| LongTerm
     Tactical[PiF1t: shared service process] -->|CONTRIBUTES_TO| Strategic
     Operational[PiF1o: response within 24 hours] -->|CONTRIBUTES_TO| Tactical
 ```
 
-| Entity | Example content |
-| --- | --- |
-| `PiH` | Earlier complaints caused by late responses |
-| `CiV` | We act with customer focus, transparency, and reliability. |
-| `PiF2` | Customers experience the organisation as a reliable long-term partner. |
-| `PiF1s` | Customer service operates digitally and learns continuously. |
-| `PiF1t` | All enquiry channels share one service process. |
-| `PiF1o` | Every enquiry receives a qualified response within 24 hours. |
+| Entity  | Example content                                                                                                                                                                      |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `PiH`   | Earlier complaints caused by late responses                                                                                                                                          |
+| `CiV`   | Reliability: NOT = commitments have consequences; SELF = we fulfill commitments transparently; TO SERVE = customers receive dependable orientation. `HELD_BY` points to Example Ltd. |
+| `PiF2`  | Customers experience the organisation as a reliable long-term partner.                                                                                                               |
+| `PiF1s` | Customer service operates digitally and learns continuously.                                                                                                                         |
+| `PiF1t` | All enquiry channels share one service process.                                                                                                                                      |
+| `PiF1o` | Every enquiry receives a qualified response within 24 hours.                                                                                                                         |
 
 Backward navigation from `PiF1o` reaches `CiV` and its historical context, explaining why the operational target exists.
 
@@ -164,15 +165,17 @@ The `Verification` is applicable only while it has not been superseded and the c
 
 `RaN` is an entity type. `RULE`, `NORM`, `POLICY`, `CONSTRAINT`, and `LAW` are values of its `ruleType` property, not additional nodes.
 
-| `ruleType` | Example |
-| --- | --- |
-| `RULE` | Every enquiry requires a category. |
-| `NORM` | Responses use the approved template. |
-| `POLICY` | Only authorised roles may use customer data. |
-| `CONSTRAINT` | Responses must be sent within 24 hours. |
-| `LAW` | Personal data must be processed lawfully. |
+| `ruleType`   | Example                                      |
+| ------------ | -------------------------------------------- |
+| `RULE`       | Every enquiry requires a category.           |
+| `NORM`       | Responses use the approved template.         |
+| `POLICY`     | Only authorised roles may use customer data. |
+| `CONSTRAINT` | Responses must be sent within 24 hours.      |
+| `LAW`        | Personal data must be processed lawfully.    |
 
 Every `RaN` also carries `effect = REQUIRE | PROHIBIT | PERMIT`, `scopeType = GLOBAL | ORGANIZATION | TEAM | ENTITY`, `decisionKey`, `governedTypes`, `priority`, and a normalised `condition` with `combiner = ALL | ANY`.
+
+An active `RaN` protects at least one `CiV` and at least one `PiF2` grounded by it through `PROTECTS`. `GOVERNS`, in contrast, connects the concrete implementation on which the condition is evaluated. In this example, the access rule protects the CiV “Reliability” and the long-term future “reliable partner”.
 
 ```mermaid
 flowchart LR
@@ -198,6 +201,9 @@ The arrows in this type diagram illustrate properties and are not stored JCI rel
 ```mermaid
 flowchart LR
     Rule[RaN: access to customer data]
+    Rule -->|PROTECTS| Value[CiV: Reliability]
+    Rule -->|PROTECTS| Future[PiF2: reliable partner]
+    Value -->|INSCRIBES_PURPOSE_IN| Future
     Rule -->|GOVERNS| Task[Task: Analyse enquiry]
     Rule -->|GOVERNS| Object[ERoFObject: Ticket system]
     Rule -->|APPLIES_IN| Team[RoFTeam: Customer Service]
@@ -205,11 +211,11 @@ flowchart LR
 
 Condition clauses exclusively use `EXISTS`, `NOT_EXISTS`, `EQUALS`, `NOT_EQUALS`, `LESS_THAN`, `LESS_OR_EQUAL`, `GREATER_THAN`, `GREATER_OR_EQUAL`, `IN`, `NOT_IN`, `CONTAINS`, or `MATCHES`.
 
-| `effect` | Condition true | Condition false |
-| --- | --- | --- |
-| `REQUIRE` | `ALLOW` | `DENY` |
-| `PROHIBIT` | `DENY` | `NO_DECISION` |
-| `PERMIT` | `ALLOW` | `NO_DECISION` |
+| `effect`   | Condition true | Condition false |
+| ---------- | -------------- | --------------- |
+| `REQUIRE`  | `ALLOW`        | `DENY`          |
+| `PROHIBIT` | `DENY`         | `NO_DECISION`   |
+| `PERMIT`   | `ALLOW`        | `NO_DECISION`   |
 
 One `DENY` blocks the decision but is not yet a `RaNConflict`.
 
@@ -279,11 +285,11 @@ Dashed arrows are technical process steps, not stored relationships. Every compl
 
 ## 10. The three SYNC outcomes
 
-| Outcome | Domain change | Revision and `PiH` | Completion documentation |
-| --- | --- | --- | --- |
-| `SUCCESS` | commit completely and atomically | for every existing entity that actually changes | `SyncEvent`; at least one `AFFECTS` target |
-| `CONFLICT` | roll back completely | none for rejected states | `SyncEvent`; at least one `AFFECTS` target, optionally `RaNConflict` |
-| `FAILED` | roll back completely | none for rejected states | `SyncEvent` immediately or after technical recovery; `AFFECTS` may be absent only before successful target resolution |
+| Outcome    | Domain change                    | Revision and `PiH`                              | Completion documentation                                                                                              |
+| ---------- | -------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `SUCCESS`  | commit completely and atomically | for every existing entity that actually changes | `SyncEvent`; at least one `AFFECTS` target                                                                            |
+| `CONFLICT` | roll back completely             | none for rejected states                        | `SyncEvent`; at least one `AFFECTS` target, optionally `RaNConflict`                                                  |
+| `FAILED`   | roll back completely             | none for rejected states                        | `SyncEvent` immediately or after technical recovery; `AFFECTS` may be absent only before successful target resolution |
 
 The completed event records the definition used and affected entities:
 
@@ -326,14 +332,14 @@ Two active `HistoricalCorrections` for the same `PiH` may coexist when their `co
 
 ## 12. Complete traceability
 
-| Perspective | Path or question |
-| --- | --- |
-| **WHY** | From `Task` through `PiF1o`, `PiF1t`, `PiF1s`, and `PiF2` to `CiV`: Why does the work exist? |
-| **WHO** | From `Task` through `RoleAssignment`, `RoFTeamMember`, `RoFRole`, `RoFTeam`, and `RoFOrg`: Who acts in which context? |
-| **WHERE** | From `Task` and `RoleAssignment` through `USES` to `ERoFObject` and its `OWNED_BY`: Which environment is used? |
-| **UNDER WHICH RULES** | Backward from a target to `RaN` nodes connected through `GOVERNS`: Which rules apply? |
-| **WITH WHAT RESULT** | From `Task` to `Result`, `Verification`, `SuccessCriterion`, and `Evidence`: What was produced and how was it checked? |
-| **WITH WHAT HISTORY** | From `JCIEntity` and `SyncEvent` to `PiH` and `HistoricalCorrection`: Which former states and corrections exist? |
+| Perspective           | Path or question                                                                                                       |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **WHY**               | From `Task` through `PiF1o`, `PiF1t`, `PiF1s`, and `PiF2` to `CiV`: Why does the work exist?                           |
+| **WHO**               | From `Task` through `RoleAssignment`, `RoFTeamMember`, `RoFRole`, `RoFTeam`, and `RoFOrg`: Who acts in which context?  |
+| **WHERE**             | From `Task` and `RoleAssignment` through `USES` to `ERoFObject` and its `OWNED_BY`: Which environment is used?         |
+| **UNDER WHICH RULES** | Backward from a target to `RaN` nodes connected through `GOVERNS`: Which rules apply?                                  |
+| **WITH WHAT RESULT**  | From `Task` to `Result`, `Verification`, `SuccessCriterion`, and `Evidence`: What was produced and how was it checked? |
+| **WITH WHAT HISTORY** | From `JCIEntity` and `SyncEvent` to `PiH` and `HistoricalCorrection`: Which former states and corrections exist?       |
 
 ## 13. Coverage of all concrete entities
 
@@ -342,6 +348,8 @@ The complete map shows every concrete entity type at least once. It summarizes p
 ```mermaid
 flowchart LR
     PiH -->|PROVIDES_CONTEXT_TO| CiV
+    CiV -->|HELD_BY| ValueHolder[RoFOrg, RoFTeam, or human]
+    CiV -->|INFORMED_BY| SourceCiV[another CiV]
     CiV -->|INSCRIBES_PURPOSE_IN| PiF2
     PiF1s -->|CONTRIBUTES_TO| PiF2
     PiF1t -->|CONTRIBUTES_TO| PiF1s
@@ -367,6 +375,8 @@ flowchart LR
     Verification -->|EVALUATES| Result
     Verification -->|CHECKS| SuccessCriterion
     Verification -->|USES_EVIDENCE| Evidence
+    RaN -->|PROTECTS| CiV
+    RaN -->|PROTECTS| PiF2
     RaN -->|GOVERNS| Task
     RaNConflict -->|CONFLICTING_RULE| RaN
     RaNConflict -->|DETECTED_BY| SyncEvent
@@ -384,11 +394,11 @@ flowchart LR
     HistoricalCorrection -->|SUPERSEDES| PreviousCorrection[HistoricalCorrection: overlapping active predecessor]
 ```
 
-| Area | Entities |
-| --- | --- |
-| Core-element instances | `PiH`, `CiV`, `RaN`, `SYNC`, `PiF2`, `PiF1s`, `PiF1t`, `PiF1o` |
-| Organisation | `RoFOrg`, `RoFOrgRelationship`, `RoFTeam`, `RoFTeamMember`, `RoFRole`, `RoleAssignment` |
-| Work and verification | `Task`, `SuccessCriterion`, `Result`, `Verification`, `Evidence`, `ERoFObject` |
-| Change | `ChangeEvent`, `SyncEvent`, `RaNConflict`, `HistoricalCorrection` |
+| Area                   | Entities                                                                                |
+| ---------------------- | --------------------------------------------------------------------------------------- |
+| Core-element instances | `PiH`, `CiV`, `RaN`, `SYNC`, `PiF2`, `PiF1s`, `PiF1t`, `PiF1o`                          |
+| Organisation           | `RoFOrg`, `RoFOrgRelationship`, `RoFTeam`, `RoFTeamMember`, `RoFRole`, `RoleAssignment` |
+| Work and verification  | `Task`, `SuccessCriterion`, `Result`, `Verification`, `Evidence`, `ERoFObject`          |
+| Change                 | `ChangeEvent`, `SyncEvent`, `RaNConflict`, `HistoricalCorrection`                       |
 
 `JCIEntity`, `JCIElementInstance`, and `GraphObject` are abstract types. `RoF` and `ERoF` are model spaces. `SyncRun` is technical runtime state. They are not counted as additional domain nodes.

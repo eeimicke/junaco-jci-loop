@@ -40,14 +40,14 @@ The stored edges represent domain provenance. The technical arrows to `SyncRun` 
 
 A technical `SyncRun` requires at least:
 
-| Input               | Meaning                                        |
-| ------------------- | ---------------------------------------------- |
-| `runId`             | unique technical run identifier                |
-| `idempotencyKey`    | identifier of the domain change request        |
-| `changeEventId`     | triggering `ChangeEvent`                       |
-| `syncDefinitionId`  | active `SYNC` definition to use                |
-| `startedAt`         | start of the attempt                           |
-| `requestedRevision` | expected revision or `null` for `CREATED`      |
+| Input               | Meaning                                   |
+| ------------------- | ----------------------------------------- |
+| `runId`             | unique technical run identifier           |
+| `idempotencyKey`    | identifier of the domain change request   |
+| `changeEventId`     | triggering `ChangeEvent`                  |
+| `syncDefinitionId`  | active `SYNC` definition to use           |
+| `startedAt`         | start of the attempt                      |
+| `requestedRevision` | expected revision or `null` for `CREATED` |
 
 The `ChangeEvent` already stored before the run has at least:
 
@@ -109,32 +109,32 @@ Because `DEPENDS_ON` may cross PiF1o boundaries, a Task change can affect multip
 
 The following matrix defines the minimum domain traversal. “Upward” means the WHY path to the higher-level future and to `CiV`; “downward” means contributing future elements through operational implementation. Inverse readings use the same stored edge in the opposite direction.
 
-| Changed type | Check directly | Continue indirectly |
-| ------------ | -------------- | ------------------- |
-| `CiV` | connected `PiF2`, context-providing `PiH`, applicable `RaN` | downward through all future levels to Tasks, Result, Verification, RoF, and ERoF |
-| `PiF2` | grounding `CiV`, contributing `PiF1s`, `RaN` | downward to `PiF1o` and operational graph objects |
-| `PiF1s` | target `PiF2`, contributing `PiF1t`, `RaN` | upward to `CiV`, downward to operational graph objects |
-| `PiF1t` | target `PiF1s`, contributing `PiF1o`, `RaN` | upward to `CiV`, downward to Tasks and verification |
-| `PiF1o` | target `PiF1t`, criteria, accountable member, all Tasks, `RaN` | complete WHY path, Task graph, Results, Verifications, teams, roles, and ERoF |
-| `Task` | parent, subtasks, prerequisites, dependent Tasks, PiF1o, team, executors, ERoFObjects, Results, `RaN` | all Task and PiF1o graphs reached from them, including their future and verification paths |
-| `SuccessCriterion` | associated `PiF1o`, checking applicable current Verifications, `RaN` | Results and Tasks of the Verifications; then PiF1o aggregation and future chain |
-| `Result` | producing Task, current and superseded Verifications, `RaN` | PiF1o, criteria, Task graph, and higher future levels |
-| `Verification` | Result, criterion, their bound revisions, predecessor/successor, Evidence | producing Task, PiF1o, all applicable current Verifications, criteria, and higher future levels |
-| `Evidence` | all incoming `USES_EVIDENCE`, `RaN` | their respective domain target paths; Evidence itself determines no status |
-| `RaN` | `GOVERNS`, `APPLIES_IN`, open conflicts | all governed targets and their dependent paths according to this matrix |
-| `RaNConflict` | conflicting rules, affected entities, detecting SyncEvent, resolution references | upon resolution, fully recheck all affected entities and rules |
-| `RoFOrg` | teams, organization relationships, owned ERoFObjects, `RaN` | members, role assignments, Tasks, PiF1o, and the other organization side |
-| `RoFOrgRelationship` | both organizations, representing RoleAssignments, `RaN` | teams, members, ERoF and, for `SUBSIDIARY`, the complete ancestor/descendant structure |
-| `RoFTeam` | organization, members, RoleAssignments, responsible Tasks, `RaN` | PiF1o, Task graph, ERoFObjects, and organization relationships of the participants |
-| `RoFTeamMember` | teams, roles, assignments, accountable PiF1o, `RaN` | executed Tasks, ERoFObjects, organizations, and future paths |
-| `RoFRole` | owning members, activating assignments, `RaN` | teams, Tasks, ERoFObjects, and affected organizations |
-| `RoleAssignment` | member, team, role, Tasks, ERoFObjects, organization representations, `RaN` | organization, PiF1o, Task graph, and environment of all direct uses |
-| `ERoFObject` | using assignments and Tasks, owners, `RaN` | teams, members, organizations, PiF1o, and future paths of the Tasks |
-| `SYNC` | using SyncEvents and valid predecessor definition | the new definition is checked by the previously active definition; no retroactive change to old SyncEvents |
-| `ChangeEvent` | target coordinates, optional `CHANGED_BY` source, `TARGETS_HISTORY`, requester, Evidence, triggered SyncEvents | only within the existing change process; no recursive ChangeEvent |
-| `SyncEvent` | ChangeEvent, executed SYNC definition, affected entities, created history/corrections/conflicts | immutable; check only the consistency of its stored references |
-| `PiH` | original entity, creating SyncEvent, corrections, context use | immutable; treat deviations exclusively as HistoricalCorrection |
-| `HistoricalCorrection` | PiH, ChangeEvent, SyncEvent, corrector, Evidence, `baseHistoryViewHash`, predecessor/successor | immutable; determine the effective `HistoryView` and treat a current model correction as a separate process |
+| Changed type           | Check directly                                                                                                 | Continue indirectly                                                                                                  |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `CiV`                  | three dimensions, `HELD_BY`, `INFORMED_BY`, protecting `RaN`, connected `PiF2`, context-providing `PiH`        | to source CiV, value holder, and protected PiF2; downward to every governed implementation element                   |
+| `PiF2`                 | grounding `CiV`, shared value holder, protecting `RaN`, contributing `PiF1s`                                   | to protected CiV; downward to `PiF1o` and every governed implementation element                                      |
+| `PiF1s`                | target `PiF2`, contributing `PiF1t`, `RaN`                                                                     | upward to `CiV`, downward to operational graph objects                                                               |
+| `PiF1t`                | target `PiF1s`, contributing `PiF1o`, `RaN`                                                                    | upward to `CiV`, downward to Tasks and verification                                                                  |
+| `PiF1o`                | target `PiF1t`, criteria, accountable member, all Tasks, `RaN`                                                 | complete WHY path, Task graph, Results, Verifications, teams, roles, and ERoF                                        |
+| `Task`                 | parent, subtasks, prerequisites, dependent Tasks, PiF1o, team, executors, ERoFObjects, Results, `RaN`          | all Task and PiF1o graphs reached from them, including their future and verification paths                           |
+| `SuccessCriterion`     | associated `PiF1o`, checking applicable current Verifications, `RaN`                                           | Results and Tasks of the Verifications; then PiF1o aggregation and future chain                                      |
+| `Result`               | producing Task, current and superseded Verifications, `RaN`                                                    | PiF1o, criteria, Task graph, and higher future levels                                                                |
+| `Verification`         | Result, criterion, their bound revisions, predecessor/successor, Evidence                                      | producing Task, PiF1o, all applicable current Verifications, criteria, and higher future levels                      |
+| `Evidence`             | all incoming `USES_EVIDENCE`, `RaN`                                                                            | their respective domain target paths; Evidence itself determines no status                                           |
+| `RaN`                  | `PROTECTS`, `GOVERNS`, `APPLIES_IN`, open conflicts                                                            | all protected CiV and PiF2, all governed implementation elements, and their dependent paths according to this matrix |
+| `RaNConflict`          | conflicting rules, affected entities, detecting SyncEvent, resolution references                               | upon resolution, fully recheck all affected entities and rules                                                       |
+| `RoFOrg`               | teams, organization relationships, owned ERoFObjects, `RaN`                                                    | members, role assignments, Tasks, PiF1o, and the other organization side                                             |
+| `RoFOrgRelationship`   | both organizations, representing RoleAssignments, `RaN`                                                        | teams, members, ERoF and, for `SUBSIDIARY`, the complete ancestor/descendant structure                               |
+| `RoFTeam`              | organization, members, RoleAssignments, responsible Tasks, `RaN`                                               | PiF1o, Task graph, ERoFObjects, and organization relationships of the participants                                   |
+| `RoFTeamMember`        | teams, roles, assignments, accountable PiF1o, `RaN`                                                            | executed Tasks, ERoFObjects, organizations, and future paths                                                         |
+| `RoFRole`              | owning members, activating assignments, `RaN`                                                                  | teams, Tasks, ERoFObjects, and affected organizations                                                                |
+| `RoleAssignment`       | member, team, role, Tasks, ERoFObjects, organization representations, `RaN`                                    | organization, PiF1o, Task graph, and environment of all direct uses                                                  |
+| `ERoFObject`           | using assignments and Tasks, owners, `RaN`                                                                     | teams, members, organizations, PiF1o, and future paths of the Tasks                                                  |
+| `SYNC`                 | using SyncEvents and valid predecessor definition                                                              | the new definition is checked by the previously active definition; no retroactive change to old SyncEvents           |
+| `ChangeEvent`          | target coordinates, optional `CHANGED_BY` source, `TARGETS_HISTORY`, requester, Evidence, triggered SyncEvents | only within the existing change process; no recursive ChangeEvent                                                    |
+| `SyncEvent`            | ChangeEvent, executed SYNC definition, affected entities, created history/corrections/conflicts                | immutable; check only the consistency of its stored references                                                       |
+| `PiH`                  | original entity, creating SyncEvent, corrections, context use                                                  | immutable; treat deviations exclusively as HistoricalCorrection                                                      |
+| `HistoricalCorrection` | PiH, ChangeEvent, SyncEvent, corrector, Evidence, `baseHistoryViewHash`, predecessor/successor                 | immutable; determine the effective `HistoryView` and treat a current model correction as a separate process          |
 
 When a relationship changes, `SYNC` starts at both endpoints and uses the matrix row for each. For `REPLACED_BY`, `SUPERSEDES`, `DEPENDS_ON`, `DECOMPOSES_INTO`, `CONTRIBUTES_TO`, and `SUBSIDIARY`, the respective chain is traversed to its end and checked for cycles.
 
@@ -146,9 +146,13 @@ The traversal maintains a visited set of `entityId`, read `revision`, relationsh
 
 ### 5.3 Validation
 
-Before any domain evaluation, `SYNC` checks the status transition against section 2.2.4 of `JCI_CONTEXT.md`. A transition not listed there ends with `outcome = CONFLICT`; the current state remains unchanged. Terminal states are not reopened. A continuation is created as a new entity.
+Before any domain evaluation, `SYNC` checks the status transition against section 2.2.4 of [`JCI_CONTEXT.md`](JCI_CONTEXT.md). A transition not listed there ends with `outcome = CONFLICT`; the current state remains unchanged. Terminal states are not reopened. A continuation is created as a new entity.
 
 Before activating or completing an atomic Task, `SYNC` also checks traceability: the WHY path must lead through `PiF1o`, `PiF1t`, `PiF1s`, and `PiF2` to at least one `CiV`. The WHO path must unambiguously identify the executing `RoleAssignment`, member, role, responsible team, and organization. A missing mandatory path prevents the status transition.
+
+Whenever a CiV is created or changed, `SYNC` validates that it describes exactly one value through the three non-empty dimensions `notCiV`, `selfCiV`, and `toServeCiV`, has exactly one permitted `HELD_BY` value holder, and does not use a technical member as personal scope. `INFORMED_BY` must not form a self-relationship and is never inferred from names, memberships, or affiliations. For every connected `PiF2`, all directly grounding CiV must have the same value holder. A value decision or adoption of dimensions requires human confirmation and is never created by `SYNC` itself.
+
+Whenever a RaN is created, activated, or changed, `SYNC` validates `PROTECTS` separately from `GOVERNS`: an active RaN protects at least one CiV and one PiF2, governs at least one permitted implementation element, and satisfies bidirectional coherence through `INSCRIBES_PURPOSE_IN`. Protection targets must be organizationally compatible with `scopeType`, `APPLIES_IN`, and, for `ENTITY`, the WHY paths of the governed targets. `GOVERNS` to `PiF2` is prohibited. `SYNC` validates human-requested protection edges but neither creates nor guesses them itself.
 
 For `changeType = REPLACED`, `SYNC` checks that exactly one successor of the same concrete type is specified through `REPLACED_BY`. For every other status, the entity being changed must have no outgoing `REPLACED_BY` relationship. Self-references and cycles are rejected.
 
@@ -166,6 +170,8 @@ For every possible change, at least the following are checked:
 - role and team context,
 - temporal overlap of team membership, role ownership, and role assignment,
 - organization-relative ownership and environmental perspective,
+- CiV dimensions, unique value holder, explicit `INFORMED_BY` provenance, and shared PiF2 scope,
+- RaN protection edges, protected CiV-PiF2 coherence, permitted `GOVERNS` implementation types, and protection scope,
 - person-bound ERoF use,
 - organization rules, including freedom from `SUBSIDIARY` cycles,
 - immutable entity types,
@@ -228,16 +234,17 @@ After every change to a future element, `SYNC` evaluates the future chain from b
 
 For every decision affected by rules, `SYNC` performs:
 
-1. Use `governedTypes`, `scopeType`, and, where applicable, `APPLIES_IN` to identify all potentially relevant active and temporally valid `RaN`; compare `GOVERNS` with the current concrete targets and prepare any required target edges.
-2. Evaluate every normalized condition reproducibly. Non-cataloged or ambiguous paths produce `UNEVALUABLE`.
-3. Derive `ALLOW`, `DENY`, or `NO_DECISION` from `effect` and the condition for each rule.
-4. Treat a single rule violation as `DENY` and block the decision without creating a `RaNConflict` solely for that violation.
-5. Compare only rules with the same `decisionKey`, overlapping scope, and a common target for contradictory results.
-6. For every actual contradiction between `ALLOW` and `DENY`, compare priorities.
-7. If priorities differ, give the larger number precedence only within that contradiction.
-8. If the highest relevant priority is tied, prepare an open `RaNConflict` with `conflictType = PRIORITY_TIE` and a `conflictKey` derived from the ChangeEvent, sorted conflict set, and decision.
-9. If applicability or compatibility cannot be evaluated unambiguously, prepare an open `RaNConflict` with `conflictType = UNEVALUABLE` and a corresponding `conflictKey`.
-10. Block automatic changes whose permissibility depends on the open conflict.
+1. For each active RaN, validate at least one protected CiV, one protected PiF2, their coherence through `INSCRIBES_PURPOSE_IN`, and organizational compatibility with the scope. Missing or contradictory protection relationships block activation or the decision; `SYNC` does not add them automatically.
+2. Use `governedTypes`, `scopeType`, and, where applicable, `APPLIES_IN` to identify all potentially relevant active and temporally valid `RaN`; compare `GOVERNS` with the current concrete implementation elements and prepare any required target edges.
+3. Evaluate every normalized condition reproducibly. Non-cataloged or ambiguous paths produce `UNEVALUABLE`.
+4. Derive `ALLOW`, `DENY`, or `NO_DECISION` from `effect` and the condition for each rule.
+5. Treat a single rule violation as `DENY` and block the decision without creating a `RaNConflict` solely for that violation.
+6. Compare only rules with the same `decisionKey`, overlapping scope, and a common target for contradictory results.
+7. For every actual contradiction between `ALLOW` and `DENY`, compare priorities.
+8. If priorities differ, give the larger number precedence only within that contradiction.
+9. If the highest relevant priority is tied, prepare an open `RaNConflict` with `conflictType = PRIORITY_TIE` and a `conflictKey` derived from the ChangeEvent, sorted conflict set, and decision.
+10. If applicability or compatibility cannot be evaluated unambiguously, prepare an open `RaNConflict` with `conflictType = UNEVALUABLE` and a corresponding `conflictKey`.
+11. Block automatic changes whose permissibility depends on the open conflict.
 
 A lower-priority `RaN` is not revoked by precedence and remains applicable to compatible and other decisions. `ruleType` is not used as a ranking.
 
@@ -335,11 +342,11 @@ conflictCount
 
 Permitted outcomes:
 
-| Outcome      | Meaning                                                        |
-| ------------ | -------------------------------------------------------------- |
-| `SUCCESS`    | validation and commit completed successfully                   |
-| `CONFLICT`   | a domain conflict prevented an automatic decision              |
-| `FAILED`     | a technical or formal error terminated the attempt             |
+| Outcome    | Meaning                                            |
+| ---------- | -------------------------------------------------- |
+| `SUCCESS`  | validation and commit completed successfully       |
+| `CONFLICT` | a domain conflict prevented an automatic decision  |
+| `FAILED`   | a technical or formal error terminated the attempt |
 
 A `SyncRun` that ends either through domain completion or controlled technical termination creates exactly one `SyncEvent` with the same unique `runId`. If storing it was temporarily impossible, the event is stored later. Every `SyncEvent` points through `EXECUTES` to the SYNC definition used and, read inversely through `TRIGGERS`, to exactly one `ChangeEvent`. A second completion record for the same `runId` is not permitted.
 
@@ -382,7 +389,7 @@ Technical diagnostic data does not replace the final `SyncEvent`. An attempt tha
 
 ## 11. Exchange Format
 
-`JCIChangeRequest` and `JCISyncResult` use the exchange format defined in section 12.6 of `JCI_CONTEXT.md`, incompatibly refined from 1.0, with `schemaVersion = "1.1"`. The binding JSON Schemas are stored under `docs/schemas/`. Before any graph change, a SyncRun rejects documents with an unknown `schemaVersion`, additional disallowed fields, or invalid content.
+`JCIChangeRequest` and `JCISyncResult` use the exchange format defined in section 12.6 of [`JCI_CONTEXT.md`](JCI_CONTEXT.md), incompatibly refined from 1.0, with `schemaVersion = "1.1"`. The binding JSON Schemas are stored under `docs/schemas/`. Before any graph change, a SyncRun rejects documents with an unknown `schemaVersion`, additional disallowed fields, or invalid content.
 
 An accepted `JCIChangeRequest` contains at least `requestId`, `idempotencyKey`, `requestedAt`, `requestedRevision`, `changeType`, `target`, `requestedByRoleAssignmentId`, and `reason`. When stored, the following mappings apply:
 

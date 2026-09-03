@@ -11,7 +11,12 @@ Der **JUNACO Continuous Integration Loop** ist ein graphbasiertes Organisationsm
 ```mermaid
 flowchart LR
     PiH -->|PROVIDES_CONTEXT_TO| CiV
+    CiV -->|HELD_BY| Holder[RoFOrg, RoFTeam oder Mensch]
+    CiV -->|INFORMED_BY| SourceCiV[anderes CiV]
     CiV -->|INSCRIBES_PURPOSE_IN| PiF2
+    RaN -->|PROTECTS| CiV
+    RaN -->|PROTECTS| PiF2
+    RaN -->|GOVERNS| Task
     PiF1s -->|CONTRIBUTES_TO| PiF2
     PiF1t -->|CONTRIBUTES_TO| PiF1s
     PiF1o -->|CONTRIBUTES_TO| PiF1t

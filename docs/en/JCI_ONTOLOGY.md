@@ -2,7 +2,7 @@
 
 ## 1. Status and purpose
 
-This document translates the domain meaning from [JCI_CONTEXT.md](../JCI_CONTEXT.md) into unambiguously named entity and relationship types. `JCI_CONTEXT.md` remains the canonical domain source. If a conflict exists, the state documented there applies; the conflict must be reported before changing the model.
+This document translates the domain meaning from [JCI_CONTEXT.md](../JCI_CONTEXT.md) into unambiguously named entity and relationship types. [`JCI_CONTEXT.md`](JCI_CONTEXT.md) remains the canonical domain source. If a conflict exists, the state documented there applies; the conflict must be reported before changing the model.
 
 Cardinalities and invariants are defined in [JCI_GRAPH_RULES.md](JCI_GRAPH_RULES.md). The `SYNC` process is defined in [JCI_SYNC_SPEC.md](JCI_SYNC_SPEC.md). Database-specific labels, properties, constraints, and indexes belong in [implementations/neo4j/JCI_NEO4J_SCHEMA.md](implementations/neo4j/JCI_NEO4J_SCHEMA.md).
 
@@ -60,27 +60,28 @@ HistoricalCorrection
 
 Every concrete `JCIEntity` has:
 
-| Property | Data type | Required | Rule |
-|---|---|---:|---|
-| `id` | UUID | yes | globally unique and immutable |
-| `entityType` | Enum | yes | exactly matches the concrete entity type |
-| `name` | String | yes | not empty |
-| `description` | String | no | domain description |
-| `createdAt` | DateTime | yes | ISO 8601 with time zone |
-| `updatedAt` | DateTime | yes | not before `createdAt` |
-| `revision` | Integer | yes | at least `1` |
-| `status` | Enum | yes | type-specific permitted status |
+| Property      | Data type | Required | Rule                                     |
+| ------------- | --------- | -------: | ---------------------------------------- |
+| `id`          | UUID      | yes      | globally unique and immutable            |
+| `entityType`  | Enum      | yes      | exactly matches the concrete entity type |
+| `name`        | String    | yes      | not empty                                |
+| `description` | String    | no       | domain description                       |
+| `createdAt`   | DateTime  | yes      | ISO 8601 with time zone                  |
+| `updatedAt`   | DateTime  | yes      | not before `createdAt`                   |
+| `revision`    | Integer   | yes      | at least `1`                             |
+| `status`      | Enum      | yes      | type-specific permitted status           |
 
 `PiH`, `ChangeEvent`, `SyncEvent`, and `HistoricalCorrection` are immutable in content. For them, `revision = 1` and `updatedAt = createdAt` apply permanently. A `ChangeEvent` documents an accepted change request, whereas a `SyncEvent` documents the result of exactly one completed or controlled-aborted technical `SyncRun`. The `TRIGGERS` relationship created when the run finishes may only be appended. For a successful `CREATED`, exactly one `CHANGED_BY` relationship from the newly created entity to the existing `ChangeEvent` may additionally be established once. These provenance additions do not change any property of the `ChangeEvent`.
 
 The following type-specific required fields apply in particular to the entity types refined here:
 
-| Entity type | Additional required fields |
-| ----------- | -------------------------- |
-| `ChangeEvent` | `idempotencyKey`, `targetEntityId`, `targetEntityType`, `requestedRevision` |
-| `SyncEvent` | `runId` |
-| `Verification` | `evaluatedResultRevision`, `checkedCriterionRevision` |
-| `HistoricalCorrection` | `baseHistoryViewHash` |
+| Entity type            | Additional required fields                                                  |
+| ---------------------- | --------------------------------------------------------------------------- |
+| `CiV`                  | `notCiV`, `selfCiV`, `toServeCiV`                                           |
+| `ChangeEvent`          | `idempotencyKey`, `targetEntityId`, `targetEntityType`, `requestedRevision` |
+| `SyncEvent`            | `runId`                                                                     |
+| `Verification`         | `evaluatedResultRevision`, `checkedCriterionRevision`                       |
+| `HistoricalCorrection` | `baseHistoryViewHash`                                                       |
 
 `requestedRevision` is `null` exclusively for `changeType = CREATED`; otherwise it is a positive integer. The target details of the `ChangeEvent` are immutable audit coordinates of the request and do not replace a domain relationship. `runId` identifies exactly one technical attempt. `baseHistoryViewHash` binds a historical correction to the effective historical view immediately preceding it.
 
@@ -94,11 +95,15 @@ Complex values exclusively use the types `TypedValue`, `StateSnapshot`, `Relatio
 
 ```text
 PiH PROVIDES_CONTEXT_TO CiV
+CiV HELD_BY RoFOrg, RoFTeam, or human RoFTeamMember
+CiV INFORMED_BY CiV
 CiV INSCRIBES_PURPOSE_IN PiF2
 PiF1s CONTRIBUTES_TO PiF2
 PiF1t CONTRIBUTES_TO PiF1s
 PiF1o CONTRIBUTES_TO PiF1t
 ```
+
+Each `CiV` describes exactly one value through the three non-empty dimensions `notCiV`, `selfCiV`, and `toServeCiV`. Exactly one `HELD_BY` determines its scope; a `RoFTeamMember` is permitted only with `memberType = HUMAN`. `INFORMED_BY` documents only explicitly confirmed domain provenance between different CiV and causes neither inheritance nor copying. All CiV directly grounding one `PiF2` have the same `HELD_BY` target; the scope of the `PiF2` is derived from it. The purpose developed in the `PiF2` is not stored redundantly as a CiV property.
 
 ### 5.2 Operational implementation and verification
 
@@ -141,6 +146,7 @@ RoFOrgRelationship REPRESENTED_BY RoleAssignment
 ### 5.4 Rules
 
 ```text
+RaN PROTECTS CiV or PiF2
 RaN GOVERNS permitted JCIEntity
 RaN APPLIES_IN RoFOrg or RoFTeam
 RaNConflict CONFLICTING_RULE RaN
@@ -151,9 +157,9 @@ RaNConflict RESOLVED_THROUGH ChangeEvent
 RaNConflict USES_EVIDENCE Evidence
 ```
 
-Permitted target types are `PiF2`, `PiF1s`, `PiF1t`, `PiF1o`, `Task`, `RoFOrg`, `RoFOrgRelationship`, `RoFTeam`, `RoFTeamMember`, `RoFRole`, `RoleAssignment`, and `ERoFObject`.
+`PROTECTS` targets only `CiV` or `PiF2`. Permitted `GOVERNS` target types are `PiF1s`, `PiF1t`, `PiF1o`, `Task`, `SuccessCriterion`, `Result`, `Verification`, `Evidence`, `RoFOrg`, `RoFOrgRelationship`, `RoFTeam`, `RoFTeamMember`, `RoFRole`, `RoleAssignment`, and `ERoFObject`. `PiF2` is no longer a `GOVERNS` target and is protected through `PROTECTS` instead.
 
-A `RaN` has `effect`, `decisionKey`, `scopeType`, `governedTypes`, and a normalized `condition`. `GOVERNS` connects the concrete targets currently governed. `APPLIES_IN` limits an organization or team scope. `priority` is an explicitly stored integer; a larger number means higher precedence in a detected contradiction. `ruleType` has no implicit ranking. `RaNConflict` is a historizable graph object with `status = OPEN | RESOLVED`. It does not replace a participating rule but documents the conflict that cannot be decided automatically and its later resolution. A `PRIORITY_TIE` connects at least two rules; an `UNEVALUABLE` conflict may concern a single rule whose evaluation is not unambiguous.
+A `RaN` has `effect`, `decisionKey`, `scopeType`, `governedTypes`, and a normalized `condition`. `PROTECTS` connects the explicitly protected values and long-term future states. An active RaN protects at least one CiV and one PiF2; both sides are coherently connected by `INSCRIBES_PURPOSE_IN`. `GOVERNS` connects at least one currently governed concrete implementation element. `APPLIES_IN` limits an organization or team scope. `priority` is an explicitly stored integer; a larger number means higher precedence in a detected contradiction. `ruleType` has no implicit ranking. `RaNConflict` is a historizable graph object with `status = OPEN | RESOLVED`. It does not replace a participating rule but documents the conflict that cannot be decided automatically and its later resolution. A `PRIORITY_TIE` connects at least two rules; an `UNEVALUABLE` conflict may concern a single rule whose evaluation is not unambiguous.
 
 ### 5.5 Actors and evidence
 
@@ -243,12 +249,12 @@ Only `ATOMIC` Tasks have `EXECUTED_BY`, `USES`, and `PRODUCES`. An active or com
 
 ## 9. Machine-readable exchange and extension
 
-Complete graph and ontology exports use JSON-LD 1.1 with the context `schemas/jci-context.jsonld`. Entities are identified as `urn:jci:<UUID>`; concrete types and relationships use the public, versioned namespace `https://eeimicke.github.io/junaco-jci-loop/ns/jci/1.0#`.
+Complete graph and ontology exports use JSON-LD 1.1 with the context [`schemas/jci-context.jsonld`](../schemas/jci-context.jsonld). Entities are identified as `urn:jci:<UUID>`; concrete types and relationships use the public, versioned namespace `https://eeimicke.github.io/junaco-jci-loop/ns/jci/1.0#`.
 
 `JCIChangeRequest` and `JCISyncResult` use `schemaVersion = "1.1"`. For `HISTORICAL_CORRECTION`, a structured `historicalCorrection` object replaces the general `operations`; it includes in particular `expectedHistoryViewHash`, unique lexicographically sorted `correctedFields`, `previousValue`, and `correctedValue`.
 
-Complex properties use the structured types from `JCI_CONTEXT.md` and are transferred as JSON-LD-compatible JSON values. The Neo4j projection as a canonical JSON string does not change the exchange format.
+Complex properties use the structured types from [`JCI_CONTEXT.md`](JCI_CONTEXT.md) and are transferred as JSON-LD-compatible JSON values. The Neo4j projection as a canonical JSON string does not change the exchange format.
 
-The concrete entity, enum, and relationship types listed in this version form a closed catalogue. A new subtype or relationship requires a versioned semantic model change in `JCI_CONTEXT.md`, followed by updates to all downstream documents, the JSON-LD context, schemas, and tests. Implementations must not silently treat unknown types as known types.
+The concrete entity, enum, and relationship types listed in this version form a closed catalogue. A new subtype or relationship requires a versioned semantic model change in [`JCI_CONTEXT.md`](JCI_CONTEXT.md), followed by updates to all downstream documents, the JSON-LD context, schemas, and tests. Implementations must not silently treat unknown types as known types.
 
 **Short example:** An exported Task entity has `@id = "urn:jci:<UUID>"`, `@type = "jci:Task"`, and relationships such as `jci:RESPONSIBLE_TEAM`. On import, these become the canonical nodes and edges again.

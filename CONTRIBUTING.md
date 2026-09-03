@@ -1,6 +1,6 @@
 # Zum JCI-Modell beitragen
 
-Beiträge sind willkommen, werden aber kontrolliert geprüft. Maßgeblich sind `docs/JCI_CONTEXT.md`, `GOVERNANCE.md`, `LICENSE.md` und `NOTICE.md`.
+Beiträge sind willkommen, werden aber kontrolliert geprüft. Maßgeblich sind [`docs/JCI_CONTEXT.md`](docs/JCI_CONTEXT.md), [`GOVERNANCE.md`](GOVERNANCE.md), [`LICENSE.md`](LICENSE.md) und [`NOTICE.md`](NOTICE.md).
 
 ## Ablauf
 
@@ -27,6 +27,18 @@ Bei einer Modelländerung müssen mindestens angegeben werden:
 
 Eine Änderung darf nicht allein deshalb übernommen werden, weil die technischen Prüfungen erfolgreich sind.
 
+## Tabellenlayout
+
+Markdown-Tabellen verwenden durchgängig ein spaltenweise ausgerichtetes GFM-Format:
+
+| Spalte A | Spalte B              |
+| -------- | --------------------: |
+| Inhalt   | rechtsbündiger Inhalt |
+
+Außen-Pipes und genau ein Leerzeichen zwischen Pipe und Zellinhalt sind verpflichtend. Innerhalb eines Tabellenblocks wird jede Spalte auf die Breite ihres längsten Inhalts aufgefüllt, sodass alle Pipes im Quelltext vertikal untereinanderstehen. Trennzellen füllen dieselbe Breite mit mindestens drei Bindestrichen; optionale Doppelpunkte legen die Ausrichtung fest. Notwendige Umbrüche innerhalb einer Zelle werden mit `<br>` gesetzt.
+
+Lokale Dateiverweise werden in allen Markdown-Dokumenten als relative, klickbare Links geschrieben. Der sichtbare Dateiname bleibt dabei als Inline-Code formatiert, beispielsweise [`README.md`](README.md). Automatische Prüfungen stellen sicher, dass kein dateiartiger Verweis unverlinkt bleibt und jedes Linkziel existiert.
+
 ## Rechte an Beiträgen
 
 Beitragende müssen zur Einreichung aller Inhalte berechtigt sein. Quellen und Drittinhalte sind vollständig zu kennzeichnen.
@@ -37,4 +49,4 @@ Bis zu dieser Rechteklärung können externe Ideen als Issue diskutiert werden, 
 
 ## Lizenz- und Governance-Dateien
 
-Änderungen an `LICENSE.md`, `NOTICE.md`, `GOVERNANCE.md`, `AGENTS.md` oder `.github/CODEOWNERS` müssen im Pull Request ausdrücklich als solche gekennzeichnet und gesondert begründet werden.
+Änderungen an [`LICENSE.md`](LICENSE.md), [`NOTICE.md`](NOTICE.md), [`GOVERNANCE.md`](GOVERNANCE.md), [`AGENTS.md`](AGENTS.md) oder [`.github/CODEOWNERS`](.github/CODEOWNERS) müssen im Pull Request ausdrücklich als solche gekennzeichnet und gesondert begründet werden.

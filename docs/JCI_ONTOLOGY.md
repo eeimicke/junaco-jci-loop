@@ -2,7 +2,7 @@
 
 ## 1. Status und Zweck
 
-Dieses Dokument übersetzt die fachliche Bedeutung aus [JCI_CONTEXT.md](JCI_CONTEXT.md) in eindeutig benannte Entitäts- und Beziehungstypen. `JCI_CONTEXT.md` bleibt die kanonische fachliche Quelle. Bei einem Konflikt gilt der dort dokumentierte Stand; der Konflikt muss vor einer Modelländerung gemeldet werden.
+Dieses Dokument übersetzt die fachliche Bedeutung aus [JCI_CONTEXT.md](JCI_CONTEXT.md) in eindeutig benannte Entitäts- und Beziehungstypen. [`JCI_CONTEXT.md`](JCI_CONTEXT.md) bleibt die kanonische fachliche Quelle. Bei einem Konflikt gilt der dort dokumentierte Stand; der Konflikt muss vor einer Modelländerung gemeldet werden.
 
 Kardinalitäten und Invarianten stehen in [JCI_GRAPH_RULES.md](JCI_GRAPH_RULES.md). Der Ablauf von `SYNC` steht in [JCI_SYNC_SPEC.md](JCI_SYNC_SPEC.md). Datenbankspezifische Labels, Properties, Constraints und Indizes gehören in [implementations/neo4j/JCI_NEO4J_SCHEMA.md](implementations/neo4j/JCI_NEO4J_SCHEMA.md).
 
@@ -62,25 +62,26 @@ Jede konkrete `JCIEntity` besitzt:
 
 | Eigenschaft   | Datentyp | Pflicht | Regel                                      |
 | ------------- | -------- | ------: | ------------------------------------------ |
-| `id`          | UUID     |      ja | global eindeutig und unveränderlich        |
-| `entityType`  | Enum     |      ja | entspricht genau dem konkreten Entitätstyp |
-| `name`        | String   |      ja | nicht leer                                 |
-| `description` | String   |    nein | fachliche Beschreibung                     |
-| `createdAt`   | DateTime |      ja | ISO 8601 mit Zeitzone                      |
-| `updatedAt`   | DateTime |      ja | nicht vor `createdAt`                      |
-| `revision`    | Integer  |      ja | mindestens `1`                             |
-| `status`      | Enum     |      ja | typabhängiger zulässiger Status            |
+| `id`          | UUID     | ja      | global eindeutig und unveränderlich        |
+| `entityType`  | Enum     | ja      | entspricht genau dem konkreten Entitätstyp |
+| `name`        | String   | ja      | nicht leer                                 |
+| `description` | String   | nein    | fachliche Beschreibung                     |
+| `createdAt`   | DateTime | ja      | ISO 8601 mit Zeitzone                      |
+| `updatedAt`   | DateTime | ja      | nicht vor `createdAt`                      |
+| `revision`    | Integer  | ja      | mindestens `1`                             |
+| `status`      | Enum     | ja      | typabhängiger zulässiger Status            |
 
 `PiH`, `ChangeEvent`, `SyncEvent` und `HistoricalCorrection` sind inhaltlich unveränderlich. Für sie gelten dauerhaft `revision = 1` und `updatedAt = createdAt`. Ein `ChangeEvent` dokumentiert einen angenommenen Veränderungsauftrag, während ein `SyncEvent` das Ergebnis genau eines beendeten oder kontrolliert abgebrochenen technischen `SyncRun` dokumentiert. Die beim Laufabschluss entstehende Beziehung `TRIGGERS` darf ausschließlich append-only ergänzt werden. Beim erfolgreichen `CREATED` darf außerdem genau einmal `CHANGED_BY` von der neu erzeugten Entität zum bereits bestehenden `ChangeEvent` hergestellt werden. Diese Provenienzergänzungen verändern keine Eigenschaft des `ChangeEvent`.
 
 Für die hier präzisierten Entitätstypen gelten insbesondere folgende typspezifischen Pflichtfelder:
 
-| Entitätstyp            | Zusätzliche Pflichtfelder |
-| ---------------------- | ------------------------- |
+| Entitätstyp            | Zusätzliche Pflichtfelder                                                   |
+| ---------------------- | --------------------------------------------------------------------------- |
+| `CiV`                  | `notCiV`, `selfCiV`, `toServeCiV`                                           |
 | `ChangeEvent`          | `idempotencyKey`, `targetEntityId`, `targetEntityType`, `requestedRevision` |
-| `SyncEvent`            | `runId` |
-| `Verification`         | `evaluatedResultRevision`, `checkedCriterionRevision` |
-| `HistoricalCorrection` | `baseHistoryViewHash` |
+| `SyncEvent`            | `runId`                                                                     |
+| `Verification`         | `evaluatedResultRevision`, `checkedCriterionRevision`                       |
+| `HistoricalCorrection` | `baseHistoryViewHash`                                                       |
 
 `requestedRevision` ist ausschließlich bei `changeType = CREATED` `null`; andernfalls ist es eine positive Ganzzahl. Die Zielangaben des `ChangeEvent` sind unveränderliche Audit-Koordinaten des Auftrags und ersetzen keine fachliche Beziehung. `runId` identifiziert genau einen technischen Versuch. `baseHistoryViewHash` bindet eine historische Korrektur an die vor ihr wirksame historische Sicht.
 
@@ -94,11 +95,15 @@ Komplexe Werte verwenden ausschließlich die in Abschnitt 2.2.7 definierten Type
 
 ```text
 PiH PROVIDES_CONTEXT_TO CiV
+CiV HELD_BY RoFOrg, RoFTeam oder menschliches RoFTeamMember
+CiV INFORMED_BY CiV
 CiV INSCRIBES_PURPOSE_IN PiF2
 PiF1s CONTRIBUTES_TO PiF2
 PiF1t CONTRIBUTES_TO PiF1s
 PiF1o CONTRIBUTES_TO PiF1t
 ```
+
+Jedes `CiV` beschreibt genau einen Wert durch die drei nicht leeren Dimensionen `notCiV`, `selfCiV` und `toServeCiV`. Genau ein `HELD_BY` bestimmt seinen Scope; ein `RoFTeamMember` ist nur mit `memberType = HUMAN` zulässig. `INFORMED_BY` dokumentiert ausschließlich eine ausdrücklich bestätigte fachliche Herkunft zwischen unterschiedlichen CiV und bewirkt weder Vererbung noch Kopie. Alle ein `PiF2` unmittelbar begründenden CiV besitzen denselben `HELD_BY`-Zielknoten; daraus wird der Scope des `PiF2` abgeleitet. Der im `PiF2` erarbeitete Zweck wird nicht redundant als CiV-Eigenschaft gespeichert.
 
 ### 5.2 Operative Umsetzung und Prüfung
 
@@ -141,6 +146,7 @@ RoFOrgRelationship REPRESENTED_BY RoleAssignment
 ### 5.4 Regeln
 
 ```text
+RaN PROTECTS CiV oder PiF2
 RaN GOVERNS zulässige JCIEntity
 RaN APPLIES_IN RoFOrg oder RoFTeam
 RaNConflict CONFLICTING_RULE RaN
@@ -151,9 +157,9 @@ RaNConflict RESOLVED_THROUGH ChangeEvent
 RaNConflict USES_EVIDENCE Evidence
 ```
 
-Zulässige Zieltypen sind `PiF2`, `PiF1s`, `PiF1t`, `PiF1o`, `Task`, `RoFOrg`, `RoFOrgRelationship`, `RoFTeam`, `RoFTeamMember`, `RoFRole`, `RoleAssignment` und `ERoFObject`.
+`PROTECTS` besitzt ausschließlich `CiV` oder `PiF2` als Ziel. Zulässige `GOVERNS`-Zieltypen sind `PiF1s`, `PiF1t`, `PiF1o`, `Task`, `SuccessCriterion`, `Result`, `Verification`, `Evidence`, `RoFOrg`, `RoFOrgRelationship`, `RoFTeam`, `RoFTeamMember`, `RoFRole`, `RoleAssignment` und `ERoFObject`. `PiF2` ist kein `GOVERNS`-Ziel mehr, sondern wird über `PROTECTS` geschützt.
 
-Ein `RaN` besitzt `effect`, `decisionKey`, `scopeType`, `governedTypes` und eine normalisierte `condition`. `GOVERNS` verbindet die aktuell geregelten konkreten Ziele. `APPLIES_IN` begrenzt einen Organisations- oder Team-Scope. `priority` ist eine ausdrücklich gespeicherte Ganzzahl; eine größere Zahl bedeutet höheren Vorrang bei einem erkannten Widerspruch. `ruleType` besitzt keine implizite Rangfolge. `RaNConflict` ist ein historisierbares Graphobjekt mit `status = OPEN | RESOLVED`. Es ersetzt keine beteiligte Regel, sondern dokumentiert den nicht automatisch entscheidbaren Konflikt und seine spätere Auflösung. Ein `PRIORITY_TIE` verbindet mindestens zwei Regeln; ein `UNEVALUABLE` kann bereits eine einzelne nicht eindeutig auswertbare Regel betreffen.
+Ein `RaN` besitzt `effect`, `decisionKey`, `scopeType`, `governedTypes` und eine normalisierte `condition`. `PROTECTS` verbindet die ausdrücklich geschützten Werte und langfristigen Zukunftszustände. Ein aktives RaN schützt mindestens ein CiV und ein PiF2; beide Seiten sind durch `INSCRIBES_PURPOSE_IN` kohärent verbunden. `GOVERNS` verbindet mindestens ein aktuell geregeltes konkretes Umsetzungselement. `APPLIES_IN` begrenzt einen Organisations- oder Team-Scope. `priority` ist eine ausdrücklich gespeicherte Ganzzahl; eine größere Zahl bedeutet höheren Vorrang bei einem erkannten Widerspruch. `ruleType` besitzt keine implizite Rangfolge. `RaNConflict` ist ein historisierbares Graphobjekt mit `status = OPEN | RESOLVED`. Es ersetzt keine beteiligte Regel, sondern dokumentiert den nicht automatisch entscheidbaren Konflikt und seine spätere Auflösung. Ein `PRIORITY_TIE` verbindet mindestens zwei Regeln; ein `UNEVALUABLE` kann bereits eine einzelne nicht eindeutig auswertbare Regel betreffen.
 
 ### 5.5 Akteure und Nachweise
 
@@ -243,12 +249,12 @@ Nur `ATOMIC`-Tasks besitzen `EXECUTED_BY`, `USES` und `PRODUCES`. Ein aktiver od
 
 ## 9. Maschinenlesbarer Austausch und Erweiterung
 
-Vollständige Graph- und Ontologieexporte verwenden JSON-LD 1.1 mit dem Kontext `schemas/jci-context.jsonld`. Entitäten werden als `urn:jci:<UUID>` identifiziert; konkrete Typen und Beziehungen verwenden den öffentlichen, versionierten Namensraum `https://eeimicke.github.io/junaco-jci-loop/ns/jci/1.0#`.
+Vollständige Graph- und Ontologieexporte verwenden JSON-LD 1.1 mit dem Kontext [`schemas/jci-context.jsonld`](schemas/jci-context.jsonld). Entitäten werden als `urn:jci:<UUID>` identifiziert; konkrete Typen und Beziehungen verwenden den öffentlichen, versionierten Namensraum `https://eeimicke.github.io/junaco-jci-loop/ns/jci/1.0#`.
 
 `JCIChangeRequest` und `JCISyncResult` verwenden `schemaVersion = "1.1"`. Für `HISTORICAL_CORRECTION` ersetzt ein strukturiertes `historicalCorrection`-Objekt die allgemeinen `operations`; es enthält insbesondere `expectedHistoryViewHash`, eindeutige lexikografisch sortierte `correctedFields`, `previousValue` und `correctedValue`.
 
-Komplexe Eigenschaften verwenden die strukturierten Typen aus `JCI_CONTEXT.md` und werden als JSON-LD-kompatible JSON-Werte übertragen. Die Neo4j-Projektion als kanonische JSON-Zeichenkette verändert das Austauschformat nicht.
+Komplexe Eigenschaften verwenden die strukturierten Typen aus [`JCI_CONTEXT.md`](JCI_CONTEXT.md) und werden als JSON-LD-kompatible JSON-Werte übertragen. Die Neo4j-Projektion als kanonische JSON-Zeichenkette verändert das Austauschformat nicht.
 
-Die in dieser Version aufgeführten konkreten Entitäts-, Enum- und Beziehungstypen bilden einen geschlossenen Katalog. Eine neue Unterart oder Beziehung benötigt eine versionierte semantische Modelländerung in `JCI_CONTEXT.md`, die anschließende Aktualisierung aller Folgedokumente, des JSON-LD-Kontexts, der Schemas und der Tests. Implementierungen dürfen unbekannte Typen nicht stillschweigend als bekannte Typen behandeln.
+Die in dieser Version aufgeführten konkreten Entitäts-, Enum- und Beziehungstypen bilden einen geschlossenen Katalog. Eine neue Unterart oder Beziehung benötigt eine versionierte semantische Modelländerung in [`JCI_CONTEXT.md`](JCI_CONTEXT.md), die anschließende Aktualisierung aller Folgedokumente, des JSON-LD-Kontexts, der Schemas und der Tests. Implementierungen dürfen unbekannte Typen nicht stillschweigend als bekannte Typen behandeln.
 
 **Kurzes Beispiel:** Eine exportierte Task-Entität besitzt `@id = "urn:jci:<UUID>"`, `@type = "jci:Task"` und Beziehungen wie `jci:RESPONSIBLE_TEAM`. Beim Import entstehen daraus wieder die kanonischen Knoten und Kanten.

@@ -1,8 +1,8 @@
 # Contributing to the JCI model
 
-> Controlled English translation of `CONTRIBUTING.md`.
+> Controlled English translation of [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
-Contributions are welcome and reviewed in a controlled process. `docs/JCI_CONTEXT.md`, `GOVERNANCE.md`, `LICENSE.md`, and `NOTICE.md` are authoritative.
+Contributions are welcome and reviewed in a controlled process. [`docs/JCI_CONTEXT.md`](docs/JCI_CONTEXT.md), [`GOVERNANCE.md`](GOVERNANCE.md), [`LICENSE.md`](LICENSE.md), and [`NOTICE.md`](NOTICE.md) are authoritative.
 
 ## Workflow
 
@@ -19,11 +19,23 @@ Direct pushes to `main` are not part of the normal workflow.
 
 A model change must state its purpose, class, affected core elements and graph objects, relationships and cardinalities, effects on `RaN`, `RoF`, `ERoF`, `SYNC`, and `PiH`, effects on traceability to `CiV`, and known conflicts or open decisions. Passing technical tests alone does not make a model change correct.
 
+## Table layout
+
+Markdown tables consistently use a column-aligned GFM format:
+
+| Column A | Column B              |
+| -------- | --------------------: |
+| Content  | right-aligned content |
+
+Outer pipes and exactly one space between each pipe and cell content are required. Within a table block, every column is padded to the width of its longest content so that all pipes line up vertically in the source. Separator cells fill the same width with at least three hyphens; optional colons define alignment. Required line breaks inside a cell use `<br>`.
+
+Local file references in all Markdown documents are written as relative, clickable links. The visible file name remains formatted as inline code, for example [`README.md`](README.md). Automated checks ensure that no file-like reference remains unlinked and that every link target exists.
+
 ## Contribution rights
 
 Contributors must have permission to submit all content and identify sources and third-party material. Submission of model content intended for acceptance represents that it may be provided under CC BY-NC-SA 4.0. It does not automatically transfer additional or commercial rights to JUNACO. Such rights require a separate written agreement.
 
 ## Protected files
 
-Changes to `LICENSE.md`, `NOTICE.md`, `GOVERNANCE.md`, `AGENTS.md`, or `.github/CODEOWNERS` must be explicitly identified and separately justified in the pull request.
+Changes to [`LICENSE.md`](LICENSE.md), [`NOTICE.md`](NOTICE.md), [`GOVERNANCE.md`](GOVERNANCE.md), [`AGENTS.md`](AGENTS.md), or [`.github/CODEOWNERS`](.github/CODEOWNERS) must be explicitly identified and separately justified in the pull request.
 

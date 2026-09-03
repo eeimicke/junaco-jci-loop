@@ -4,7 +4,7 @@
 
 Copyright © 2026 JUNACO Organization Development GmbH.
 
-The specification of the **JUNACO Continuous Integration Model for Organizations** and the resulting **JCI Loop** contained in `docs/JCI_CONTEXT.md` is licensed under **CC BY-NC-SA 4.0**. The regulations in [LICENSE.md](LICENSE.md) and the legally binding license text linked there are decisive.
+The specification of the **JUNACO Continuous Integration Model for Organizations** and the resulting **JCI Loop** contained in [`docs/JCI_CONTEXT.md`](docs/JCI_CONTEXT.md) is licensed under **CC BY-NC-SA 4.0**. The regulations in [LICENSE.md](LICENSE.md) and the legally binding license text linked there are decisive.
 
 Recommended Attribution:
 

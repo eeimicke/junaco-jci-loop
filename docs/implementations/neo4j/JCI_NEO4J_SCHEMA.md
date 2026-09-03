@@ -32,13 +32,22 @@ FOR (e:JCIEntity) REQUIRE e.updatedAt IS NOT NULL;
 
 CREATE INDEX jci_entity_type_index IF NOT EXISTS FOR (e:JCIEntity) ON (e.entityType);
 CREATE INDEX jci_entity_status_index IF NOT EXISTS FOR (e:JCIEntity) ON (e.status);
+
+CREATE CONSTRAINT civ_not_dimension_exists IF NOT EXISTS
+FOR (v:CiV) REQUIRE v.notCiV IS NOT NULL;
+
+CREATE CONSTRAINT civ_self_dimension_exists IF NOT EXISTS
+FOR (v:CiV) REQUIRE v.selfCiV IS NOT NULL;
+
+CREATE CONSTRAINT civ_to_serve_dimension_exists IF NOT EXISTS
+FOR (v:CiV) REQUIRE v.toServeCiV IS NOT NULL;
 ```
 
 Die global eindeutige `JCIEntity.id` macht zusätzliche ID-Constraints je konkretem Label technisch redundant. Spezifische Constraints werden nur für fachlich weitere eindeutige Schlüssel angelegt.
 
 ### Komplexe strukturierte Werte
 
-Neo4j-Properties speichern keine verschachtelten JSON-Objekte. Die kanonischen Strukturen aus `JCI_CONTEXT.md` werden deshalb ohne Semantikverlust als kanonische JSON-Zeichenketten projiziert:
+Neo4j-Properties speichern keine verschachtelten JSON-Objekte. Die kanonischen Strukturen aus [`JCI_CONTEXT.md`](../../JCI_CONTEXT.md) werden deshalb ohne Semantikverlust als kanonische JSON-Zeichenketten projiziert:
 
 | Fachliches Feld                       | Neo4j-Property         |
 | ------------------------------------- | ---------------------- |
@@ -56,17 +65,17 @@ Die JSON-Zeichenketten verwenden UTF-8, lexikografisch sortierte Objektschlüsse
 
 Die folgenden Felder präzisieren die Speicherung der bereits definierten fachlichen Vorgänge. Alle genannten Knoten tragen zusätzlich das Label `JCIEntity` und ihr abstraktes sowie konkretes Typ-Label.
 
-| Knoten | Property | Bedeutung |
-| ------ | -------- | --------- |
-| `ChangeEvent` | `idempotencyKey` | unveränderliche, graphweit eindeutige Kennung des fachlichen Veränderungsauftrags |
-| `ChangeEvent` | `targetEntityId` | UUID der angeforderten Zielentität, auch wenn ein `CREATED`-Versuch vor der Anlage scheitert |
-| `ChangeEvent` | `targetEntityType` | konkreter Typ der angeforderten Zielentität |
-| `ChangeEvent` | `requestedRevision` | erwartete positive Ausgangsrevision; bei `CREATED` nicht gesetzt |
-| `SyncEvent` | `runId` | unveränderliche, graphweit eindeutige Kennung des abgeschlossenen technischen Laufs |
-| `RoleAssignment` | `bootstrapKey` | ausschließlich am initialen Root-Assignment gesetzter Wert `ROOT` |
-| `Verification` | `evaluatedResultRevision` | exakt die Revision des über `EVALUATES` verbundenen `Result`, die bewertet wurde |
-| `Verification` | `checkedCriterionRevision` | exakt die Revision des über `CHECKS` verbundenen `SuccessCriterion`, die geprüft wurde |
-| `HistoricalCorrection` | `baseHistoryViewHash` | SHA-256 des vor der Korrektur erneut gelesenen effektiven historischen Stands |
+| Knoten                 | Property                   | Bedeutung                                                                                    |
+| ---------------------- | -------------------------- | -------------------------------------------------------------------------------------------- |
+| `ChangeEvent`          | `idempotencyKey`           | unveränderliche, graphweit eindeutige Kennung des fachlichen Veränderungsauftrags            |
+| `ChangeEvent`          | `targetEntityId`           | UUID der angeforderten Zielentität, auch wenn ein `CREATED`-Versuch vor der Anlage scheitert |
+| `ChangeEvent`          | `targetEntityType`         | konkreter Typ der angeforderten Zielentität                                                  |
+| `ChangeEvent`          | `requestedRevision`        | erwartete positive Ausgangsrevision; bei `CREATED` nicht gesetzt                             |
+| `SyncEvent`            | `runId`                    | unveränderliche, graphweit eindeutige Kennung des abgeschlossenen technischen Laufs          |
+| `RoleAssignment`       | `bootstrapKey`             | ausschließlich am initialen Root-Assignment gesetzter Wert `ROOT`                            |
+| `Verification`         | `evaluatedResultRevision`  | exakt die Revision des über `EVALUATES` verbundenen `Result`, die bewertet wurde             |
+| `Verification`         | `checkedCriterionRevision` | exakt die Revision des über `CHECKS` verbundenen `SuccessCriterion`, die geprüft wurde       |
+| `HistoricalCorrection` | `baseHistoryViewHash`      | SHA-256 des vor der Korrektur erneut gelesenen effektiven historischen Stands                |
 
 Neo4j speichert `null` nicht als Property. `requestedRevision` fehlt deshalb genau dann, wenn `changeType = 'CREATED'` gilt. Für alle anderen Veränderungstypen muss die Property vorhanden und eine positive Ganzzahl sein.
 
@@ -280,6 +289,43 @@ Neo4j-Constraints erzwingen Enum-Werte, Kardinalitäten und graphweite Zyklusreg
 ## Validierungsabfragen
 
 Jede folgende Abfrage muss für einen gültigen Graphen null Zeilen liefern.
+
+### CiV-Dimensionen, Werteträger und PiF2-Scope
+
+```cypher
+MATCH (value:JCIEntity:CiV)
+OPTIONAL MATCH (value)-[:HELD_BY]->(holder:JCIEntity)
+WITH value, collect(DISTINCT holder) AS holders
+WHERE value.notCiV IS NULL OR trim(value.notCiV) = ''
+   OR value.selfCiV IS NULL OR trim(value.selfCiV) = ''
+   OR value.toServeCiV IS NULL OR trim(value.toServeCiV) = ''
+   OR value.purpose IS NOT NULL OR value.values IS NOT NULL OR value.scope IS NOT NULL
+   OR size(holders) <> 1
+   OR (size(holders) = 1 AND
+       NOT ('RoFOrg' IN labels(holders[0]) OR
+            'RoFTeam' IN labels(holders[0]) OR
+            ('RoFTeamMember' IN labels(holders[0]) AND holders[0].memberType = 'HUMAN')))
+RETURN value.id AS valueId, [holder IN holders | holder.id] AS holderIds;
+```
+
+```cypher
+MATCH (value:CiV)-[:INFORMED_BY]->(source:JCIEntity)
+WHERE value = source OR NOT source:CiV
+RETURN value.id AS valueId, source.id AS invalidSourceId;
+```
+
+```cypher
+MATCH (future:JCIEntity:PiF2)
+OPTIONAL MATCH (value:CiV)-[:INSCRIBES_PURPOSE_IN]->(future)
+OPTIONAL MATCH (value)-[:HELD_BY]->(holder:JCIEntity)
+WITH future, collect(DISTINCT value) AS values, collect(DISTINCT holder) AS holders
+WHERE size(values) < 1 OR size(holders) <> 1
+RETURN future.id AS futureId,
+       [value IN values | value.id] AS valueIds,
+       [holder IN holders | holder.id] AS holderIds;
+```
+
+Diese Abfragen prüfen Struktur, nicht die fachliche Entscheidung selbst. `SYNC` darf `INFORMED_BY` oder Wertdimensionen nicht aus Namen, Mitgliedschaften oder Organisationszugehörigkeiten ableiten. Ein bestehendes gebündeltes CiV mit `purpose`, `values` oder `scope` wird nicht automatisch migriert: Die Liste muss in einzelne CiV aufgeteilt, jede Dreidimensionalität menschlich bestätigt und alle Beziehungen kontrolliert neu verbunden werden.
 
 ### Ungültige Enum-Werte
 
@@ -1065,6 +1111,49 @@ WHERE NOT r.effect IN ['REQUIRE','PROHIBIT','PERMIT']
 RETURN r.id AS ruleId, r.effect, r.scopeType, [scope IN scopes | scope.id] AS scopeIds;
 ```
 
+Ein aktives RaN schützt mindestens ein CiV und ein PiF2 und regelt mindestens ein konkretes Umsetzungselement. Die folgenden Abfragen prüfen Zieltypen, Mindestkardinalitäten und die CiV-PiF2-Kohärenz. Die organisatorische Scope-Kompatibilität über zeitabhängige Mitgliedschaften und WHY-Pfade prüft das versionierte SYNC-Regelpaket.
+
+```cypher
+MATCH (rule:RaN)-[:PROTECTS]->(target)
+WHERE NOT (target:CiV OR target:PiF2)
+RETURN rule.id AS ruleId, target.id AS invalidProtectedTargetId, labels(target) AS targetLabels;
+```
+
+```cypher
+MATCH (rule:RaN)-[:GOVERNS]->(target:JCIEntity)
+WHERE none(label IN labels(target) WHERE label IN [
+  'PiF1s','PiF1t','PiF1o','Task','SuccessCriterion','Result','Verification','Evidence',
+  'RoFOrg','RoFOrgRelationship','RoFTeam','RoFTeamMember','RoFRole','RoleAssignment','ERoFObject'
+])
+RETURN rule.id AS ruleId, target.id AS invalidGovernedTargetId, labels(target) AS targetLabels;
+```
+
+```cypher
+MATCH (rule:RaN {status: 'ACTIVE'})
+OPTIONAL MATCH (rule)-[:PROTECTS]->(protected:JCIEntity)
+OPTIONAL MATCH (rule)-[:GOVERNS]->(governed:JCIEntity)
+WITH rule, collect(DISTINCT protected) AS protected, collect(DISTINCT governed) AS governed
+WHERE size([target IN protected WHERE 'CiV' IN labels(target)]) < 1
+   OR size([target IN protected WHERE 'PiF2' IN labels(target)]) < 1
+   OR size(governed) < 1
+RETURN rule.id AS ruleId,
+       [target IN protected | target.id] AS protectedTargetIds,
+       [target IN governed | target.id] AS governedTargetIds;
+```
+
+```cypher
+MATCH (rule:RaN {status: 'ACTIVE'})-[:PROTECTS]->(target:JCIEntity)
+WHERE (target:CiV AND NOT EXISTS {
+  MATCH (target)-[:INSCRIBES_PURPOSE_IN]->(future:PiF2)
+  WHERE EXISTS { MATCH (rule)-[:PROTECTS]->(future) }
+})
+OR (target:PiF2 AND NOT EXISTS {
+  MATCH (value:CiV)-[:INSCRIBES_PURPOSE_IN]->(target)
+  WHERE EXISTS { MATCH (rule)-[:PROTECTS]->(value) }
+})
+RETURN rule.id AS ruleId, target.id AS incoherentProtectedTargetId, labels(target) AS targetLabels;
+```
+
 ### PiH, Korrekturen und SyncEvent
 
 ```cypher
@@ -1287,11 +1376,15 @@ Für die in diesem Dokument präzisierten Felder gilt folgende migrationsverträ
 4. Revisionsbindungen vorhandener Verifications anhand `verifiedAt`, aktueller Revision und eindeutiger `PiH`-Gültigkeitsintervalle bestimmen. Null oder mehrere Kandidaten stoppen die Migration.
 5. Ein Root-Assignment nur dann mit `bootstrapKey = 'ROOT'` markieren, wenn es und seine initiale SYNC-Definition eindeutig nachgewiesen sind. Ein mehrdeutiger nichtleerer Altbestand wird nicht automatisch zum geschlossenen Bootstrap umgedeutet.
 6. Für vorhandene HistoricalCorrections den damaligen `baseHistoryViewHash` nur bei vollständig rekonstruierbarer Korrekturfolge bilden. Überlappende nicht abgelöste Feldkorrekturen erfordern vorher eine fachliche Auflösung.
-7. Erst nach erfolgreichem Backfill alle Existenz-, Typ- und Eindeutigkeitsconstraints anlegen und sämtliche Abfragen erneut ausführen.
+7. Jede vorhandene `GOVERNS`-Kante zu einem `PiF2` als noch unbestätigten Migrationskandidaten erfassen; sie darf nicht blind umbenannt werden.
+8. Ein berechtigtes `RoleAssignment` bestätigt das PiF2 als `PROTECTS`-Ziel, wählt mindestens ein dieses PiF2 über `INSCRIBES_PURPOSE_IN` begründendes CiV aus und bestätigt auch dieses als `PROTECTS`-Ziel. `SYNC` darf diese Auswahl nicht ableiten.
+9. Die tatsächlich geregelten Umsetzungselemente mit `GOVERNS` verbinden. Erst nach erfolgreicher Kohärenz-, Scope- und Typprüfung die bisherige `GOVERNS`-Kante zum PiF2 entfernen.
+10. Vorhandene RaN ohne vollständig bestätigte Schutz- und Umsetzungsziele nicht unter der neuen Regelversion aktivieren; die Migration stoppt zur fachlichen Klärung.
+11. Erst nach erfolgreichem Backfill alle Existenz-, Typ- und Eindeutigkeitsconstraints anlegen und sämtliche Abfragen erneut ausführen.
 
 Bei einer noch vollständig leeren Datenbank entfallen die Backfills. Dort werden zuerst die Constraints und anschließend genau einmal die atomare Bootstrap-Transaktion ausgeführt. Diese Dokumentänderung führt selbst keine Migration und keinen Bootstrap gegen eine Live-Datenbank aus.
 
-**Kurzes Beispiel:** Migration `V002` ergänzt `REPLACED_BY`. Sie prüft zuerst alle vorhandenen `REPLACED`-Entitäten, legt benötigte Nachfolgekanten innerhalb einer kontrollierten Datenmigration an und aktiviert den neuen Constraint erst, wenn keine ersetzte Entität ohne Nachfolger verbleibt.
+**Kurzes Beispiel:** Eine RaN-Migration findet `RaN A ── GOVERNS ──► PiF2 X`. Sie bereitet `PROTECTS` zu PiF2 X nur als Kandidaten vor. Erst nachdem ein berechtigter Mensch das begründende CiV Y und die tatsächlich geregelten Umsetzungselemente bestätigt hat, übernimmt `SYNC` beide `PROTECTS`-Kanten, die neuen `GOVERNS`-Kanten und die Entfernung der alten PiF2-Regelkante atomar.
 
 ## Abgrenzung der Mandantentrennung
 
@@ -1299,6 +1392,6 @@ Bei einer noch vollständig leeren Datenbank entfallen die Backfills. Dort werde
 
 ## Automatisierte Prüfung
 
-Die technologieunabhängigen Invarianten werden zusätzlich durch `tests/test_model_rules.py` geprüft. `tests/test_spec_consistency.py` stellt sicher, dass Entitäts- und Beziehungskatalog, strukturierte Datentypen sowie die Folgedokumente synchron bleiben. GitHub Actions führt beide Tests bei jedem Push auf `main` und bei jedem Pull Request aus.
+Die technologieunabhängigen Invarianten werden zusätzlich durch [`tests/test_model_rules.py`](../../../tests/test_model_rules.py) geprüft. [`tests/test_spec_consistency.py`](../../../tests/test_spec_consistency.py) stellt sicher, dass Entitäts- und Beziehungskatalog, strukturierte Datentypen sowie die Folgedokumente synchron bleiben. GitHub Actions führt beide Tests bei jedem Push auf `main` und bei jedem Pull Request aus.
 
 Die Cypher-Abfragen dieses Dokuments bleiben für eine reale Neo4j-Instanz zusätzlich verpflichtend. Jede Validierungsabfrage muss nach Migration und fachlicher Transaktion null Zeilen liefern.

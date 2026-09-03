@@ -4,18 +4,18 @@
 
 ## Zehn Kernelemente
 
-| Element | Einfache Bedeutung |
-|---|---|
-| `PiH` | bewahrt einen früheren, abgelösten Zustand |
-| `CiV` | beschreibt Zweck und Werte |
-| `RaN` | beschreibt Regeln und Normen |
-| `RoF` | Modellraum für Organisationen, Teams, Mitglieder und Rollen |
-| `ERoF` | Modellraum für die relevante Umwelt handelnder Rollen |
-| `SYNC` | gespeicherte Definition der Synchronisationslogik |
-| `PiF2` | langfristiger Zukunftszustand über zehn Jahre |
-| `PiF1s` | strategischer Zukunftszustand über fünf bis zehn Jahre |
-| `PiF1t` | taktischer Zukunftszustand über ein bis fünf Jahre |
-| `PiF1o` | operativer Zukunftszustand unter einem Jahr |
+| Element | Einfache Bedeutung                                          |
+| ------- | ----------------------------------------------------------- |
+| `PiH`   | bewahrt einen früheren, abgelösten Zustand                  |
+| `CiV`   | beschreibt einen Wert durch NOT, SELF und TO SERVE          |
+| `RaN`   | schützt CiV und PiF2 und regelt deren konkrete Umsetzung    |
+| `RoF`   | Modellraum für Organisationen, Teams, Mitglieder und Rollen |
+| `ERoF`  | Modellraum für die relevante Umwelt handelnder Rollen       |
+| `SYNC`  | gespeicherte Definition der Synchronisationslogik           |
+| `PiF2`  | langfristiger Zukunftszustand über zehn Jahre               |
+| `PiF1s` | strategischer Zukunftszustand über fünf bis zehn Jahre      |
+| `PiF1t` | taktischer Zukunftszustand über ein bis fünf Jahre          |
+| `PiF1o` | operativer Zukunftszustand unter einem Jahr                 |
 
 `RoF` und `ERoF` sind Kernelemente, aber keine eigenen Knoten. Sie werden aus ihren konkreten Graphobjekten und Beziehungen sichtbar.
 

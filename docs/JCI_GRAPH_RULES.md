@@ -2,7 +2,7 @@
 
 ## 1. Status und Zweck
 
-Dieses Dokument legt technologieunabhängige Kardinalitäten und Invarianten des JCI-Graphen fest. Die fachliche Bedeutung stammt aus [JCI_CONTEXT.md](JCI_CONTEXT.md), der zulässige Typkatalog aus [JCI_ONTOLOGY.md](JCI_ONTOLOGY.md). Bei einem Konflikt gilt `JCI_CONTEXT.md`.
+Dieses Dokument legt technologieunabhängige Kardinalitäten und Invarianten des JCI-Graphen fest. Die fachliche Bedeutung stammt aus [JCI_CONTEXT.md](JCI_CONTEXT.md), der zulässige Typkatalog aus [JCI_ONTOLOGY.md](JCI_ONTOLOGY.md). Bei einem Konflikt gilt [`JCI_CONTEXT.md`](JCI_CONTEXT.md).
 
 ## 2. Allgemeine Entitätsregeln
 
@@ -20,16 +20,16 @@ Dieses Dokument legt technologieunabhängige Kardinalitäten und Invarianten des
 
 ## 3. Statusregeln
 
-| Entitätstypen                                             | Zulässige Statuswerte                                 |
-| --------------------------------------------------------- | ----------------------------------------------------- |
-| `CiV`, `RaN`, `SYNC`, RoF- und ERoF-Graphobjekte          | `DRAFT`, `ACTIVE`, `REPLACED`, `REVOKED`              |
-| `PiF2`, `PiF1s`, `PiF1t`, `PiF1o`                         | `DRAFT`, `ACTIVE`, `ACHIEVED`, `REPLACED`, `REVOKED`  |
+| Entitätstypen                                             | Zulässige Statuswerte                                            |
+| --------------------------------------------------------- | ---------------------------------------------------------------- |
+| `CiV`, `RaN`, `SYNC`, RoF- und ERoF-Graphobjekte          | `DRAFT`, `ACTIVE`, `REPLACED`, `REVOKED`                         |
+| `PiF2`, `PiF1s`, `PiF1t`, `PiF1o`                         | `DRAFT`, `ACTIVE`, `ACHIEVED`, `REPLACED`, `REVOKED`             |
 | `Task`                                                    | `DRAFT`, `ACTIVE`, `BLOCKED`, `COMPLETED`, `REPLACED`, `REVOKED` |
-| `Result`                                                  | `DRAFT`, `ACTIVE`, `COMPLETED`, `REPLACED`, `REVOKED` |
-| `SuccessCriterion`, `Evidence`                            | `DRAFT`, `ACTIVE`, `REPLACED`, `REVOKED`              |
-| `Verification`                                            | `COMPLETED`                                           |
-| `RaNConflict`                                             | `OPEN`, `RESOLVED`                                    |
-| `PiH`, `ChangeEvent`, `SyncEvent`, `HistoricalCorrection` | `RECORDED`                                            |
+| `Result`                                                  | `DRAFT`, `ACTIVE`, `COMPLETED`, `REPLACED`, `REVOKED`            |
+| `SuccessCriterion`, `Evidence`                            | `DRAFT`, `ACTIVE`, `REPLACED`, `REVOKED`                         |
+| `Verification`                                            | `COMPLETED`                                                      |
+| `RaNConflict`                                             | `OPEN`, `RESOLVED`                                               |
+| `PiH`, `ChangeEvent`, `SyncEvent`, `HistoricalCorrection` | `RECORDED`                                                       |
 
 Aus `ACHIEVED`, `REPLACED`, `REVOKED`, `COMPLETED`, `RECORDED` und `RESOLVED` führt kein Übergang zurück in einen veränderbaren Zustand. Eine Fortsetzung wird als neue Entität modelliert.
 
@@ -54,74 +54,76 @@ Die Spalte „Ziele je Quelle“ gilt in Pfeilrichtung; „Quellen je Ziel“ gi
 
 ### 4.1 Zweck und Zukunft
 
-| Quelle  | Beziehung              | Ziel    | Ziele je Quelle | Quellen je Ziel |
-| ------- | ---------------------- | ------- | --------------: | --------------: |
-| `PiH`   | `PROVIDES_CONTEXT_TO`  | `CiV`   |          `0..n` |          `0..n` |
-| `CiV`   | `INSCRIBES_PURPOSE_IN` | `PiF2`  |          `0..n` |          `1..n` |
-| `PiF1s` | `CONTRIBUTES_TO`       | `PiF2`  |          `1..n` |          `0..n` |
-| `PiF1t` | `CONTRIBUTES_TO`       | `PiF1s` |          `1..n` |          `0..n` |
-| `PiF1o` | `CONTRIBUTES_TO`       | `PiF1t` |          `1..n` |          `0..n` |
+| Quelle  | Beziehung              | Ziel                                                     | Ziele je Quelle | Quellen je Ziel |
+| ------- | ---------------------- | -------------------------------------------------------- | --------------: | --------------: |
+| `PiH`   | `PROVIDES_CONTEXT_TO`  | `CiV`                                                    | `0..n`          | `0..n`          |
+| `CiV`   | `HELD_BY`              | `RoFOrg`, `RoFTeam` oder<br>menschliches `RoFTeamMember` | `1`             | `0..n`          |
+| `CiV`   | `INFORMED_BY`          | `CiV`                                                    | `0..n`          | `0..n`          |
+| `CiV`   | `INSCRIBES_PURPOSE_IN` | `PiF2`                                                   | `0..n`          | `1..n`          |
+| `PiF1s` | `CONTRIBUTES_TO`       | `PiF2`                                                   | `1..n`          | `0..n`          |
+| `PiF1t` | `CONTRIBUTES_TO`       | `PiF1s`                                                  | `1..n`          | `0..n`          |
+| `PiF1o` | `CONTRIBUTES_TO`       | `PiF1t`                                                  | `1..n`          | `0..n`          |
 
 ### 4.2 Operative Umsetzung und Prüfung
 
 | Quelle           | Beziehung              | Ziel               | Ziele je Quelle | Quellen je Ziel |
 | ---------------- | ---------------------- | ------------------ | --------------: | --------------: |
-| `PiF1o`          | `HAS_SUCCESS_CRITERIA` | `SuccessCriterion` |          `1..n` |             `1` |
-| `PiF1o`          | `ACCOUNTABLE_MEMBER`   | `RoFTeamMember`    |             `1` |          `0..n` |
-| `PiF1o`          | `DECOMPOSES_INTO`      | `Task`             |          `1..n` |             `1` |
-| `Task`           | `DECOMPOSES_INTO`      | `Task`             |          `0..n` |          `0..1` |
-| `Task`           | `DEPENDS_ON`           | `Task`             |          `0..n` |          `0..n` |
-| `Task`           | `RESPONSIBLE_TEAM`     | `RoFTeam`          |             `1` |          `0..n` |
-| `Task`           | `EXECUTED_BY`          | `RoleAssignment`   |          `0..n` |          `0..n` |
-| `Task`           | `USES`                 | `ERoFObject`       |          `0..n` |          `0..n` |
-| `RoleAssignment` | `USES`                 | `ERoFObject`       |          `0..n` |          `1..n` |
-| `ERoFObject`     | `OWNED_BY`             | `RoFOrg`           |          `0..n` |          `0..n` |
-| `Task`           | `PRODUCES`             | `Result`           |          `0..n` |             `1` |
-| `Verification`   | `EVALUATES`            | `Result`           |             `1` |          `0..n` |
-| `Verification`   | `CHECKS`               | `SuccessCriterion` |             `1` |          `0..n` |
-| `Verification`   | `USES_EVIDENCE`        | `Evidence`         |          `0..n` |          `0..n` |
-| `Verification`   | `SUPERSEDES`           | `Verification`     |          `0..1` |          `0..1` |
+| `PiF1o`          | `HAS_SUCCESS_CRITERIA` | `SuccessCriterion` | `1..n`          | `1`             |
+| `PiF1o`          | `ACCOUNTABLE_MEMBER`   | `RoFTeamMember`    | `1`             | `0..n`          |
+| `PiF1o`          | `DECOMPOSES_INTO`      | `Task`             | `1..n`          | `1`             |
+| `Task`           | `DECOMPOSES_INTO`      | `Task`             | `0..n`          | `0..1`          |
+| `Task`           | `DEPENDS_ON`           | `Task`             | `0..n`          | `0..n`          |
+| `Task`           | `RESPONSIBLE_TEAM`     | `RoFTeam`          | `1`             | `0..n`          |
+| `Task`           | `EXECUTED_BY`          | `RoleAssignment`   | `0..n`          | `0..n`          |
+| `Task`           | `USES`                 | `ERoFObject`       | `0..n`          | `0..n`          |
+| `RoleAssignment` | `USES`                 | `ERoFObject`       | `0..n`          | `1..n`          |
+| `ERoFObject`     | `OWNED_BY`             | `RoFOrg`           | `0..n`          | `0..n`          |
+| `Task`           | `PRODUCES`             | `Result`           | `0..n`          | `1`             |
+| `Verification`   | `EVALUATES`            | `Result`           | `1`             | `0..n`          |
+| `Verification`   | `CHECKS`               | `SuccessCriterion` | `1`             | `0..n`          |
+| `Verification`   | `USES_EVIDENCE`        | `Evidence`         | `0..n`          | `0..n`          |
+| `Verification`   | `SUPERSEDES`           | `Verification`     | `0..1`          | `0..1`          |
 
 ### 4.3 Organisation und Rollen
 
 | Quelle               | Beziehung        | Ziel             | Ziele je Quelle | Quellen je Ziel |
 | -------------------- | ---------------- | ---------------- | --------------: | --------------: |
-| `RoFOrg`             | `HAS_TEAM`       | `RoFTeam`        |          `1..n` |             `1` |
-| `RoFTeam`            | `HAS_MEMBER`     | `RoFTeamMember`  |          `1..n` |          `1..n` |
-| `RoFTeamMember`      | `HAS_ROLE`       | `RoFRole`        |          `1..n` |          `0..n` |
-| `RoFTeamMember`      | `HAS_ASSIGNMENT` | `RoleAssignment` |          `0..n` |             `1` |
-| `RoleAssignment`     | `IN_TEAM`        | `RoFTeam`        |             `1` |          `0..n` |
-| `RoleAssignment`     | `ACTIVATES_ROLE` | `RoFRole`        |             `1` |          `0..n` |
-| `RoFOrgRelationship` | `SOURCE_ORG`     | `RoFOrg`         |             `1` |          `0..n` |
-| `RoFOrgRelationship` | `TARGET_ORG`     | `RoFOrg`         |             `1` |          `0..n` |
-| `RoFOrgRelationship` | `REPRESENTED_BY` | `RoleAssignment` |          `2..n` |          `0..n` |
+| `RoFOrg`             | `HAS_TEAM`       | `RoFTeam`        | `1..n`          | `1`             |
+| `RoFTeam`            | `HAS_MEMBER`     | `RoFTeamMember`  | `1..n`          | `1..n`          |
+| `RoFTeamMember`      | `HAS_ROLE`       | `RoFRole`        | `1..n`          | `0..n`          |
+| `RoFTeamMember`      | `HAS_ASSIGNMENT` | `RoleAssignment` | `0..n`          | `1`             |
+| `RoleAssignment`     | `IN_TEAM`        | `RoFTeam`        | `1`             | `0..n`          |
+| `RoleAssignment`     | `ACTIVATES_ROLE` | `RoFRole`        | `1`             | `0..n`          |
+| `RoFOrgRelationship` | `SOURCE_ORG`     | `RoFOrg`         | `1`             | `0..n`          |
+| `RoFOrgRelationship` | `TARGET_ORG`     | `RoFOrg`         | `1`             | `0..n`          |
+| `RoFOrgRelationship` | `REPRESENTED_BY` | `RoleAssignment` | `2..n`          | `0..n`          |
 
 ### 4.4 Akteure und Nachweise
 
 | Quelle                 | Beziehung       | Ziel             | Ziele je Quelle | Quellen je Ziel |
 | ---------------------- | --------------- | ---------------- | --------------: | --------------: |
-| `JCIEntity`            | `CREATED_BY`    | `RoleAssignment` |          `0..1` |          `0..n` |
-| `ChangeEvent`          | `REQUESTED_BY`  | `RoleAssignment` |             `1` |          `0..n` |
-| `HistoricalCorrection` | `CORRECTED_BY`  | `RoleAssignment` |             `1` |          `0..n` |
-| `ChangeEvent`          | `USES_EVIDENCE` | `Evidence`       |          `0..n` |          `0..n` |
-| `HistoricalCorrection` | `USES_EVIDENCE` | `Evidence`       |          `0..n` |          `0..n` |
+| `JCIEntity`            | `CREATED_BY`    | `RoleAssignment` | `0..1`          | `0..n`          |
+| `ChangeEvent`          | `REQUESTED_BY`  | `RoleAssignment` | `1`             | `0..n`          |
+| `HistoricalCorrection` | `CORRECTED_BY`  | `RoleAssignment` | `1`             | `0..n`          |
+| `ChangeEvent`          | `USES_EVIDENCE` | `Evidence`       | `0..n`          | `0..n`          |
+| `HistoricalCorrection` | `USES_EVIDENCE` | `Evidence`       | `0..n`          | `0..n`          |
 
 ### 4.5 Veränderung, Historisierung und Korrektur
 
 | Quelle                      | Beziehung              | Ziel                   | Ziele je Quelle | Quellen je Ziel |
 | --------------------------- | ---------------------- | ---------------------- | --------------: | --------------: |
-| historisierbare `JCIEntity` | `CHANGED_BY`           | `ChangeEvent`          |          `0..n` |          `0..1` |
-| `ChangeEvent`               | `TRIGGERS`             | `SyncEvent`            |          `0..n` |             `1` |
-| `ChangeEvent`               | `TARGETS_HISTORY`      | `PiH`                  |          `0..1` |          `0..n` |
-| `SyncEvent`                 | `EXECUTES`             | `SYNC`                 |             `1` |          `0..n` |
-| `SyncEvent`                 | `AFFECTS`              | `JCIEntity`            |          `0..n` |          `0..n` |
-| historisierbare `JCIEntity` | `HAS_HISTORICAL_STATE` | `PiH`                  |          `0..n` |             `1` |
-| `SyncEvent`                 | `CREATES_HISTORY`      | `PiH`                  |          `0..n` |             `1` |
-| `HistoricalCorrection`      | `CORRECTS`             | `PiH`                  |             `1` |          `0..n` |
-| `HistoricalCorrection`      | `CAUSED_BY`            | `ChangeEvent`          |             `1` |          `0..n` |
-| `SyncEvent`                 | `CREATES_CORRECTION`   | `HistoricalCorrection` |          `0..n` |             `1` |
-| `HistoricalCorrection`      | `SUPERSEDES`           | `HistoricalCorrection` |          `0..1` |          `0..1` |
-| ersetzbare `JCIEntity`      | `REPLACED_BY`          | gleicher konkreter Typ |          `0..1` |          `0..n` |
+| historisierbare `JCIEntity` | `CHANGED_BY`           | `ChangeEvent`          | `0..n`          | `0..1`          |
+| `ChangeEvent`               | `TRIGGERS`             | `SyncEvent`            | `0..n`          | `1`             |
+| `ChangeEvent`               | `TARGETS_HISTORY`      | `PiH`                  | `0..1`          | `0..n`          |
+| `SyncEvent`                 | `EXECUTES`             | `SYNC`                 | `1`             | `0..n`          |
+| `SyncEvent`                 | `AFFECTS`              | `JCIEntity`            | `0..n`          | `0..n`          |
+| historisierbare `JCIEntity` | `HAS_HISTORICAL_STATE` | `PiH`                  | `0..n`          | `1`             |
+| `SyncEvent`                 | `CREATES_HISTORY`      | `PiH`                  | `0..n`          | `1`             |
+| `HistoricalCorrection`      | `CORRECTS`             | `PiH`                  | `1`             | `0..n`          |
+| `HistoricalCorrection`      | `CAUSED_BY`            | `ChangeEvent`          | `1`             | `0..n`          |
+| `SyncEvent`                 | `CREATES_CORRECTION`   | `HistoricalCorrection` | `0..n`          | `1`             |
+| `HistoricalCorrection`      | `SUPERSEDES`           | `HistoricalCorrection` | `0..1`          | `0..1`          |
+| ersetzbare `JCIEntity`      | `REPLACED_BY`          | gleicher konkreter Typ | `0..1`          | `0..n`          |
 
 Bedingte Invarianten:
 
@@ -133,20 +135,22 @@ Bedingte Invarianten:
 
 **Kurzes Beispiel:** Ein abgewiesener `CREATED`-Auftrag behält sein `ChangeEvent` und erhält nach dem beendeten Versuch ein `SyncEvent`, erzeugt aber weder den angeforderten Zielknoten noch `CHANGED_BY` oder `PiH`.
 
-`RaN ── GOVERNS ──► zulässige JCIEntity` besitzt in beiden Richtungen `0..n`.
+`RaN ── PROTECTS ──► CiV | PiF2` und `RaN ── GOVERNS ──► zulässiges Umsetzungselement` besitzen in beiden Richtungen `0..n`. Für aktive RaN gelten zusätzlich die Mindestkardinalitäten und Kohärenzregeln aus Abschnitt 7.
 
-| Quelle | Beziehung | Ziel | Ziele je Quelle | Quellen je Ziel |
-| ------ | --------- | ---- | --------------: | --------------: |
-| `RaN` | `APPLIES_IN` | `RoFOrg` oder `RoFTeam` | `0..1` | `0..n` |
+| Quelle | Beziehung    | Ziel                         | Ziele je Quelle | Quellen je Ziel |
+| ------ | ------------ | ---------------------------- | --------------: | --------------: |
+| `RaN`  | `PROTECTS`   | `CiV` oder `PiF2`            | `0..n`          | `0..n`          |
+| `RaN`  | `GOVERNS`    | zulässiges Umsetzungselement | `0..n`          | `0..n`          |
+| `RaN`  | `APPLIES_IN` | `RoFOrg` oder `RoFTeam`      | `0..1`          | `0..n`          |
 
 | Quelle        | Beziehung          | Ziel             | Ziele je Quelle | Quellen je Ziel |
-| ------------- | ------------------ | ---------------- | ---------------:| ---------------:|
-| `RaNConflict` | `CONFLICTING_RULE` | `RaN`            |          `1..n` |          `0..n` |
-| `RaNConflict` | `AFFECTS`          | `JCIEntity`      |          `1..n` |          `0..n` |
-| `RaNConflict` | `DETECTED_BY`      | `SyncEvent`      |             `1` |          `0..n` |
-| `RaNConflict` | `RESOLVED_BY`      | `RoleAssignment` |          `0..1` |          `0..n` |
-| `RaNConflict` | `RESOLVED_THROUGH` | `ChangeEvent`    |          `0..1` |          `0..n` |
-| `RaNConflict` | `USES_EVIDENCE`    | `Evidence`       |          `0..n` |          `0..n` |
+| ------------- | ------------------ | ---------------- | --------------: | --------------: |
+| `RaNConflict` | `CONFLICTING_RULE` | `RaN`            | `1..n`          | `0..n`          |
+| `RaNConflict` | `AFFECTS`          | `JCIEntity`      | `1..n`          | `0..n`          |
+| `RaNConflict` | `DETECTED_BY`      | `SyncEvent`      | `1`             | `0..n`          |
+| `RaNConflict` | `RESOLVED_BY`      | `RoleAssignment` | `0..1`          | `0..n`          |
+| `RaNConflict` | `RESOLVED_THROUGH` | `ChangeEvent`    | `0..1`          | `0..n`          |
+| `RaNConflict` | `USES_EVIDENCE`    | `Evidence`       | `0..n`          | `0..n`          |
 
 ## 5. Akteurs- und Evidenzregeln
 
@@ -169,43 +173,53 @@ Bedingte Invarianten:
 
 ## 6. Organisations- und Umweltregeln
 
-1. Jede aktive `RoFOrg` besitzt mindestens ein Team; jedes aktive Team mindestens ein Mitglied.
-2. Ein `RoleAssignment` gehört genau zu einem Mitglied, einem Team und einer aktivierten Rolle.
-3. Das Mitglied eines `RoleAssignment` muss Mitglied des verbundenen Teams sein und die aktivierte Rolle besitzen.
-4. Mindestens ein ausführendes `RoleAssignment` eines aktiven oder abgeschlossenen `ATOMIC`-Tasks gehört zu dessen `RESPONSIBLE_TEAM`.
-5. Jedes aktive `ERoFObject` wird von mindestens einem `RoleAssignment` verwendet.
-6. Eine direkte `Task ── USES ──► ERoFObject`-Beziehung ist nur für `ATOMIC`-Tasks zulässig und setzt voraus, dass mindestens ein ausführendes `RoleAssignment` dasselbe Objekt verwendet.
-7. `SOURCE_ORG` und `TARGET_ORG` einer `RoFOrgRelationship` müssen verschieden sein.
-8. `SUBSIDIARY` ist gerichtet und über beliebig viele Ebenen zulässig, muss aber zyklusfrei bleiben.
-9. `PARTNERSHIP` ist fachlich wechselseitig; die gespeicherte Richtung dient nur der Eindeutigkeit.
-10. Eine aktive Organisationsbeziehung besitzt mindestens ein vertretendes `RoleAssignment` aus jeder beteiligten Organisation.
-11. `HAS_MEMBER` und `HAS_ROLE` besitzen `validFrom` und optional `validUntil`; das Ende liegt nicht vor dem Beginn.
-12. Der Gültigkeitszeitraum eines `RoleAssignment` liegt vollständig innerhalb einer gleichzeitig gültigen Mitgliedschaft im Team und eines gleichzeitig gültigen Rollenbesitzes.
-13. Ist `allocation` angegeben, gilt `0 < allocation <= 1`; die Summe gleichzeitig gültiger Werte eines Mitglieds überschreitet `1` nicht.
-14. Eine aktive `PARTNERSHIP` speichert die Organisation mit der lexikografisch kleineren UUID als `SOURCE_ORG`.
-15. Aktive Organisationsbeziehungen desselben Typs und Organisationspaars besitzen keine überlappenden Gültigkeitszeiträume.
-16. `INTERNAL` beziehungsweise `EXTERNAL` wird je betrachteter Organisation abgeleitet: Eine `OWNED_BY`-Kante zu ihr ergibt `INTERNAL`, ihr Fehlen `EXTERNAL`.
+1. Jedes `CiV` beschreibt genau einen Wert und besitzt nicht leere Strings für `notCiV`, `selfCiV` und `toServeCiV`; die alten Felder `purpose`, `values` und `scope` sind für CiV unzulässig.
+2. Jedes `CiV` besitzt genau ein `HELD_BY` zu einer `RoFOrg`, einem `RoFTeam` oder einem menschlichen `RoFTeamMember`. Ein technisches Mitglied ist als Werteträger unzulässig.
+3. `INFORMED_BY` verbindet ausschließlich unterschiedliche CiV nach ausdrücklicher fachlicher Bestätigung. Gleicher Name, Mitgliedschaft oder Zugehörigkeit erzeugen weder eine Kante noch eine automatische Übernahme von Dimensionen.
+4. Alle CiV, die dasselbe `PiF2` unmittelbar über `INSCRIBES_PURPOSE_IN` begründen, besitzen denselben `HELD_BY`-Zielknoten. Dieser bestimmt den Scope des `PiF2`; ein redundantes CiV-Zweck- oder Scope-Feld ist unzulässig.
+5. Ein organisationsbezogenes CiV bleibt mit der `RoFOrg` verbunden, auch wenn ein beauftragtes Team es erarbeitet. Die menschliche Entscheidung bleibt über `CREATED_BY`, `ChangeEvent`, `REQUESTED_BY` und die beteiligten `RoleAssignments` nachvollziehbar.
+6. Jede aktive `RoFOrg` besitzt mindestens ein Team; jedes aktive Team mindestens ein Mitglied.
+7. Ein `RoleAssignment` gehört genau zu einem Mitglied, einem Team und einer aktivierten Rolle.
+8. Das Mitglied eines `RoleAssignment` muss Mitglied des verbundenen Teams sein und die aktivierte Rolle besitzen.
+9. Mindestens ein ausführendes `RoleAssignment` eines aktiven oder abgeschlossenen `ATOMIC`-Tasks gehört zu dessen `RESPONSIBLE_TEAM`.
+10. Jedes aktive `ERoFObject` wird von mindestens einem `RoleAssignment` verwendet.
+11. Eine direkte `Task ── USES ──► ERoFObject`-Beziehung ist nur für `ATOMIC`-Tasks zulässig und setzt voraus, dass mindestens ein ausführendes `RoleAssignment` dasselbe Objekt verwendet.
+12. `SOURCE_ORG` und `TARGET_ORG` einer `RoFOrgRelationship` müssen verschieden sein.
+13. `SUBSIDIARY` ist gerichtet und über beliebig viele Ebenen zulässig, muss aber zyklusfrei bleiben.
+14. `PARTNERSHIP` ist fachlich wechselseitig; die gespeicherte Richtung dient nur der Eindeutigkeit.
+15. Eine aktive Organisationsbeziehung besitzt mindestens ein vertretendes `RoleAssignment` aus jeder beteiligten Organisation.
+16. `HAS_MEMBER` und `HAS_ROLE` besitzen `validFrom` und optional `validUntil`; das Ende liegt nicht vor dem Beginn.
+17. Der Gültigkeitszeitraum eines `RoleAssignment` liegt vollständig innerhalb einer gleichzeitig gültigen Mitgliedschaft im Team und eines gleichzeitig gültigen Rollenbesitzes.
+18. Ist `allocation` angegeben, gilt `0 < allocation <= 1`; die Summe gleichzeitig gültiger Werte eines Mitglieds überschreitet `1` nicht.
+19. Eine aktive `PARTNERSHIP` speichert die Organisation mit der lexikografisch kleineren UUID als `SOURCE_ORG`.
+20. Aktive Organisationsbeziehungen desselben Typs und Organisationspaars besitzen keine überlappenden Gültigkeitszeiträume.
+21. `INTERNAL` beziehungsweise `EXTERNAL` wird je betrachteter Organisation abgeleitet: Eine `OWNED_BY`-Kante zu ihr ergibt `INTERNAL`, ihr Fehlen `EXTERNAL`.
 
-## 7. RaN-Priorität und Konflikte
+## 7. RaN-Schutz, Priorität und Konflikte
 
-1. Für eine Entscheidung werden nur `RaN` mit `status = ACTIVE`, gültigem Zeitintervall, passendem `scopeType`, zutreffendem `APPLIES_IN`, passendem `governedTypes` und einschlägiger `GOVERNS`-Beziehung berücksichtigt.
-2. `priority` ist eine verpflichtende Ganzzahl; eine größere Zahl bedeutet höheren Vorrang bei einem tatsächlichen Widerspruch.
-3. `ruleType` begründet keinen automatischen Vorrang.
-4. Vereinbare anwendbare Regeln gelten gemeinsam, unabhängig von ihrer relativen Priorität.
-5. Bei widersprüchlichen Regeln unterschiedlicher Priorität gilt für den konkreten Widerspruch die höher priorisierte Regel. Die andere Regel bleibt außerhalb dieses Widerspruchs aktiv.
-6. Bei mindestens zwei widersprüchlichen Regeln derselben höchsten einschlägigen Priorität entsteht genau ein `RaNConflict` mit `conflictType = PRIORITY_TIE` für die Konfliktmenge und Entscheidung.
-7. Ist Anwendbarkeit oder Vereinbarkeit nicht eindeutig auswertbar, entsteht ein `RaNConflict` mit `conflictType = UNEVALUABLE`; die Priorität darf Unsicherheit nicht übergehen.
-8. Ein offener Konflikt besitzt einen nicht leeren und innerhalb des Veränderungsauftrags eindeutigen `conflictKey`, mindestens eine `CONFLICTING_RULE`, mindestens ein `AFFECTS`, genau ein `DETECTED_BY`, kein `RESOLVED_BY` und kein `RESOLVED_THROUGH`. `PRIORITY_TIE` erfordert mindestens zwei Konfliktregeln; für `UNEVALUABLE` genügt mindestens eine nicht eindeutig auswertbare Regel.
-9. Ein gelöster Konflikt besitzt genau ein `RESOLVED_BY`, genau ein `RESOLVED_THROUGH` und ein nicht leeres `resolution` sowie `resolvedAt`.
-10. `RESOLVED` darf erst gesetzt werden, wenn ein nachfolgender erfolgreicher Synchronisationslauf bestätigt, dass der dokumentierte Widerspruch nicht mehr besteht.
-11. Der Wechsel von `OPEN` zu `RESOLVED` ist eine fachliche Änderung; der offene Ausgangszustand wird als `PiH` historisiert. `RESOLVED` ist terminal.
-12. Ein offener Konflikt blockiert automatische Änderungen, deren Zulässigkeit von seiner Auflösung abhängt; unabhängige Prüfungen bleiben möglich.
-13. `governedTypes` ist nicht leer; jedes `GOVERNS`-Ziel besitzt einen aufgeführten konkreten Typ.
-14. `GLOBAL` und `ENTITY` besitzen kein `APPLIES_IN`. `ORGANIZATION` besitzt genau eine Beziehung zu `RoFOrg`; `TEAM` genau eine zu `RoFTeam`.
-15. Jede Condition besitzt `combiner = ALL | ANY` und mindestens eine auswertbare Klausel aus `path`, `operator` und gegebenenfalls `value`.
-16. `REQUIRE` erlaubt bei wahrer und verweigert bei falscher Bedingung. `PROHIBIT` verweigert bei wahrer Bedingung. `PERMIT` erlaubt bei wahrer Bedingung. Falsches `PROHIBIT` oder `PERMIT` trifft keine eigene Entscheidung.
-17. Eine Regelverletzung blockiert die angeforderte Entscheidung, erzeugt allein aber keinen `RaNConflict`.
-18. Ein Widerspruch liegt nur vor, wenn Regeln mit gleichem `decisionKey`, überlappendem Scope und gemeinsamem Ziel gleichzeitig erlauben und verweigern.
+1. Ein aktives `RaN` besitzt mindestens ein `PROTECTS` zu `CiV`, mindestens ein `PROTECTS` zu `PiF2` und mindestens ein `GOVERNS` zu einem zulässigen Umsetzungselement.
+2. Jedes geschützte CiV begründet mindestens ein durch dasselbe RaN geschütztes PiF2; jedes geschützte PiF2 wird von mindestens einem durch dasselbe RaN geschützten CiV begründet. Weitere CiV desselben PiF2 müssen nicht geschützt werden.
+3. `PROTECTS` besitzt nur `CiV` oder `PiF2` als Ziel. `GOVERNS` besitzt nur `PiF1s`, `PiF1t`, `PiF1o`, `Task`, `SuccessCriterion`, `Result`, `Verification`, `Evidence`, `RoFOrg`, `RoFOrgRelationship`, `RoFTeam`, `RoFTeamMember`, `RoFRole`, `RoleAssignment` oder `ERoFObject` als Ziel.
+4. `PROTECTS` wird ausschließlich durch eine ausdrückliche, menschlich bestätigte und auf ein `RoleAssignment` zurückführbare Änderung erzeugt. `SYNC` leitet keine Schutzbeziehung automatisch ab.
+5. Schutzobjekte sind gemäß `GLOBAL`, `ORGANIZATION`, `TEAM` oder `ENTITY` organisatorisch mit Scope und WHY-Pfaden des RaN vereinbar.
+6. Für eine Entscheidung werden nur `RaN` mit `status = ACTIVE`, gültigem Zeitintervall, passendem `scopeType`, zutreffendem `APPLIES_IN`, passendem `governedTypes` und einschlägiger `GOVERNS`-Beziehung berücksichtigt.
+7. `priority` ist eine verpflichtende Ganzzahl; eine größere Zahl bedeutet höheren Vorrang bei einem tatsächlichen Widerspruch.
+8. `ruleType` begründet keinen automatischen Vorrang.
+9. Vereinbare anwendbare Regeln gelten gemeinsam, unabhängig von ihrer relativen Priorität.
+10. Bei widersprüchlichen Regeln unterschiedlicher Priorität gilt für den konkreten Widerspruch die höher priorisierte Regel. Die andere Regel bleibt außerhalb dieses Widerspruchs aktiv.
+11. Bei mindestens zwei widersprüchlichen Regeln derselben höchsten einschlägigen Priorität entsteht genau ein `RaNConflict` mit `conflictType = PRIORITY_TIE` für die Konfliktmenge und Entscheidung.
+12. Ist Anwendbarkeit oder Vereinbarkeit nicht eindeutig auswertbar, entsteht ein `RaNConflict` mit `conflictType = UNEVALUABLE`; die Priorität darf Unsicherheit nicht übergehen.
+13. Ein offener Konflikt besitzt einen nicht leeren und innerhalb des Veränderungsauftrags eindeutigen `conflictKey`, mindestens eine `CONFLICTING_RULE`, mindestens ein `AFFECTS`, genau ein `DETECTED_BY`, kein `RESOLVED_BY` und kein `RESOLVED_THROUGH`. `PRIORITY_TIE` erfordert mindestens zwei Konfliktregeln; für `UNEVALUABLE` genügt mindestens eine nicht eindeutig auswertbare Regel.
+14. Ein gelöster Konflikt besitzt genau ein `RESOLVED_BY`, genau ein `RESOLVED_THROUGH` und ein nicht leeres `resolution` sowie `resolvedAt`.
+15. `RESOLVED` darf erst gesetzt werden, wenn ein nachfolgender erfolgreicher Synchronisationslauf bestätigt, dass der dokumentierte Widerspruch nicht mehr besteht.
+16. Der Wechsel von `OPEN` zu `RESOLVED` ist eine fachliche Änderung; der offene Ausgangszustand wird als `PiH` historisiert. `RESOLVED` ist terminal.
+17. Ein offener Konflikt blockiert automatische Änderungen, deren Zulässigkeit von seiner Auflösung abhängt; unabhängige Prüfungen bleiben möglich.
+18. `governedTypes` ist nicht leer; jedes `GOVERNS`-Ziel besitzt einen aufgeführten konkreten Typ.
+19. `GLOBAL` und `ENTITY` besitzen kein `APPLIES_IN`. `ORGANIZATION` besitzt genau eine Beziehung zu `RoFOrg`; `TEAM` genau eine zu `RoFTeam`.
+20. Jede Condition besitzt `combiner = ALL | ANY` und mindestens eine auswertbare Klausel aus `path`, `operator` und gegebenenfalls `value`.
+21. `REQUIRE` erlaubt bei wahrer und verweigert bei falscher Bedingung. `PROHIBIT` verweigert bei wahrer Bedingung. `PERMIT` erlaubt bei wahrer Bedingung. Falsches `PROHIBIT` oder `PERMIT` trifft keine eigene Entscheidung.
+22. Eine Regelverletzung blockiert die angeforderte Entscheidung, erzeugt allein aber keinen `RaNConflict`.
+23. Ein Widerspruch liegt nur vor, wenn Regeln mit gleichem `decisionKey`, überlappendem Scope und gemeinsamem Ziel gleichzeitig erlauben und verweigern.
 
 ## 8. Erfolgskriterien und Erreichung
 

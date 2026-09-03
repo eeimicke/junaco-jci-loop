@@ -7,7 +7,8 @@
   <style>
     body { max-width: 70rem; margin: 2rem auto; padding: 0 1rem; font: 1rem/1.55 system-ui, sans-serif; color: #17212b; }
     code { background: #f2f4f7; padding: .1rem .3rem; border-radius: .2rem; }
-    table { width: 100%; border-collapse: collapse; margin: 1rem 0 2rem; }
+    .table-wrap { width: 100%; overflow-x: auto; margin: 1rem 0 2rem; }
+    table { width: 100%; min-width: 40rem; border-collapse: collapse; margin: 0; }
     th, td { border: 1px solid #c9d1d9; padding: .5rem; text-align: left; vertical-align: top; }
     th { background: #f2f4f7; }
   </style>
@@ -23,11 +24,12 @@
   <p lang="en">The canonical domain description is available in the German <a href="../../../JCI_CONTEXT.md">JCI_CONTEXT.md</a>. The controlled English companion is available in <a href="../../../en/JCI_CONTEXT.md">docs/en/JCI_CONTEXT.md</a>. If they differ, the German source documents govern.</p>
 
   <h2>Entitätstypen / Entity types</h2>
+  <div class="table-wrap" role="region" aria-label="Entitätstypen / Entity types" tabindex="0">
   <table>
     <thead><tr><th>Begriff / Term</th><th>Einordnung / Meaning</th></tr></thead>
     <tbody>
       <tr><td><code>PiH</code></td><td>Unveränderlicher historischer Zustand. / <span lang="en">Immutable historical state.</span></td></tr>
-      <tr><td><code>CiV</code></td><td>Werte und Zweck. / <span lang="en">Values and purpose.</span></td></tr>
+      <tr><td><code>CiV</code></td><td>Ein Wert mit NOT-, SELF- und TO-SERVE-Dimension. / <span lang="en">One value with NOT, SELF, and TO SERVE dimensions.</span></td></tr>
       <tr><td><code>RaN</code></td><td>Regel oder Norm. / <span lang="en">Rule or norm.</span></td></tr>
       <tr><td><code>SYNC</code></td><td>Gespeicherte Synchronisationsdefinition. / <span lang="en">Stored synchronization definition.</span></td></tr>
       <tr><td><code>PiF2</code>, <code>PiF1s</code>, <code>PiF1t</code>, <code>PiF1o</code></td><td>Langfristige, strategische, taktische und operative Zukunftszustände. / <span lang="en">Long-term, strategic, tactical, and operational future states.</span></td></tr>
@@ -37,10 +39,11 @@
       <tr><td><code>ChangeEvent</code>, <code>SyncEvent</code>, <code>RaNConflict</code>, <code>HistoricalCorrection</code></td><td>Veränderung, Synchronisation, Konflikt und historische Berichtigung. / <span lang="en">Change, synchronization, conflict, and historical correction.</span></td></tr>
     </tbody>
   </table>
+  </div>
 
   <h2>Kanonische Beziehungen / Canonical relationships</h2>
   <p>
-    <code>PROVIDES_CONTEXT_TO</code>, <code>INSCRIBES_PURPOSE_IN</code>,
+    <code>PROVIDES_CONTEXT_TO</code>, <code>HELD_BY</code>, <code>INFORMED_BY</code>, <code>INSCRIBES_PURPOSE_IN</code>,
     <code>CONTRIBUTES_TO</code>, <code>HAS_SUCCESS_CRITERIA</code>,
     <code>ACCOUNTABLE_MEMBER</code>, <code>DECOMPOSES_INTO</code>,
     <code>DEPENDS_ON</code>, <code>RESPONSIBLE_TEAM</code>,
@@ -49,7 +52,7 @@
     <code>SUPERSEDES</code>, <code>HAS_TEAM</code>, <code>HAS_MEMBER</code>,
     <code>HAS_ROLE</code>, <code>HAS_ASSIGNMENT</code>, <code>IN_TEAM</code>,
     <code>ACTIVATES_ROLE</code>, <code>SOURCE_ORG</code>, <code>TARGET_ORG</code>,
-    <code>REPRESENTED_BY</code>, <code>OWNED_BY</code>, <code>GOVERNS</code>,
+    <code>REPRESENTED_BY</code>, <code>OWNED_BY</code>, <code>PROTECTS</code>, <code>GOVERNS</code>,
     <code>APPLIES_IN</code>, <code>CONFLICTING_RULE</code>, <code>AFFECTS</code>,
     <code>DETECTED_BY</code>, <code>RESOLVED_BY</code>,
     <code>RESOLVED_THROUGH</code>, <code>CREATED_BY</code>,
@@ -60,6 +63,7 @@
   </p>
 
   <h2>Präzisierende Eigenschaften / Clarifying properties</h2>
+  <div class="table-wrap" role="region" aria-label="Präzisierende Eigenschaften / Clarifying properties" tabindex="0">
   <table>
     <thead><tr><th>Begriff / Term</th><th>Einordnung / Meaning</th></tr></thead>
     <tbody>
@@ -69,11 +73,15 @@
       <tr><td><code>requestedRevision</code></td><td>Erwartete Ausgangsrevision; bei <code>CREATED</code> nicht gesetzt. / <span lang="en">Expected base revision; absent for <code>CREATED</code>.</span></td></tr>
       <tr><td><code>runId</code></td><td>Eindeutige Kennung eines abgeschlossenen technischen Synchronisationslaufs. / <span lang="en">Unique identifier of a completed technical synchronization run.</span></td></tr>
       <tr><td><code>bootstrapKey</code></td><td>Kennung des einmaligen Root-RoleAssignment. / <span lang="en">Marker of the one-time root role assignment.</span></td></tr>
+      <tr><td><code>notCiV</code></td><td>Was dem einzelnen Wert widerspricht und ausgeschlossen ist. / <span lang="en">What contradicts the individual value and is excluded.</span></td></tr>
+      <tr><td><code>selfCiV</code></td><td>Wie der einzelne Wert in eigener Identität und Haltung erscheint. / <span lang="en">How the individual value appears in one's own identity and stance.</span></td></tr>
+      <tr><td><code>toServeCiV</code></td><td>Wem oder was der einzelne Wert dient und welchen Beitrag er leistet. / <span lang="en">Whom or what the individual value serves and what it contributes.</span></td></tr>
       <tr><td><code>evaluatedResultRevision</code></td><td>Von einer Verification bewertete Result-Revision. / <span lang="en">Result revision evaluated by a verification.</span></td></tr>
       <tr><td><code>checkedCriterionRevision</code></td><td>Von einer Verification geprüfte SuccessCriterion-Revision. / <span lang="en">SuccessCriterion revision checked by a verification.</span></td></tr>
       <tr><td><code>baseHistoryViewHash</code></td><td>SHA-256 des vor einer HistoricalCorrection erneut gelesenen effektiven historischen Stands. / <span lang="en">SHA-256 of the effective historical view re-read before a historical correction.</span></td></tr>
     </tbody>
   </table>
+  </div>
 
   <h2>Beispiele für vollständige IRIs / Full IRI examples</h2>
   <ul>

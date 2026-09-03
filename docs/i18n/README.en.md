@@ -2,7 +2,7 @@
 
 ## Authority
 
-- `docs/JCI_CONTEXT.md` is the canonical domain source.
+- [`docs/JCI_CONTEXT.md`](../JCI_CONTEXT.md) is the canonical domain source.
 - Files below `docs/en/` are controlled English translations.
 - A translation must not add, remove, or reinterpret any entity, relationship, cardinality, or rule.
 - Canonical identifiers such as `PiF1o`, `RoleAssignment`, `EXECUTED_BY`, and status values are not translated.

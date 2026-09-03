@@ -2,7 +2,7 @@
 
 ## Verbindlichkeit
 
-- `docs/JCI_CONTEXT.md` ist die kanonische fachliche Quelle.
+- [`docs/JCI_CONTEXT.md`](../JCI_CONTEXT.md) ist die kanonische fachliche Quelle.
 - Dateien unter `docs/en/` sind kontrollierte englische Übersetzungen.
 - Eine Übersetzung darf keine Entität, Beziehung, Kardinalität oder Regel hinzufügen, entfernen oder umdeuten.
 - Kanonische Bezeichner wie `PiF1o`, `RoleAssignment`, `EXECUTED_BY` und Statuswerte werden nicht übersetzt.

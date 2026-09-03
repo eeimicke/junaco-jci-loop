@@ -1,5 +1,7 @@
 flowchart LR
     PiH -->|PROVIDES_CONTEXT_TO| CiV
+    CiV -->|HELD_BY| RoFOrg
+    CiV -->|INFORMED_BY| SourceCiV[CiV source]
     CiV -->|INSCRIBES_PURPOSE_IN| PiF2
     PiF1s -->|CONTRIBUTES_TO| PiF2
     PiF1t -->|CONTRIBUTES_TO| PiF1s
@@ -25,6 +27,8 @@ flowchart LR
     Verification[Verification binds target revisions] -->|EVALUATES| Result
     Verification -->|CHECKS| SuccessCriterion
     Verification -->|USES_EVIDENCE| Evidence
+    RaN -->|PROTECTS| CiV
+    RaN -->|PROTECTS| PiF2
     RaN -->|GOVERNS| Task
     RaNConflict -->|CONFLICTING_RULE| RaN
     RaNConflict -->|DETECTED_BY| SyncEvent

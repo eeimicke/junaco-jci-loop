@@ -6,18 +6,18 @@
 
 ## Ten core elements
 
-| Element | Plain-language meaning |
-|---|---|
-| `PiH` | preserves a former state that was superseded |
-| `CiV` | describes purpose and values |
-| `RaN` | describes rules and norms |
-| `RoF` | model space for organisations, teams, members, and roles |
-| `ERoF` | model space for the relevant environment of acting roles |
-| `SYNC` | stored definition of synchronisation logic |
-| `PiF2` | long-term future state beyond ten years |
-| `PiF1s` | strategic future state beyond five and up to ten years |
-| `PiF1t` | tactical future state from one to five years |
-| `PiF1o` | operational future state within one year |
+| Element | Plain-language meaning                                   |
+| ------- | -------------------------------------------------------- |
+| `PiH`   | preserves a former state that was superseded             |
+| `CiV`   | describes one value through NOT, SELF, and TO SERVE      |
+| `RaN`   | protects CiV and PiF2 and governs their implementation   |
+| `RoF`   | model space for organisations, teams, members, and roles |
+| `ERoF`  | model space for the relevant environment of acting roles |
+| `SYNC`  | stored definition of synchronisation logic               |
+| `PiF2`  | long-term future state beyond ten years                  |
+| `PiF1s` | strategic future state beyond five and up to ten years   |
+| `PiF1t` | tactical future state from one to five years             |
+| `PiF1o` | operational future state within one year                 |
 
 `RoF` and `ERoF` are core elements without dedicated nodes. They become visible through their concrete graph objects and relationships.
 

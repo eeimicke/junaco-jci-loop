@@ -16,7 +16,7 @@ This page leads from an accessible introduction to the formal and technical spec
 
 ## Language policy
 
-`docs/JCI_CONTEXT.md` is the canonical specification. The English documents are controlled translations. If the versions differ, the German version temporarily prevails until the translation has been corrected and reviewed again.
+[`docs/JCI_CONTEXT.md`](../JCI_CONTEXT.md) is the canonical specification. The English documents are controlled translations. If the versions differ, the German version temporarily prevails until the translation has been corrected and reviewed again.
 
 Technical artifacts such as JSON Schemas, the JSON-LD context, tests, and workflows exist only once. Their identifiers and canonical JCI terms are language-neutral.
 

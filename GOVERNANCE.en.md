@@ -1,10 +1,10 @@
 # Governance of the JCI repository
 
-> Controlled English translation of `GOVERNANCE.md`.
+> Controlled English translation of [`GOVERNANCE.md`](GOVERNANCE.md).
 
 ## 1. Purpose
 
-This document governs how changes to the JCI model specification are proposed, reviewed, and accepted. `docs/JCI_CONTEXT.md` is the canonical domain source.
+This document governs how changes to the JCI model specification are proposed, reviewed, and accepted. [`docs/JCI_CONTEXT.md`](docs/JCI_CONTEXT.md) is the canonical domain source.
 
 ## 2. Current single-maintainer operation
 
@@ -12,12 +12,12 @@ Domain and technical approval currently rest with the repository owner. Even sel
 
 ## 3. Change classes
 
-| Class | Meaning | Required review |
-|---|---|---|
-| Editorial | spelling, formatting, or links without semantic change | formal check and self-review |
-| Clarification | clearer wording with unchanged semantics | comparison with the whole specification |
-| Semantic | changes to elements, relationships, cardinalities, or rules | full model and dependency review |
-| Rights | licence, source, or rights attribution change | separate rights review |
+| Class         | Meaning                                                     | Required review                         |
+| ------------- | ----------------------------------------------------------- | --------------------------------------- |
+| Editorial     | spelling, formatting, or links without semantic change      | formal check and self-review            |
+| Clarification | clearer wording with unchanged semantics                    | comparison with the whole specification |
+| Semantic      | changes to elements, relationships, cardinalities, or rules | full model and dependency review        |
+| Rights        | licence, source, or rights attribution change               | separate rights review                  |
 
 New core elements and changes to history, synchronisation, or rights architecture are always semantic changes.
 

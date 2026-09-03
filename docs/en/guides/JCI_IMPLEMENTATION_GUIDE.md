@@ -6,7 +6,7 @@
 
 ## Purpose
 
-This guide orders the implementation steps. `JCI_CONTEXT.md`, `JCI_ONTOLOGY.md`, `JCI_GRAPH_RULES.md`, and `JCI_SYNC_SPEC.md` remain normative.
+This guide orders the implementation steps. [`JCI_CONTEXT.md`](../JCI_CONTEXT.md), [`JCI_ONTOLOGY.md`](../JCI_ONTOLOGY.md), [`JCI_GRAPH_RULES.md`](../JCI_GRAPH_RULES.md), and [`JCI_SYNC_SPEC.md`](../JCI_SYNC_SPEC.md) remain normative.
 
 ## 1. Run the one-time bootstrap
 
@@ -18,15 +18,21 @@ Before commit, validate the empty starting graph, completeness of the minimal gr
 
 Every node receives the abstract type `JCIEntity` and exactly one concrete `entityType`. Common required properties are UUID, name, timestamps, positive revision, and a type-appropriate status. Newly created entities begin with `revision = 1`. `RoF` and `ERoF` are not stored as dedicated nodes.
 
+A `CiV` stores exactly one value with the required properties `notCiV`, `selfCiV`, and `toServeCiV`. Its scope is exclusively the single `HELD_BY` relationship to `RoFOrg`, `RoFTeam`, or a human `RoFTeamMember`; `purpose`, `values`, and `scope` are not stored on CiV. `INFORMED_BY` documents only explicitly confirmed provenance. All CiV directly grounding one `PiF2` must have the same value holder.
+
 A `Verification` additionally stores `evaluatedResultRevision` and `checkedCriterionRevision`. It is applicable only if it has not been superseded and both bound revisions equal the current revisions of its `Result` and `SuccessCriterion`. For example, if a criterion changes from revision 2 to 3, a verification bound to revision 2 no longer contributes to current target achievement.
 
 ## 3. Validate relationships
 
 Only canonical relationship types are permitted. Before activation, validate direction, endpoint types, cardinalities, temporal validity, and additional invariants. Inverse readings do not create duplicate edges.
 
+An active `RaN` has at least one `PROTECTS` to `CiV`, at least one `PROTECTS` to a `PiF2` grounded by that CiV, and at least one `GOVERNS` to a permitted implementation element. Permitted implementation types cover the future levels `PiF1s` through `PiF1o`, work, success and verification, organization, roles, and environment. `PiF2` is not a `GOVERNS` target. Protection relationships are stored only after human confirmation and are not inferred by `SYNC`.
+
+To migrate an existing `GOVERNS` edge to `PiF2`, first prepare a `PROTECTS` candidate to that PiF2. An authorized `RoleAssignment` confirms at least one CiV connected to that PiF2 as protected as well and connects concrete implementation elements through `GOVERNS`. Remove the former edge only after successful SYNC validation. Automatic CiV selection is prohibited.
+
 ## 4. Accept a change request
 
-Validate a request against `schemas/jci-change-request.schema.json`. The schema checks transport structure and data types. After acceptance, store the `ChangeEvent` unambiguously and schedule a technical attempt. Until an attempt ends, the `ChangeEvent` may still have no `TRIGGERS` relationship.
+Validate a request against [`schemas/jci-change-request.schema.json`](../../schemas/jci-change-request.schema.json). The schema checks transport structure and data types. After acceptance, store the `ChangeEvent` unambiguously and schedule a technical attempt. Until an attempt ends, the `ChangeEvent` may still have no `TRIGGERS` relationship.
 
 Provenance depends on the change type:
 
@@ -76,14 +82,15 @@ A correction request transmits `expectedHistoryViewHash` and lexicographically s
 2. schema and required fields
 3. identity, type, expected revision, and status transition
 4. relationship types and cardinalities, including conditional `CHANGED_BY` and `AFFECTS` edges
-5. WHY, WHO, and environmental paths
-6. target revisions and applicability of `Verification`
-7. Task and future aggregation
-8. applicable `RaN`, priority, and conflicts
-9. prepared revisions and `PiH`, or hash and field conflicts of a historical correction
-10. atomic commit or complete rollback
-11. immutable `SyncEvent` with unique `runId`
-12. counters and response document
+5. CiV dimensions, `HELD_BY`, `INFORMED_BY`, and shared PiF2 scope
+6. WHY, WHO, and environmental paths
+7. target revisions and applicability of `Verification`
+8. Task and future aggregation
+9. `PROTECTS` coherence, `GOVERNS` target types, applicable `RaN`, priority, and conflicts
+10. prepared revisions and `PiH`, or hash and field conflicts of a historical correction
+11. atomic commit or complete rollback
+12. immutable `SyncEvent` with unique `runId`
+13. counters and response document
 
 ## 9. Tests
 

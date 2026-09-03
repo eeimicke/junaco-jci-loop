@@ -31,6 +31,6 @@ Nicht betroffene Punkte bitte mit „nicht betroffen“ kennzeichnen. Mark unaff
 
 ## Prüfung / Verification
 
-- [ ] `docs/JCI_CONTEXT.md` wurde vollständig berücksichtigt. / `docs/JCI_CONTEXT.md` was considered in full.
+- [ ] [`docs/JCI_CONTEXT.md`](../docs/JCI_CONTEXT.md) wurde vollständig berücksichtigt. / [`docs/JCI_CONTEXT.md`](../docs/JCI_CONTEXT.md) was considered in full.
 - [ ] Die Änderung wurde auf Widersprüche geprüft. / The change was checked for contradictions.
 - [ ] Die automatischen Prüfungen wurden ausgeführt oder kontrolliert. / Automated checks were run or reviewed.
