@@ -34,6 +34,9 @@ flowchart LR
 - [Die JCI-Elemente](docs/guides/JCI_ELEMENTS.md)
 - [Durchgängiges Beispiel](docs/guides/JCI_EXAMPLE.md)
 - [Kanonische Spezifikation](docs/JCI_CONTEXT.md)
+- [Sechs Logikänderungen in Version 2.0](docs/changes/JCI_LOGIC_2_0.md)
+
+Die Regel-, Snapshot-, Werte- und Austauschprofile verwenden Version `2.0`. JSON-LD `1.1` und der bestehende Vokabularnamensraum bleiben unverändert. Die [Referenzfunktionen](reference/jci_rules.py) veranschaulichen prüfbare Regeln; sie bilden keine produktive SYNC-Engine.
 
 ### Formale und technische Dokumente
 
@@ -58,6 +61,9 @@ The **JUNACO Continuous Integration Loop** is a graph-based organisational model
 - [JCI elements](docs/en/guides/JCI_ELEMENTS.md)
 - [End-to-end example](docs/en/guides/JCI_EXAMPLE.md)
 - [English model specification](docs/en/JCI_CONTEXT.md)
+- [Six logic changes in version 2.0](docs/en/changes/JCI_LOGIC_2_0.md)
+
+The rule, snapshot, value and exchange profiles use version `2.0`. JSON-LD `1.1` and the existing vocabulary namespace remain unchanged. The [reference functions](reference/jci_rules.py) illustrate testable rules; they do not form a production SYNC engine.
 
 ### Formal and technical documents
 

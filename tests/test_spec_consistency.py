@@ -275,7 +275,7 @@ class SpecificationConsistencyTests(unittest.TestCase):
                 self.assertIn("@context" if name.endswith(".jsonld") else "$schema", data)
 
     def test_exchange_schemas_are_valid_and_enforce_conditional_invariants(self):
-        """Version 1.1 must distinguish create, correction and run outcomes."""
+        """Version 2.0 must distinguish create, correction and run outcomes."""
         schema_dir = DOCS / "schemas"
         request_schema = json.loads(
             (schema_dir / "jci-change-request.schema.json").read_text(encoding="utf-8")
@@ -293,7 +293,7 @@ class SpecificationConsistencyTests(unittest.TestCase):
         )
 
         base_request = {
-            "schemaVersion": "1.1",
+            "schemaVersion": "2.0",
             "requestId": "11111111-1111-4111-8111-111111111111",
             "idempotencyKey": "create-task-1",
             "requestedAt": "2026-08-30T10:00:00+02:00",
@@ -332,13 +332,13 @@ class SpecificationConsistencyTests(unittest.TestCase):
             "historicalCorrection": {
                 "correctionType": "ADDITION",
                 "reason": "Historische Teamzuordnung belegt",
-                "valueSchemaVersion": "1.0",
+                "valueSchemaVersion": "2.0",
                 "expectedHistoryViewHash": "a" * 64,
-                "correctedFields": ["/stateData/team"],
+                "correctedFields": ["/stateData/properties/description"],
                 "previousValue": {
-                    "/stateData/team": {"valueType": "NULL", "value": None}
+                    "/stateData/properties/description": {"valueType": "NULL", "value": None}
                 },
-                "correctedValue": {"/stateData/team": value},
+                "correctedValue": {"/stateData/properties/description": value},
             },
         }
         correction_request.pop("operations")
@@ -349,7 +349,7 @@ class SpecificationConsistencyTests(unittest.TestCase):
             request_validator.validate(invalid_correction)
 
         base_result = {
-            "schemaVersion": "1.1",
+            "schemaVersion": "2.0",
             "requestId": base_request["requestId"],
             "runId": "55555555-5555-4555-8555-555555555555",
             "syncEventId": "66666666-6666-4666-8666-666666666666",

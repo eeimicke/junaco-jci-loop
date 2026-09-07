@@ -2,7 +2,13 @@
 
 ## Status und Zweck
 
-Dieses Dokument konkretisiert die technische Abbildung des JCI-Modells in Neo4j. Es implementiert [JCI_CONTEXT.md](../../JCI_CONTEXT.md), [JCI_ONTOLOGY.md](../../JCI_ONTOLOGY.md), [JCI_GRAPH_RULES.md](../../JCI_GRAPH_RULES.md) und [JCI_SYNC_SPEC.md](../../JCI_SYNC_SPEC.md). Bei einem Konflikt gilt die fachliche Spezifikation; das Schema darf ihre Semantik nicht verändern.
+Dieses Dokument konkretisiert die technische Abbildung des JCI-Modells in Neo4j. Es implementiert [`JCI_CONTEXT.md`](../../JCI_CONTEXT.md), [`JCI_ONTOLOGY.md`](../../JCI_ONTOLOGY.md), [`JCI_GRAPH_RULES.md`](../../JCI_GRAPH_RULES.md) und [`JCI_SYNC_SPEC.md`](../../JCI_SYNC_SPEC.md). Bei einem Konflikt gilt die fachliche Spezifikation; das Schema darf ihre Semantik nicht verändern.
+
+## Regel- und Snapshotprofil 2.0
+
+Neue SYNC-Vorgänge verwenden Regelpaket, Ontologie, Graphregeln, SYNC-Spezifikation, snapshotSchemaVersion, valueSchemaVersion und AustauschschemaVersion 2.0. JSON-LD bleibt 1.1; die bestehenden Namespace-IRIs /1.0# sind Identitäten und keine Regelversion. Alte Profile werden ausdrücklich über ihre Resolver gelesen. Bestehende PiH, HistoricalCorrections, SyncEvents und Hashes werden nicht nachträglich umgeschrieben oder neu berechnet.
+
+Die Revision gehört zum fachlichen Zustand nach der Endpunkt-Eigentumsmatrix in Abschnitt 2.2.8 von [`JCI_CONTEXT.md`](../../JCI_CONTEXT.md). Neue Prüf-, Ereignis- und Korrekturbezüge revisionieren nicht ihre Referenzziele. TRIGGERS, CHANGED_BY, HAS_HISTORICAL_STATE und neue CREATED_BY-Bezüge erzeugen keine Historisierungsschleifen. Ein zulässiges Nachtragen von CREATED_BY am Importentwurf ändert dessen Zustand; RaNConflict-Auflösung nur den Konflikt. PROVIDES_CONTEXT_TO gehört dem CiV-Kontext. Übrige katalogisierte Strukturbeziehungen ändern beide veränderlichen Eigentümer. Neue PiH projizieren nur den ihnen zugeordneten revisionierten Beziehungszustand. Revisionsneutrale Bezüge unterliegen dennoch vollständig Gate/graphEpoch und ihren eigenen unveränderlichen Provenienzregeln.
 
 ## Gemeinsame Label- und Eigenschaftsstrategie
 
@@ -227,6 +233,43 @@ CREATE CONSTRAINT sync_event_conflict_count_exists IF NOT EXISTS
 FOR (e:SyncEvent) REQUIRE e.conflictCount IS NOT NULL;
 ```
 
+## Technische Schreibsperre
+
+Die folgenden technischen Labels sind keine JCIEntity, GraphObject oder zusätzliche fachliche Typen und werden nicht als JCI-Ontologie exportiert. Genau ein Gate schützt den gesamten gemeinsamen JCI-Datenbankbestand, einschließlich aller RoFOrg und fachlich revisionsneutraler Auditappend-Transaktionen. Technische Request-/Runbelege enthalten den vollständigen unveränderlichen Request, Run-Besitz/Fencing, verwendete SYNC-Revision/Prüfsumme und Entscheidungsausgang. Erfolgsbelege existieren höchstens einmal je Auftrag; Outboxeinträge verweisen auf genau ein Abschlussereignis.
+
+```cypher
+CREATE CONSTRAINT jci_technical_gate_key_unique IF NOT EXISTS
+FOR (gate:JCITechnicalGate) REQUIRE gate.key IS UNIQUE;
+CREATE CONSTRAINT jci_technical_request_key_unique IF NOT EXISTS
+FOR (request:JCITechnicalRequest) REQUIRE request.idempotencyKey IS UNIQUE;
+CREATE CONSTRAINT jci_technical_run_id_unique IF NOT EXISTS
+FOR (run:JCITechnicalRun) REQUIRE run.runId IS UNIQUE;
+CREATE CONSTRAINT jci_technical_commit_request_unique IF NOT EXISTS
+FOR (commit:JCITechnicalCommit) REQUIRE commit.idempotencyKey IS UNIQUE;
+CREATE CONSTRAINT jci_technical_commit_run_unique IF NOT EXISTS
+FOR (commit:JCITechnicalCommit) REQUIRE commit.runId IS UNIQUE;
+CREATE CONSTRAINT jci_technical_outbox_event_unique IF NOT EXISTS
+FOR (entry:JCITechnicalOutbox) REQUIRE entry.eventId IS UNIQUE;
+```
+
+```cypher
+MERGE (gate:JCITechnicalGate {key: 'MODEL_WRITE'})
+ON CREATE SET gate.graphEpoch = 0;
+```
+
+Die Gate-Initialisierung ist ein kontrollierter technischer Installationsschritt vor dem fachlichen Bootstrap; sie erzeugt keine JCIEntity. Jeder reguläre Schreibvorgang erwartet das vorhandene Gate und scheitert bei Fehlen. Er nimmt den Lock in einer expliziten Transaktion vor jeder maßgeblichen Lesesicht. Der Lock wird durch Commit/Rollback freigegeben; reine technische Lockberührung ändert keine Fachrevision und keine graphEpoch.
+
+```cypher
+MATCH (gate:JCITechnicalGate {key: 'MODEL_WRITE'})
+SET gate._lock = true
+REMOVE gate._lock
+RETURN gate.graphEpoch AS graphEpoch;
+```
+
+Jede tatsächlich übernommene JCI-Schreibtransaktion erhöht graphEpoch genau einmal, einschließlich Annahme, Korrekturen, SUPERSEDES und FAILED-/CONFLICT-Abschlussdokumentation. Heartbeats dürfen technisch separat laufen; sie dürfen keinen Run-Besitz oder Commit-Ausgang verändern. Besitzwechsel und Finalisierung verwenden dieselbe gesicherte Reihenfolge. Direkte JCI-Schreibwege, die das Gate umgehen, sind nicht zulässig.
+
+Neo4j verwendet standardmäßig Read Committed. Der dokumentierte SET-/REMOVE-Schreiblock bleibt bis Commit oder Rollback bestehen ([Neo4j-Locking](https://neo4j.com/docs/operations-manual/current/database-internals/concurrent-data-access/)). Die Referenz verwendet eine explizite [Driver-Transaktion](https://neo4j.com/docs/python-manual/current/transactions/).
+
 ## Atomarer Bootstrap eines leeren Graphen
 
 Der Bootstrap ist die einzige Erzeugung, die noch kein vorhandenes `RoleAssignment` und keine vorher aktive SYNC-Definition verwenden kann. Er ist ausschließlich zulässig, wenn kein Knoten mit dem Label `JCIEntity` existiert. In einer einzigen Transaktion werden eine minimale Organisation, ein technisches Mitglied, seine Rolle, das Root-Assignment und genau eine erste aktive SYNC-Definition erzeugt. Das Root-Assignment ist dauerhaft durch `bootstrapKey = 'ROOT'` gekennzeichnet und bleibt die einzige aktive `JCIEntity` ohne `CREATED_BY`.
@@ -234,10 +277,14 @@ Der Bootstrap ist die einzige Erzeugung, die noch kein vorhandenes `RoleAssignme
 Die folgende parametrisierte Abfrage ist ein ausführbares Bootstrap-Beispiel. Sie liefert genau eine Zeile, wenn sie geschrieben hat. Liefert sie null Zeilen, war der Graph nicht leer; der aufrufende Deployment-Schritt muss dies als Fehler behandeln und darf keinen zweiten Bootstrap versuchen.
 
 ```cypher
-MATCH (existing:JCIEntity)
-WITH count(existing) AS existingCount
+MATCH (gate:JCITechnicalGate {key: 'MODEL_WRITE'})
+SET gate._lock = true
+REMOVE gate._lock
+WITH gate
+OPTIONAL MATCH (existing:JCIEntity)
+WITH gate, count(existing) AS existingCount
 WHERE existingCount = 0
-WITH datetime() AS now
+WITH gate, datetime.realtime() AS now
 CREATE (org:JCIEntity:GraphObject:RoFOrg {
   id: randomUUID(), entityType: 'RoFOrg', name: $organizationName,
   legalName: $organizationName, orgType: 'COMPANY', status: 'ACTIVE',
@@ -279,6 +326,7 @@ CREATE (root)-[:ACTIVATES_ROLE]->(role)
 FOREACH (created IN [org, team, member, role, definition] |
   CREATE (created)-[:CREATED_BY]->(root)
 )
+SET gate.graphEpoch = gate.graphEpoch + 1
 RETURN root.id AS rootRoleAssignmentId, definition.id AS initialSyncDefinitionId;
 ```
 
@@ -361,7 +409,12 @@ WITH t, count(DISTINCT child) AS childCount,
      count(DISTINCT result) AS resultCount
 WHERE (t.taskKind = 'ATOMIC' AND childCount > 0)
    OR (t.taskKind = 'COMPOSITE' AND
-       (childCount = 0 OR executorCount > 0 OR environmentCount > 0 OR resultCount > 0))
+       (executorCount > 0 OR environmentCount > 0 OR resultCount > 0))
+   OR (t.taskKind = 'COMPOSITE' AND NOT t.status IN ['REPLACED','REVOKED']
+       AND NOT EXISTS {
+         MATCH (t)-[:DECOMPOSES_INTO]->(currentChild:Task)
+         WHERE NOT currentChild.status IN ['REPLACED','REVOKED']
+       })
    OR (t.taskKind = 'ATOMIC' AND t.status IN ['ACTIVE', 'COMPLETED'] AND executorCount = 0)
 RETURN t.id AS taskId, childCount, executorCount, environmentCount, resultCount;
 ```
@@ -392,13 +445,50 @@ MATCH (t:Task)-[:DEPENDS_ON*1..]->(t)
 RETURN DISTINCT t.id AS dependencyCycle;
 ```
 
+```cypher
+MATCH path = (task:Task)-[:DECOMPOSES_INTO|DEPENDS_ON*1..]->(task)
+WHERE all(node IN nodes(path) WHERE node:Task AND NOT node.status IN ['REPLACED','REVOKED'])
+RETURN DISTINCT task.id AS mixedCompletionCycle,
+       [edge IN relationships(path) | type(edge)] AS relationshipTypes,
+       [node IN nodes(path) | node.id] AS taskPath;
+```
+
+```cypher
+MATCH (parent:Task)-[:DECOMPOSES_INTO]->(child:Task)
+WHERE parent.status IN ['REPLACED','REVOKED']
+  AND NOT child.status IN ['REPLACED','REVOKED']
+RETURN parent.id AS retiredParentId, child.id AS unresolvedCurrentChildId;
+```
+
+```cypher
+MATCH (parent:Task {taskKind: 'COMPOSITE'})
+WHERE parent.status IN ['ACTIVE','BLOCKED','COMPLETED']
+OPTIONAL MATCH (parent)-[:DECOMPOSES_INTO]->(child:Task)
+WHERE NOT child.status IN ['REPLACED','REVOKED']
+WITH parent, collect(DISTINCT child) AS children,
+     EXISTS {
+       MATCH (parent)-[:DEPENDS_ON]->(required:Task)
+       WHERE required.status <> 'COMPLETED'
+     } AS ownPrerequisiteUnmet
+WHERE size(children) = 0
+   OR (ownPrerequisiteUnmet AND parent.status <> 'BLOCKED')
+   OR (parent.status = 'COMPLETED' AND any(child IN children WHERE child.status <> 'COMPLETED'))
+   OR (NOT ownPrerequisiteUnmet AND none(child IN children WHERE child.status = 'ACTIVE')
+       AND any(child IN children WHERE child.status = 'BLOCKED') AND parent.status <> 'BLOCKED')
+RETURN parent.id AS invalidCompositeId, parent.status, ownPrerequisiteUnmet,
+       [child IN children | {id: child.id, status: child.status}] AS currentChildren;
+```
+
 ### Nicht erfüllte Abhängigkeit ohne BLOCKED
 
 ```cypher
 MATCH (t:Task)-[:DEPENDS_ON]->(required:Task)
-WHERE required.status <> 'COMPLETED' AND t.status <> 'BLOCKED'
+WHERE t.status IN ['ACTIVE','BLOCKED','COMPLETED']
+  AND required.status <> 'COMPLETED' AND t.status <> 'BLOCKED'
 RETURN t.id AS taskId, required.id AS unmetDependencyId, t.status AS actualStatus;
 ```
+
+Nicht freigegebene DRAFT-Tasks werden von dieser Bestandsprüfung auf Blockade ausgenommen. Ausdrückliche Freigabe und ihr Ausgangsstatus ACTIVE/BLOCKED folgen kanonischem Abschnitt 9.4.2 einschließlich aggregierter Kinderblockade. Ein gerade freigegebener Composite mit ausschließlich abgeschlossenen Kindern bleibt zunächst ACTIVE; seine Unterscheidung vom späteren Abschlussübergang benötigt den Ausgangszustand im Transaktionsadapter.
 
 ### Ausführung außerhalb des verantwortlichen Teams
 
@@ -711,7 +801,7 @@ RETURN change.id AS changeEventId, event.id AS syncEventId,
        event.outcome, historyCount, correctionCount;
 ```
 
-Ein erfolgreicher normaler Änderungsauftrag erzeugt für seine vorhandene Zielentität genau das `PiH` der angeforderten Ausgangsrevision. Weitere tatsächlich geänderte Folgeentitäten dürfen zusätzliche eigene `PiH` erhalten:
+Ein erfolgreicher normaler Auftrag erzeugt für seine Zielentität genau ein PiH nur bei tatsächlicher Änderung ihres zugeordneten Zustands. Ein fachlicher No-op erzeugt keines. Diese Bestandsabfrage findet Duplikate; die exakte Übereinstimmung mit dem deduplizierten Transaktions-Write-Set wird unter der Sperre vor Übernahme geprüft:
 
 ```cypher
 MATCH (target:JCIEntity)-[:CHANGED_BY]
@@ -724,7 +814,7 @@ WITH target, change, event, COUNT {
     AND history.originalEntityType = target.entityType
     AND history.originalRevision = change.requestedRevision
 } AS targetHistoryCount
-WHERE targetHistoryCount <> 1
+WHERE targetHistoryCount > 1
 RETURN change.id AS changeEventId, event.id AS syncEventId,
        target.id AS targetEntityId, change.requestedRevision,
        targetHistoryCount;
@@ -890,9 +980,6 @@ WHERE v.status <> 'COMPLETED'
    OR NOT EXISTS {
         MATCH (v)-[:EVALUATES]->(result:JCIEntity:GraphObject:Result {status: 'COMPLETED'})
       }
-   OR NOT EXISTS {
-        MATCH (v)-[:CHECKS]->(criterion:JCIEntity:GraphObject:SuccessCriterion {status: 'ACTIVE'})
-      }
 RETURN v.id AS verificationId, resultCount, criterionCount, commonGoalCount,
        v.evaluatedResultRevision, v.checkedCriterionRevision,
        v.status, v.outcome;
@@ -944,11 +1031,12 @@ Vor dem Erzeugen einer Verification liest `SYNC` beide aktuellen Revisionen und 
 MATCH (v:JCIEntity:GraphObject:Verification)-[:EVALUATES]->(result:JCIEntity:GraphObject:Result)
 MATCH (v)-[:CHECKS]->(criterion:JCIEntity:GraphObject:SuccessCriterion)
 MATCH (goal:JCIEntity:JCIElementInstance:PiF1o)-[:DECOMPOSES_INTO]
-      ->(:JCIEntity:GraphObject:Task)-[:PRODUCES]->(result)
+      ->(task:JCIEntity:GraphObject:Task)-[:PRODUCES]->(result)
 MATCH (goal)-[:HAS_SUCCESS_CRITERIA]->(criterion)
 WHERE v.status = 'COMPLETED'
   AND result.status = 'COMPLETED'
   AND criterion.status = 'ACTIVE'
+  AND NOT task.status IN ['REPLACED','REVOKED']
   AND v.evaluatedResultRevision = result.revision
   AND v.checkedCriterionRevision = criterion.revision
   AND NOT EXISTS {
@@ -1002,6 +1090,65 @@ RETURN DISTINCT verification.id AS verificationCycle;
 ```
 
 **Kurzes Beispiel:** Eine Verification bindet `Result`-Revision `3` und Kriterienrevision `2`. Wird das Kriterium auf Revision `3` geändert, bleibt die alte Prüfung nachvollziehbar, zählt aber nicht mehr für `ACHIEVED`; erst eine neue Verification mit `checkedCriterionRevision = 3` kann wieder angewendet werden.
+
+```cypher
+MATCH (verification:Verification)-[:EVALUATES]->(result:Result)
+MATCH (verification)-[:CHECKS]->(criterion:SuccessCriterion)
+WHERE NOT EXISTS { MATCH (:Verification)-[:SUPERSEDES]->(verification) }
+WITH result, criterion, verification.evaluatedResultRevision AS resultRevision,
+     verification.checkedCriterionRevision AS criterionRevision,
+     collect(verification.id) AS verificationIds
+WHERE size(verificationIds) > 1
+RETURN result.id AS resultId, criterion.id AS criterionId,
+       resultRevision, criterionRevision, verificationIds;
+```
+
+```cypher
+MATCH (goal:PiF1o)
+WHERE goal.status IN ['ACTIVE','ACHIEVED']
+WITH goal,
+     COUNT {
+       MATCH (goal)-[:DECOMPOSES_INTO]->(task:Task)
+       WHERE NOT task.status IN ['REPLACED','REVOKED']
+     } AS currentTaskCount,
+     COUNT {
+       MATCH (goal)-[:HAS_SUCCESS_CRITERIA]->(criterion:SuccessCriterion {requirementLevel: 'REQUIRED'})
+       WHERE NOT criterion.status IN ['REPLACED','REVOKED']
+     } AS currentRequiredCount
+WHERE currentTaskCount = 0 OR currentRequiredCount = 0
+RETURN goal.id AS emptyCurrentScope, currentTaskCount, currentRequiredCount;
+```
+
+```cypher
+MATCH (goal:PiF1o {status: 'ACHIEVED'})-[:DECOMPOSES_INTO]->(task:Task)
+WHERE NOT task.status IN ['REPLACED','REVOKED']
+  AND (task.status <> 'COMPLETED' OR EXISTS {
+    MATCH (task)-[:DEPENDS_ON]->(required:Task)
+    WHERE required.status <> 'COMPLETED'
+  })
+RETURN goal.id AS goalId, task.id AS unfinishedCurrentTask;
+```
+
+```cypher
+MATCH (goal:PiF1o {status: 'ACHIEVED'})-[:HAS_SUCCESS_CRITERIA]
+      ->(criterion:SuccessCriterion {requirementLevel: 'REQUIRED'})
+WHERE NOT criterion.status IN ['REPLACED','REVOKED']
+OPTIONAL MATCH (verification:Verification)-[:CHECKS]->(criterion)
+WHERE verification.status = 'COMPLETED'
+  AND verification.checkedCriterionRevision = criterion.revision
+  AND NOT EXISTS { MATCH (:Verification)-[:SUPERSEDES]->(verification) }
+  AND EXISTS {
+    MATCH (goal)-[:DECOMPOSES_INTO]->(task:Task)-[:PRODUCES]->(result:Result {status: 'COMPLETED'})
+    MATCH (verification)-[:EVALUATES]->(result)
+    WHERE NOT task.status IN ['REPLACED','REVOKED']
+      AND verification.evaluatedResultRevision = result.revision
+  }
+WITH goal, criterion, collect(DISTINCT verification) AS applicable
+WHERE criterion.status <> 'ACTIVE' OR size(applicable) = 0
+   OR (criterion.evaluationMode = 'ALL' AND any(v IN applicable WHERE v.outcome <> 'VALID'))
+   OR (criterion.evaluationMode = 'ANY' AND none(v IN applicable WHERE v.outcome = 'VALID'))
+RETURN goal.id AS goalId, criterion.id AS unfulfilledCurrentRequiredCriterion;
+```
 
 ### RoF-Gültigkeit, Kapazität und Organisationsbeziehungen
 
@@ -1244,47 +1391,76 @@ MATCH (correction:JCIEntity:GraphObject:HistoricalCorrection)
 RETURN DISTINCT correction.id AS correctionCycle;
 ```
 
-Mehrere nicht abgelöste Korrekturen desselben `PiH` dürfen parallel gelten, wenn ihre `correctedFields` disjunkt sind. Berühren zwei aktuelle Korrekturen denselben Pfad, muss eine die andere vollständig über `SUPERSEDES` ablösen und mindestens deren vollständige Feldmenge übernehmen; andernfalls wäre der effektive historische Stand mehrdeutig.
+Profil 2.0 erlaubt nur vollständige TypedValue-Eigenschaften unter /stateData/properties/<property>, vollständige historische Beziehungseinträge unter /relationshipData/<key> sowie deren /properties/<property>. Der stabile Schlüssel lautet direction + ":" + relationshipType + ":" + canonicalUUID(otherEntityId). Die gespeicherte relationshipData-Liste bleibt erhalten; der Resolver bildet nur zur Adressierung eine Map und weist doppelte Schlüssel ab. Identität und Originalrevision dürfen nicht umgedeutet werden.
+
+Die folgenden 2.0-Abfragen prüfen Adressform und Segmentpräfix-Überlappung. JSON-Pointer werden vor dem Vergleich in Segmente zerlegt und ~1/~0 dekodiert. Gleichheit und echter Vorfahrenbezug zählen als Überlappung; name und nameLong bleiben disjunkt. Alte Profile werden nicht mit dieser neuen Grammatik umgedeutet. Zulässige Properties, vollständige TypedValues, kanonisches Re-Encoding, Existenz und gemischte Profilmengen prüft der versionierte Resolver unter der Schreibsperre.
 
 ```cypher
-MATCH (left:JCIEntity:GraphObject:HistoricalCorrection)-[:CORRECTS]->(history:JCIEntity:PiH)
-MATCH (right:JCIEntity:GraphObject:HistoricalCorrection)-[:CORRECTS]->(history)
-WHERE left.id < right.id
-  AND NOT EXISTS {
-    MATCH (:JCIEntity:GraphObject:HistoricalCorrection)-[:SUPERSEDES]->(left)
-  }
-  AND NOT EXISTS {
-    MATCH (:JCIEntity:GraphObject:HistoricalCorrection)-[:SUPERSEDES]->(right)
-  }
-  AND any(field IN left.correctedFields WHERE field IN right.correctedFields)
-RETURN history.id AS historyId, left.id AS leftCorrectionId,
-       right.id AS rightCorrectionId,
-       [field IN left.correctedFields WHERE field IN right.correctedFields] AS overlappingFields;
+MATCH (correction:HistoricalCorrection {valueSchemaVersion: '2.0'})
+UNWIND correction.correctedFields AS pointer
+WHERE NOT (pointer =~ '^/stateData/properties/([^/~]|~[01])+$'
+   OR pointer =~ '^/relationshipData/(INCOMING|OUTGOING):[A-Z][A-Z_]*:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(/properties/([^/~]|~[01])+)?$')
+RETURN correction.id AS correctionId, pointer AS invalidAddress;
 ```
 
-Vor jeder neuen Korrektur liest `SYNC` das `PiH` und alle nicht abgelösten Korrekturen erneut. Der kanonische Hash-Eingang enthält die `historyId`, `PiH.contentHash` sowie die nach Korrektur-ID sortierten IDs, Feldlisten und Werte aller aktuellen Korrekturen. Dadurch ändert sich der View-Hash bei jedem erfolgreichen Ergänzen oder Ablösen, selbst wenn der resultierende Fachwert später wieder einem früheren Wert entspricht. Der Antrag muss genau diesen SHA-256 als `baseHistoryViewHash` nennen.
+```cypher
+MATCH (correction:HistoricalCorrection {valueSchemaVersion: '2.0'})
+WITH correction, [pointer IN correction.correctedFields |
+  [segment IN tail(split(pointer, '/')) |
+    replace(replace(segment, '~1', '/'), '~0', '~')]] AS paths
+UNWIND range(0, size(paths) - 1) AS leftIndex
+UNWIND range(leftIndex + 1, size(paths) - 1) AS rightIndex
+WITH correction, paths[leftIndex] AS leftPath, paths[rightIndex] AS rightPath
+WHERE leftPath IS NOT NULL AND rightPath IS NOT NULL
+  AND ((size(leftPath) <= size(rightPath) AND leftPath = rightPath[..size(leftPath)])
+    OR (size(rightPath) <= size(leftPath) AND rightPath = leftPath[..size(rightPath)]))
+RETURN correction.id AS internallyOverlappingCorrection, leftPath, rightPath;
+```
 
-Die folgende **Auswahlabfrage** liefert den kanonisch zu serialisierenden Ausgangssatz; die SHA-256-Bildung und die Überlagerung der JSON-Werte erfolgen im SYNC-Regelpaket:
+```cypher
+MATCH (left:HistoricalCorrection {valueSchemaVersion: '2.0'})-[:CORRECTS]->(history:PiH)
+MATCH (right:HistoricalCorrection {valueSchemaVersion: '2.0'})-[:CORRECTS]->(history)
+WHERE left.id < right.id
+  AND NOT EXISTS { MATCH (:HistoricalCorrection)-[:SUPERSEDES]->(left) }
+  AND NOT EXISTS { MATCH (:HistoricalCorrection)-[:SUPERSEDES]->(right) }
+WITH history, left, right,
+     [pointer IN left.correctedFields | [segment IN tail(split(pointer, '/')) |
+       replace(replace(segment, '~1', '/'), '~0', '~')]] AS leftPaths,
+     [pointer IN right.correctedFields | [segment IN tail(split(pointer, '/')) |
+       replace(replace(segment, '~1', '/'), '~0', '~')]] AS rightPaths
+WHERE any(p IN leftPaths WHERE any(q IN rightPaths WHERE
+  (size(p) <= size(q) AND p = q[..size(p)]) OR
+  (size(q) <= size(p) AND q = p[..size(q)])))
+RETURN history.id AS historyId, left.id AS leftCorrectionId, right.id AS rightCorrectionId;
+```
+
+Ohne Überlappung darf eine neue Korrektur parallel bestehen. Bei genau einer betroffenen aktiven Korrektur muss sie genau diese vollständig über SUPERSEDES ablösen und alle bisherigen kanonischen Pfade samt weiterhin gültigen Werten enthalten. Zusätzliche Pfade dürfen weder innerhalb der neuen Korrektur noch mit anderen aktiven Korrekturen überlappen. Mehrfache Überlappung oder impliziter Wechsel zwischen ganzer Beziehung und Propertykorrektur erzeugt CONFLICT.
+
+ADDITION verlangt tatsächliches Fehlen; ein vorhandener NULL-Wert ist nicht fehlend. CORRECTION und CLARIFICATION benötigen einen vorhandenen Pfad. previousValue wird beim Commit gegen die damalige wirksame Sicht geprüft. Beim späteren Wiederaufbau werden die correctedValue-Werte der nicht abgelösten Korrekturen als absolute Überlagerung des unveränderten PiH verwendet; previousValue wird dabei nicht erneut gegen das Original geprüft. Dadurch bleibt die Korrektur einer zuvor hinzugefügten Angabe nach Ablösung ihrer Ergänzung wirksam.
+
+Die folgende Auswahlabfrage liefert Eingaben für den Resolver, nicht den Hash-Eingang selbst. HistoryView 2.0 ist ausschließlich die wirksame Kombination {stateData, relationshipData}; ihre Beziehungsliste wird nach relationshipType, direction und otherEntityId sortiert. SHA-256 wird über deren kanonische Serialisierung berechnet, ohne historyId, Korrektur-IDs oder technische Adressmap. expectedHistoryViewHash im Request wird mit dieser Sicht verglichen und bei Erfolg unverändert als baseHistoryViewHash gespeichert.
 
 ```cypher
 MATCH (history:JCIEntity:PiH)
-OPTIONAL MATCH (correction:JCIEntity:GraphObject:HistoricalCorrection)-[:CORRECTS]->(history)
+OPTIONAL MATCH (correction:HistoricalCorrection)-[:CORRECTS]->(history)
 WHERE correction IS NULL OR NOT EXISTS {
-  MATCH (:JCIEntity:GraphObject:HistoricalCorrection)-[:SUPERSEDES]->(correction)
+  MATCH (:HistoricalCorrection)-[:SUPERSEDES]->(correction)
 }
-WITH history, correction
-ORDER BY correction.id
+WITH history, correction ORDER BY correction.id
 WITH history, collect(correction{
-       .id, .correctionType, .correctedFields,
-       .previousValueJson, .correctedValueJson
-     }) AS activeCorrections
-RETURN history.id AS historyId, history.contentHash AS pihContentHash,
-       activeCorrections;
+  .id, .correctionType, .correctedFields, .valueSchemaVersion,
+  .previousValueJson, .correctedValueJson
+}) AS activeCorrections
+RETURN history.id AS historyId, history.snapshotSchemaVersion AS snapshotSchemaVersion,
+       history.stateDataJson AS stateDataJson,
+       history.relationshipDataJson AS relationshipDataJson, activeCorrections;
 ```
 
-Unmittelbar vor dem Commit berechnet `SYNC` den Hash erneut und vergleicht ihn mit `baseHistoryViewHash`. Die SYNC-Schreibschicht serialisiert Korrekturtransaktionen anhand der Ziel-`PiH.id`: Nur der erste Schreibversuch auf derselben Basissicht kann committen; jeder weitere Versuch liest danach den inzwischen geänderten historischen Stand und endet bei unverändertem Auftrag mit `CONFLICT`. `baseHistoryViewHash` ist bewusst nicht graphweit eindeutig, weil unterschiedliche `PiH` dieselbe wirksame Sicht besitzen können. Die Serialisierung und Vor-Commit-Prüfung sind nicht durch eine nachträgliche reine Cypher-Abfrage ersetzbar, weil Neo4j die kanonischen JSON-Werte bewusst nur als Zeichenketten speichert.
+Profil 2.0 verwendet UTF-8 ohne BOM/zusätzliche Leerzeichen, Unicode-Codepoint-Schlüsselsortierung und JSON-String-Escaping ohne pauschales ASCII-Escaping. INTEGER bleibt exakt/unbeschränkt; Fließkommazahlen sind auch innerhalb OBJECT/ARRAY verboten. DECIMAL ist eine normalisierte Dezimalzeichenkette ohne Exponent oder unnötige Nullen; verschachtelte Dezimalwerte sind TypedValue DECIMAL. Maßgeblich sind Abschnitt 2.2.9 von [`JCI_CONTEXT.md`](../../JCI_CONTEXT.md) und gemeinsame Hash-Testvektoren.
 
-**Kurzes Beispiel:** Eine aktuelle Korrektur ergänzt `/relationshipData/HAS_MEMBER:OUT:team-7/validUntil`. Eine zweite aktuelle Korrektur darf gleichzeitig `/stateData/name` berichtigen. Will sie ebenfalls denselben `validUntil`-Pfad ändern, muss sie die erste Korrektur über `SUPERSEDES` ablösen und auf dem unmittelbar zuvor neu berechneten `baseHistoryViewHash` beruhen.
+Alle Korrekturen werden unter dem gemeinsamen Gate aus dem Transaktionsabschnitt geprüft und übernommen. Unmittelbar vor Commit werden Hash, alte Werte, Existenz, Pfade und aktive Korrekturmenge erneut geprüft. Alte Profile benötigen explizite Resolver; unklare Pfade stoppen den neuen Vorgang. Bestehende PiH, Korrekturen und ihre Hashes werden weder neu berechnet noch überschrieben. Der View-Hash ist kein technischer ABA-Schutz: Eine spätere identische wirksame Sicht hat denselben Hash; konkurrierende Bezüge schützt Gate/graphEpoch.
+
+**Kurzes Beispiel:** /stateData/properties/name ist eine vollständige Eigenschaft. /relationshipData/INCOMING:HAS_MEMBER:<Team-UUID> überlappt mit seiner /properties/validUntil. Beide dürfen nicht als getrennte aktive Korrekturen gelten.
 
 ```cypher
 MATCH (event:JCIEntity:GraphObject:SyncEvent)
@@ -1343,48 +1519,81 @@ RETURN event.id AS syncEventId, triggerCount, definitionCount,
 
 ## Transaktionsregel für SYNC
 
-`SYNC` prüft Hierarchie, Abhängigkeiten, Task-Typregeln sowie anwendbare `RaN` vor der Übernahme. Abgeleitete Task-Status werden von den atomaren Tasks über die Parent-Kette nach oben und erst danach zu den betroffenen `PiF1o` aggregiert. Aktuelle Zustände, erforderliche `PiH`, neue oder aufgelöste `RaNConflict`-Objekte, Beziehungen, das deduplizierte Transaktions-Write-Set und das abschließende `SyncEvent` werden atomar übernommen. Vor dem Commit werden alle fünf Zählwerte aus diesem Write-Set und den zu speichernden Beziehungen berechnet. Ein Konflikt oder Fehler darf keinen teilweise aktualisierten Graphen hinterlassen.
+Der gesamte Kandidat wird unter dem Gate mit aktuellen Mengen geprüft: Task-/Kriterienbeiträge schließen REPLACED und REVOKED aus, Pflichtmengen bleiben nicht leer, Ergebnisse müssen aus aktuellen Tasks stammen. Gemischte Abschlusszyklen werden über DECOMPOSES_INTO und DEPENDS_ON gemeinsam geprüft. Danach erfolgt Auswertung mit Voraussetzungen zuerst, Composite-eigene Voraussetzungen vor der Kindaggregation und kein Rücksprung freigegebener Composites zu DRAFT. Reine Umfangsverkleinerung gibt einen Entwurf nicht frei; DRAFT → COMPLETED bleibt ausgeschlossen. Diese Übergangsvorbedingungen benötigt der Ausgangszustand: Eine reine nachgelagerte Bestandsabfrage ersetzt sie nicht.
 
-Zusätzlich gilt für die präzisierten Vorgänge: Ein `CREATED`-Ziel wird mit Revision `1`, seiner `CHANGED_BY`-Kante und dem abschließenden erfolgreichen Ereignis atomar erzeugt. Vor dem Speichern einer Verification werden beide gebundenen Revisionen erneut mit den aktuellen Zielrevisionen verglichen. Vor einer HistoricalCorrection werden Ziel-PiH, aktuelle Korrekturmenge und `baseHistoryViewHash` innerhalb derselben Transaktion erneut geprüft; erst danach werden `HistoricalCorrection`, `CORRECTS`, `CAUSED_BY` und `CREATES_CORRECTION` gemeinsam angelegt. `SyncEvent`-Knoten werden niemals aktualisiert oder für einen neuen Lauf wiederverwendet, sondern je `runId` ausschließlich neu angehängt.
+Gelesen werden auch negative Mengen und Abhängigkeiten, etwa noch nicht vorhandene RaN, Rollen-/Scopezuordnung und die aktuelle nicht abgelöste Prüfungsmenge. Ein Vergleich allein der Fachrevisionen genügt nicht. Alle Validierungen beziehen sich auf den vollständigen Kandidaten einschließlich aller neuen Kanten und tatsächlichen Folgeänderungen.
+
+Das folgende Driver-Beispiel zeigt die verbindliche Transaktionsgrenze. rules bezeichnet die expliziten Adapter des versionierten geprüften Regelpakets, keine verfügbaren Neo4j-Builtins: read_complete_state muss die vollständige relevante Lesesicht liefern, evaluate_complete_candidate alle Modell-, Zeit-, Pfad- und RaN-Regeln prüfen; apply_owned_domain_delta darf ausschließlich das deduplizierte zugeordnete Fachdelta schreiben. append_success_bundle schreibt in derselben Transaktion PiH, Provenienz, SyncEvent, unveränderlichen Erfolgsbeleg und Outbox. validate_persisted_bundle prüft alle Zähler und Abfragen gegen diesen vollständigen Zustand. Keine Funktion darf eine eigene Transaktion öffnen oder externe Nebenwirkungen auslösen.
+
+```python
+def commit_reference(session, request_id, run_id, fencing_token, rules):
+    with session.begin_transaction() as tx:
+        gate = tx.run(
+            "MATCH (g:JCITechnicalGate {key: 'MODEL_WRITE'}) "
+            "SET g._lock = true REMOVE g._lock "
+            "RETURN g.graphEpoch AS graphEpoch"
+        ).single(strict=True)
+        request = rules.load_immutable_request(tx, request_id)
+        rules.assert_run_owner(tx, run_id, fencing_token)
+        previous = rules.find_success(tx, request.idempotency_key)
+        if previous is not None:
+            return previous
+        state = rules.read_complete_state(tx)
+        rules.assert_requested_revision(state, request)
+        decision_at = tx.run(
+            "RETURN datetime.realtime() AS decisionAt"
+        ).single(strict=True)["decisionAt"]
+        proposal = rules.evaluate_complete_candidate(
+            state, request, decision_at=decision_at
+        )
+        rules.assert_valid(proposal)
+        rules.apply_owned_domain_delta(tx, proposal)
+        result = rules.append_success_bundle(
+            tx, proposal, request, run_id, decision_at,
+            graph_epoch=gate["graphEpoch"] + 1,
+        )
+        rules.validate_persisted_bundle(tx, proposal, result)
+        tx.run(
+            "MATCH (g:JCITechnicalGate {key: 'MODEL_WRITE'}) "
+            "SET g.graphEpoch = g.graphEpoch + 1"
+        ).consume()
+        tx.commit()
+        return result
+```
+
+Der technische Commitbeleg speichert decisionAt, tatsächlich verwendete SYNC-Revision/Paketprüfsumme, den deduplizierten geänderten Eigentümersatz und die bei Prüfung gelesenen Revisionen. Ein CREATE-Ziel startet mit Revision 1, erhält aber kein PiH; jede tatsächlich geänderte bestehende Entität genau eine Revisionserhöhung und ein PiH. Reine Auditbezüge und neue Prozessobjekte zählen nicht zum fachlichen Write-Set. Ein No-op hat changedCount = historyCount = 0 und trotzdem genau einen Erfolgsbeleg. Alle fünf Zählwerte werden vor Commit aus Write-Set und Beziehungen berechnet.
+
+Bei Validierungskonflikt oder technischem Fehler wird die Fachtransaktion zurückgerollt; Abschlussdokumentation wird danach unter demselben Gate angelegt. Ein unerreichbarer Datenbankdienst hinterlässt eine Nachholpflicht am dauerhaften Runbeleg. Bei unbekanntem Commit-Ausgang zuerst unter dem Gate das Ergebnis derselben runId prüfen; ein bereits gespeicherter Erfolg wird nicht wiederholt. Ein veralteter Fencing-Token darf keinen Abschluss schreiben. Eine neue Ausgangsrevision benötigt einen neuen Auftrag; requestedRevision bleibt unverändert.
+
+Alle zeitabhängigen Entscheidungen werden für einen festen serverseitigen decisionAt nach Lock-Erwerb abschließend neu ausgewertet. completedAt bleibt Abschlusszeit. Der Vertrag garantiert Fachgültigkeit an decisionAt, nicht an der späteren physischen Commit-Bestätigung oder bei externen Aktionen. Eine neue gültige Regel durch reinen Zeitablauf wird auch ohne neue Fachrevision berücksichtigt. Spätere Optimierung darf eine unter dem Gate gelesene graphEpoch nach externer Berechnung unter erneut erworbenem Gate vergleichen; bei Abweichung neu lesen und vorbereiten, Zeitbedingungen immer erneut auswerten.
+
+Outboxzustellung erfolgt erst nach Commit. Nach Dispatcher-Absturz darf erneut zugestellt werden; Empfänger müssen anhand der stabilen Ereigniskennung deduplizieren. Die Outbox allein garantiert keine einmalige externe Wirkung.
 
 ## Grenzen der deklarativen Durchsetzung
 
 Neo4j-Constraints und nachgelagerte Cypher-Abfragen decken den gespeicherten Graphzustand ab, können aber vier Laufzeiteigenschaften nicht allein garantieren:
 
 1. Ein außerhalb des Graphen beendeter `SyncRun` ist erst nach Abgleich mit dem technischen Run-/Outbox-Protokoll als fehlendes `SyncEvent` erkennbar.
-2. Das Verbot späterer Änderungen oder Löschungen unveränderlicher Knoten und ihrer Beziehungen benötigt eingeschränkte Schreibrollen beziehungsweise ausschließlich freigegebene SYNC-Schreibtransaktionen; ein Property Constraint ist kein Append-only-Mechanismus.
+2. Das Verbot späterer Änderungen oder Löschungen unveränderlicher Knoten und der ihnen zugeordneten eigenen Beziehungen benötigt eingeschränkte Schreibrollen beziehungsweise ausschließlich freigegebene SYNC-Schreibtransaktionen; ein Property Constraint ist kein Append-only-Mechanismus.
 3. Die kanonische Überlagerung von `stateDataJson`, `relationshipDataJson` und Korrekturwerten sowie die SHA-256-Bildung erfolgen im versionierten SYNC-Regelpaket. Cypher validiert Struktur, Eindeutigkeit und gespeicherte Hashform, nicht die JSON-Semantik selbst.
 4. Die Revision `1` eines neu erzeugten Ziels und die unmittelbar vor dem Commit erneut geprüften Verification- und History-Revisionen sind Transaktionsvorbedingungen. Ein späterer Snapshot des inzwischen weiterentwickelten Graphen kann diese zeitliche Tatsache nur anhand der vollständig gespeicherten Historie nachvollziehen.
 
 ## Migration und Versionsführung
 
-Schemaänderungen werden als vorwärts gerichtete, unveränderliche Migrationen mit aufsteigender Nummer gespeichert. Jede Migration enthält:
+Änderungen werden als vorwärts gerichtete, unveränderliche Migrationen mit Ausgangs-/Zielversion, Vorvalidierung, technischem Schema, Nachvalidierung und wiederherstellbarer Sicherung geführt. Diese Dokumentänderung führt selbst keine Migration, keinen Bootstrap und keine Live-Datenbankaktion aus.
 
-1. erwartete Ausgangsversion,
-2. Vorabvalidierungen,
-3. Constraints, Indizes und notwendige Datenanpassungen,
-4. Nachvalidierungen,
-5. neue Zielversion.
+1. Altprofile und ihre benötigten Resolver inventarisieren. Bestehende unveränderliche Dokumente, Snapshotdaten und Hashes bleiben unverändert; keine Zufalls-Backfills historischer Run-IDs, Revisionen oder Prüfsummen.
+2. Die neuen technischen Gate-/Request-/Run-/Commit-/Outbox-Strukturen kontrolliert initialisieren. Sämtliche Schreibwege einschließlich Import und Nachholung auf denselben Gate verpflichten.
+3. Neue SYNC-Definition mit Regel-, Ontologie-, Graphregel-, SyncSpec-, Snapshot-, Korrektur- und Austauschprofil 2.0 erst aktivieren, wenn alle vorhandenen Typen und Legacy-Leseprofile ausdrücklich unterstützt werden und die Paketprüfsumme stimmt. Namespace-Identitäten und JSON-LD1.1 bleiben unverändert.
+4. Alle bestehenden Task-/Kriterienumfänge, Ersatzzuordnungen, aktuellen Parent-Strukturen, Composite-Status und gemischten Abschlusszyklen vorprüfen. Leere aktive Umfänge oder unklare Teilbäume erfordern begründete fachliche Aufträge; keine automatische Aufhebung, Umleitung oder Wiederöffnung terminaler Tatsachen.
+5. Neue PiH nach Revisionseigentum und Snapshotprofil 2.0 bilden. Alte PiH behalten ihr ursprüngliches Profil; gespeicherte Beziehungssnapshots werden nicht rückwirkend gefiltert oder re-gehasht.
+6. Historische Korrekturen über den expliziten Resolver ihres Profils lesen. Unklare Adressen, kollidierende Beziehungsschlüssel oder überlappende aktive Altkorrekturen stoppen den Übergang für den betroffenen Bestand. Ein neuer 2.0-Vorgang verwendet stabile Adressen und den eindeutig aufgelösten wirksamen View-Hash.
+7. Alte GOVERNS-Kanten zu PiF2 nicht blind in PROTECTS umbenennen. Ein berechtigter Mensch bestätigt geschütztes PiF2, kohärentes CiV und tatsächliche Umsetzungselemente. Erst ein regulärer validierter Auftrag übernimmt die neuen Schutz-/Governancebezüge.
+8. Constraints nur nach bestandener Prüfung ihrer Voraussetzungen anwenden. Alle einschlägigen Bestandsabfragen müssen null Fehler liefern; Transaktions-, Revisions-, Resolver- und Parallelitätstests müssen zusätzlich bestehen. Eine unverträgliche Mischung wird nicht aktiviert.
 
-Vor einer Migration wird eine wiederherstellbare Datenbanksicherung erzeugt. Eine Migration wird nur abgeschlossen, wenn alle Nachvalidierungen null Fehler liefern. Die aktive `SYNC.definition` nennt die dazu passende Ontologie-, Graphregel- und Schemazielversion; eine inkompatible Kombination darf nicht aktiviert werden.
+Bei leerem fachlichem Bestand werden technische Constraints/Gate zuerst installiert und anschließend genau einmal der atomare fachliche Bootstrap unter dem Gate ausgeführt. Vorhandene technische Belege sind kein zweiter fachlicher Bootstrap.
 
-Für die in diesem Dokument präzisierten Felder gilt folgende migrationsverträgliche Reihenfolge:
-
-1. Neue Properties zunächst ohne Existenz- oder Unique Constraint schreiben und sämtliche Altbestände klassifizieren.
-2. `ChangeEvent.targetEntityId`, `targetEntityType` und `requestedRevision` aus der eindeutigen `CHANGED_BY`-Quelle beziehungsweise bei historischen Korrekturen aus `CORRECTS` und `CAUSED_BY` ableiten. Fehlgeschlagene alte Aufträge ohne Zielkante dürfen nur aus einem unveränderten Request-Nachweis ergänzt werden.
-3. `SyncEvent.runId` ausschließlich aus dem technischen Run-/Outbox-Protokoll übernehmen. Eine neue Zufalls-ID würde die historische Laufidentität verfälschen und ist deshalb kein zulässiger Backfill.
-4. Revisionsbindungen vorhandener Verifications anhand `verifiedAt`, aktueller Revision und eindeutiger `PiH`-Gültigkeitsintervalle bestimmen. Null oder mehrere Kandidaten stoppen die Migration.
-5. Ein Root-Assignment nur dann mit `bootstrapKey = 'ROOT'` markieren, wenn es und seine initiale SYNC-Definition eindeutig nachgewiesen sind. Ein mehrdeutiger nichtleerer Altbestand wird nicht automatisch zum geschlossenen Bootstrap umgedeutet.
-6. Für vorhandene HistoricalCorrections den damaligen `baseHistoryViewHash` nur bei vollständig rekonstruierbarer Korrekturfolge bilden. Überlappende nicht abgelöste Feldkorrekturen erfordern vorher eine fachliche Auflösung.
-7. Jede vorhandene `GOVERNS`-Kante zu einem `PiF2` als noch unbestätigten Migrationskandidaten erfassen; sie darf nicht blind umbenannt werden.
-8. Ein berechtigtes `RoleAssignment` bestätigt das PiF2 als `PROTECTS`-Ziel, wählt mindestens ein dieses PiF2 über `INSCRIBES_PURPOSE_IN` begründendes CiV aus und bestätigt auch dieses als `PROTECTS`-Ziel. `SYNC` darf diese Auswahl nicht ableiten.
-9. Die tatsächlich geregelten Umsetzungselemente mit `GOVERNS` verbinden. Erst nach erfolgreicher Kohärenz-, Scope- und Typprüfung die bisherige `GOVERNS`-Kante zum PiF2 entfernen.
-10. Vorhandene RaN ohne vollständig bestätigte Schutz- und Umsetzungsziele nicht unter der neuen Regelversion aktivieren; die Migration stoppt zur fachlichen Klärung.
-11. Erst nach erfolgreichem Backfill alle Existenz-, Typ- und Eindeutigkeitsconstraints anlegen und sämtliche Abfragen erneut ausführen.
-
-Bei einer noch vollständig leeren Datenbank entfallen die Backfills. Dort werden zuerst die Constraints und anschließend genau einmal die atomare Bootstrap-Transaktion ausgeführt. Diese Dokumentänderung führt selbst keine Migration und keinen Bootstrap gegen eine Live-Datenbank aus.
-
-**Kurzes Beispiel:** Eine RaN-Migration findet `RaN A ── GOVERNS ──► PiF2 X`. Sie bereitet `PROTECTS` zu PiF2 X nur als Kandidaten vor. Erst nachdem ein berechtigter Mensch das begründende CiV Y und die tatsächlich geregelten Umsetzungselemente bestätigt hat, übernimmt `SYNC` beide `PROTECTS`-Kanten, die neuen `GOVERNS`-Kanten und die Entfernung der alten PiF2-Regelkante atomar.
+**Kurzes Beispiel:** Ein altes PiH mit Profil 1.0 behält seinen contentHash. Neue Zustandsänderungen erzeugen neue PiH mit 2.0. Ist eine alte Korrekturadresse nicht eindeutig auflösbar, wird der Übergang für diesen Fall angehalten statt der historische Wert umgedeutet.
 
 ## Abgrenzung der Mandantentrennung
 
@@ -1392,6 +1601,6 @@ Bei einer noch vollständig leeren Datenbank entfallen die Backfills. Dort werde
 
 ## Automatisierte Prüfung
 
-Die technologieunabhängigen Invarianten werden zusätzlich durch [`tests/test_model_rules.py`](../../../tests/test_model_rules.py) geprüft. [`tests/test_spec_consistency.py`](../../../tests/test_spec_consistency.py) stellt sicher, dass Entitäts- und Beziehungskatalog, strukturierte Datentypen sowie die Folgedokumente synchron bleiben. GitHub Actions führt beide Tests bei jedem Push auf `main` und bei jedem Pull Request aus.
+Die technologieunabhängigen Invarianten werden durch [`tests/test_model_rules.py`](../../../tests/test_model_rules.py) geprüft. [`reference/jci_rules.py`](../../../reference/jci_rules.py) und [`tests/test_reference_rules.py`](../../../tests/test_reference_rules.py) bilden Eigentümerrevisionen, aktuelle Abschlussmengen, gemeinsame Zyklen, Profil-2.0-Korrekturen und konkurrierende Kandidaten ausführbar ab. [`tests/test_spec_consistency.py`](../../../tests/test_spec_consistency.py) prüft die Konsistenz von Katalogen, Schemas und Dokumenten. GitHub Actions führt die Tests bei jedem Push auf `main` und bei Pull Requests aus. Referenztests ersetzen weder eine produktive SYNC-Engine noch einen realen Neo4j-Isolationstest.
 
 Die Cypher-Abfragen dieses Dokuments bleiben für eine reale Neo4j-Instanz zusätzlich verpflichtend. Jede Validierungsabfrage muss nach Migration und fachlicher Transaktion null Zeilen liefern.

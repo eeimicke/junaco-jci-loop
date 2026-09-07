@@ -2,9 +2,11 @@
 
 ## 1. Status and purpose
 
-This document translates the domain meaning from [JCI_CONTEXT.md](../JCI_CONTEXT.md) into unambiguously named entity and relationship types. [`JCI_CONTEXT.md`](JCI_CONTEXT.md) remains the canonical domain source. If a conflict exists, the state documented there applies; the conflict must be reported before changing the model.
+This document translates the domain meaning from [`JCI_CONTEXT.md`](../JCI_CONTEXT.md) into unambiguously named entity and relationship types. [`JCI_CONTEXT.md`](JCI_CONTEXT.md) remains the canonical domain source. If a conflict exists, the state documented there applies; the conflict must be reported before changing the model.
 
-Cardinalities and invariants are defined in [JCI_GRAPH_RULES.md](JCI_GRAPH_RULES.md). The `SYNC` process is defined in [JCI_SYNC_SPEC.md](JCI_SYNC_SPEC.md). Database-specific labels, properties, constraints, and indexes belong in [implementations/neo4j/JCI_NEO4J_SCHEMA.md](implementations/neo4j/JCI_NEO4J_SCHEMA.md).
+Cardinalities and invariants are defined in [`JCI_GRAPH_RULES.md`](JCI_GRAPH_RULES.md). The `SYNC` process is defined in [`JCI_SYNC_SPEC.md`](JCI_SYNC_SPEC.md). Database-specific labels, properties, constraints, and indexes belong in [`implementations/neo4j/JCI_NEO4J_SCHEMA.md`](implementations/neo4j/JCI_NEO4J_SCHEMA.md).
+
+**Rule package 2.0:** Ontology, graph rules, SYNC, new snapshots, correction values, and the exchange format use version `2.0`. JSON-LD remains `1.1`; existing namespace IRIs ending in `/1.0#` remain stable vocabulary identities and are not the rule version. Earlier records are interpreted only through their explicit version profiles.
 
 ## 2. Abstract types
 
@@ -85,7 +87,7 @@ The following type-specific required fields apply in particular to the entity ty
 
 `requestedRevision` is `null` exclusively for `changeType = CREATED`; otherwise it is a positive integer. The target details of the `ChangeEvent` are immutable audit coordinates of the request and do not replace a domain relationship. `runId` identifies exactly one technical attempt. `baseHistoryViewHash` binds a historical correction to the effective historical view immediately preceding it.
 
-Type-specific required fields and enumeration values are canonically defined in section 2.2.5 of [JCI_CONTEXT.md](../JCI_CONTEXT.md). Binding status transitions are defined in section 2.2.4. A database implementation may make them technically concrete but must not weaken or semantically reinterpret them.
+Type-specific required fields and enumeration values are canonically defined in section 2.2.5 of [`JCI_CONTEXT.md`](../JCI_CONTEXT.md). Binding status transitions are defined in section 2.2.4. A database implementation may make them technically concrete but must not weaken or semantically reinterpret them.
 
 Complex values exclusively use the types `TypedValue`, `StateSnapshot`, `RelationshipSnapshot`, `TypedValueMap`, `RuleExpression`, and `SyncDefinition` defined in section 2.2.7. Unstructured, implementation-dependent object content is not permitted.
 
@@ -200,11 +202,13 @@ replaceable JCIEntity REPLACED_BY same concrete JCIEntity type
 
 `AFFECTS` may be empty if an attempt ends with `outcome = FAILED` before successful target resolution. A `SyncEvent` with `SUCCESS` or `CONFLICT` has at least one `AFFECTS` target.
 
-A `HistoricalCorrection` stores in `baseHistoryViewHash` the hash of the effective `HistoryView` immediately before its creation. Non-superseded corrections of the same `PiH` must be disjoint by field. A new correction with overlapping `correctedFields` fully replaces exactly one active predecessor correction via `SUPERSEDES`; otherwise a conflict occurs.
+A `HistoricalCorrection` binds the effective pre-correction content through `baseHistoryViewHash`. Profile `2.0` defines canonical property and stable relationship paths, segment-based ancestor/descendant overlap, complete supersession of exactly one active predecessor, and absolute value overlays for reconstruction. Snapshot and view hashes use the same content object. Missing values differ from existing `NULL`; prior profile data and hashes remain immutable. Section 2.2.9 of [`JCI_CONTEXT.md`](JCI_CONTEXT.md) defines the binding contract.
 
 **Short example:** While the first SyncRun is still running, the `ChangeEvent` has no `TRIGGERS` target. Only its completion creates the `SyncEvent`. A later historical correction already refers to the affected `PiH` via `TARGETS_HISTORY` without changing it.
 
 `REPLACED_BY` is the stored successor relationship of an entity with `status = REPLACED`. Source and target have the same concrete `entityType`; self-references and cycles are prohibited.
+
+Revision ownership is part of the relationship contract, not a new edge or entity type. `EVALUATES`, `CHECKS`, and verification `SUPERSEDES` belong to the new `Verification`; their targets retain their revisions. `CREATED_BY` never revises the referenced `RoleAssignment`. New snapshots use `snapshotSchemaVersion = "2.0"` and include only the entity's owned relationship state. The complete matrix in section 2.2.8 of [`JCI_CONTEXT.md`](JCI_CONTEXT.md) is binding for every implementation.
 
 ## 6. Inverse readings
 
@@ -230,7 +234,7 @@ SyncEvent
 HistoricalCorrection
 ```
 
-These four types are immutable in content and are not historized again. Only the append-only provenance additions to `ChangeEvent` described above are permitted. A discrepancy in a `PiH` is documented by a new `HistoricalCorrection` object. The `PiH` itself remains unchanged. `TARGETS_HISTORY` only addresses the reason for the correction and is not a change to the historical state.
+These four types have immutable properties and owned provenance and are not historized again. Endpoint ownership is defined by section 2.2.8 of [`JCI_CONTEXT.md`](JCI_CONTEXT.md): new references owned by another object do not revise the referenced record. `TRIGGERS`, `CHANGED_BY`, `TARGETS_HISTORY`, and `CORRECTS` follow that explicit matrix. A discrepancy in a `PiH` creates a separate `HistoricalCorrection` without rewriting the `PiH`.
 
 ## 8. Task types and task graph
 
@@ -245,16 +249,22 @@ COMPOSITE = structural node made up of at least one subordinate Task
 
 `HAS_MEMBER` and `HAS_ROLE` have `validFrom` and optionally `validUntil`. The validity period of a `RoleAssignment` lies completely within the simultaneously valid membership and role ownership. `OWNED_BY` enables the organization-relative derivation of internal and external environment context; actual interaction remains person-bound through `USES`.
 
-Only `ATOMIC` Tasks have `EXECUTED_BY`, `USES`, and `PRODUCES`. An active or completed atomic Task has at least one executing `RoleAssignment`. The status of a `COMPOSITE` Task is derived from its direct subtasks.
+Only `ATOMIC` Tasks have `EXECUTED_BY`, `USES`, and `PRODUCES`. An active or completed atomic Task has at least one executing `RoleAssignment`. The status of a released `COMPOSITE` Task follows own prerequisites and then current direct subtasks under section 9.4.2 of the canonical context document.
+
+Current scope excludes `REPLACED` and `REVOKED` while retaining stored goal assignments and completed Tasks. An achieved `PiF1o` needs a non-empty completed current Task set and at least one current required criterion; current required criteria must be active and satisfied. Replacement and revocation require explicit authorization; old Results are not automatically transferred. The precise scope contract is defined in section 9.4.2 of [`JCI_CONTEXT.md`](JCI_CONTEXT.md).
+
+The completion graph is a virtual union of current hierarchy and explicit prerequisites, with source waiting for target. It introduces no entity or relationship type. Mixed cycles across goals are prohibited. Atomic and composite Tasks are evaluated together with prerequisites first. A released composite’s own unmet prerequisite yields `BLOCKED` before its children are aggregated; `DRAFT` requires explicit release and terminal states are not reopened.
 
 ## 9. Machine-readable exchange and extension
 
 Complete graph and ontology exports use JSON-LD 1.1 with the context [`schemas/jci-context.jsonld`](../schemas/jci-context.jsonld). Entities are identified as `urn:jci:<UUID>`; concrete types and relationships use the public, versioned namespace `https://eeimicke.github.io/junaco-jci-loop/ns/jci/1.0#`.
 
-`JCIChangeRequest` and `JCISyncResult` use `schemaVersion = "1.1"`. For `HISTORICAL_CORRECTION`, a structured `historicalCorrection` object replaces the general `operations`; it includes in particular `expectedHistoryViewHash`, unique lexicographically sorted `correctedFields`, `previousValue`, and `correctedValue`.
+`JCIChangeRequest` and `JCISyncResult` use `schemaVersion = "2.0"`. For `HISTORICAL_CORRECTION`, a structured `historicalCorrection` object replaces the general `operations`; it includes in particular `expectedHistoryViewHash`, unique lexicographically sorted `correctedFields`, `previousValue`, and `correctedValue`.
 
 Complex properties use the structured types from [`JCI_CONTEXT.md`](JCI_CONTEXT.md) and are transferred as JSON-LD-compatible JSON values. The Neo4j projection as a canonical JSON string does not change the exchange format.
 
 The concrete entity, enum, and relationship types listed in this version form a closed catalogue. A new subtype or relationship requires a versioned semantic model change in [`JCI_CONTEXT.md`](JCI_CONTEXT.md), followed by updates to all downstream documents, the JSON-LD context, schemas, and tests. Implementations must not silently treat unknown types as known types.
+
+The technical commit gate, `graphEpoch`, durable payload, run ownership, and idempotent commit record under section 12.8 of [`JCI_CONTEXT.md`](JCI_CONTEXT.md) are implementation infrastructure outside `JCIEntity`. They protect all JCI writes without introducing a core element, semantic edge, or domain cardinality. Legacy exchange schemas remain separately available; version `2.0` does not rewrite older snapshots or hashes.
 
 **Short example:** An exported Task entity has `@id = "urn:jci:<UUID>"`, `@type = "jci:Task"`, and relationships such as `jci:RESPONSIBLE_TEAM`. On import, these become the canonical nodes and edges again.

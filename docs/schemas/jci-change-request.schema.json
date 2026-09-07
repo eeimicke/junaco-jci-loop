@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/eeimicke/junaco-jci-loop/main/docs/schemas/jci-change-request.schema.json",
-  "title": "JCIChangeRequest 1.1",
+  "title": "JCIChangeRequest 2.0",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -16,11 +16,29 @@
     "reason"
   ],
   "properties": {
-    "schemaVersion": {"const": "1.1"},
-    "requestId": {"type": "string", "format": "uuid"},
-    "idempotencyKey": {"type": "string", "minLength": 1},
-    "requestedAt": {"type": "string", "format": "date-time"},
-    "requestedRevision": {"type": ["integer", "null"], "minimum": 1},
+    "schemaVersion": {
+      "const": "2.0"
+    },
+    "requestId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "idempotencyKey": {
+      "type": "string",
+      "minLength": 1
+    },
+    "requestedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "requestedRevision": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
     "changeType": {
       "enum": [
         "CREATED",
@@ -36,58 +54,146 @@
     "target": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "entityType"],
+      "required": [
+        "id",
+        "entityType"
+      ],
       "properties": {
-        "id": {"type": "string", "format": "uuid"},
-        "entityType": {"type": "string", "minLength": 1}
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "entityType": {
+          "enum": [
+            "ChangeEvent",
+            "CiV",
+            "ERoFObject",
+            "Evidence",
+            "HistoricalCorrection",
+            "PiF1o",
+            "PiF1s",
+            "PiF1t",
+            "PiF2",
+            "PiH",
+            "RaN",
+            "RaNConflict",
+            "Result",
+            "RoFOrg",
+            "RoFOrgRelationship",
+            "RoFRole",
+            "RoFTeam",
+            "RoFTeamMember",
+            "RoleAssignment",
+            "SYNC",
+            "SuccessCriterion",
+            "SyncEvent",
+            "Task",
+            "Verification"
+          ]
+        }
       }
     },
-    "requestedByRoleAssignmentId": {"type": "string", "format": "uuid"},
-    "reason": {"type": "string", "minLength": 1},
+    "requestedByRoleAssignmentId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    },
     "operations": {
       "type": "array",
       "minItems": 1,
-      "items": {"$ref": "#/$defs/operation"}
+      "items": {
+        "$ref": "#/$defs/operation"
+      }
     },
-    "historicalCorrection": {"$ref": "#/$defs/historicalCorrection"}
+    "historicalCorrection": {
+      "$ref": "#/$defs/historicalCorrection"
+    }
   },
   "oneOf": [
     {
       "properties": {
-        "changeType": {"const": "CREATED"},
-        "requestedRevision": {"type": "null"}
-      },
-      "required": ["operations"],
-      "not": {"required": ["historicalCorrection"]}
-    },
-    {
-      "properties": {
-        "changeType": {"const": "HISTORICAL_CORRECTION"},
-        "requestedRevision": {"const": 1},
-        "target": {
-          "properties": {"entityType": {"const": "PiH"}},
-          "required": ["entityType"]
+        "changeType": {
+          "const": "CREATED"
+        },
+        "requestedRevision": {
+          "type": "null"
         }
       },
-      "required": ["historicalCorrection"],
-      "not": {"required": ["operations"]}
+      "required": [
+        "operations"
+      ],
+      "not": {
+        "required": [
+          "historicalCorrection"
+        ]
+      }
     },
     {
       "properties": {
         "changeType": {
-          "enum": ["CHANGED", "ACHIEVED", "COMPLETED", "REPLACED", "REVOKED", "RESOLVED"]
+          "const": "HISTORICAL_CORRECTION"
         },
-        "requestedRevision": {"type": "integer", "minimum": 1}
+        "requestedRevision": {
+          "const": 1
+        },
+        "target": {
+          "properties": {
+            "entityType": {
+              "const": "PiH"
+            }
+          },
+          "required": [
+            "entityType"
+          ]
+        }
       },
-      "required": ["operations"],
-      "not": {"required": ["historicalCorrection"]}
+      "required": [
+        "historicalCorrection"
+      ],
+      "not": {
+        "required": [
+          "operations"
+        ]
+      }
+    },
+    {
+      "properties": {
+        "changeType": {
+          "enum": [
+            "CHANGED",
+            "ACHIEVED",
+            "COMPLETED",
+            "REPLACED",
+            "REVOKED",
+            "RESOLVED"
+          ]
+        },
+        "requestedRevision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "operations"
+      ],
+      "not": {
+        "required": [
+          "historicalCorrection"
+        ]
+      }
     }
   ],
   "$defs": {
     "typedValue": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["valueType", "value"],
+      "required": [
+        "valueType",
+        "value"
+      ],
       "properties": {
         "valueType": {
           "enum": [
@@ -103,13 +209,122 @@
           ]
         },
         "value": {}
-      }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "valueType": {
+              "const": "NULL"
+            },
+            "value": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "properties": {
+            "valueType": {
+              "const": "BOOLEAN"
+            },
+            "value": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "properties": {
+            "valueType": {
+              "const": "INTEGER"
+            },
+            "value": {
+              "type": "integer"
+            }
+          }
+        },
+        {
+          "properties": {
+            "valueType": {
+              "const": "DECIMAL"
+            },
+            "value": {
+              "type": "string",
+              "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]*[1-9])?$",
+              "not": {
+                "const": "-0"
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "valueType": {
+              "const": "STRING"
+            },
+            "value": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "properties": {
+            "valueType": {
+              "const": "DATE"
+            },
+            "value": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        },
+        {
+          "properties": {
+            "valueType": {
+              "const": "DATETIME"
+            },
+            "value": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2})$"
+            }
+          }
+        },
+        {
+          "properties": {
+            "valueType": {
+              "const": "OBJECT"
+            },
+            "value": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/jsonValue"
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "valueType": {
+              "const": "ARRAY"
+            },
+            "value": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/jsonValue"
+              }
+            }
+          }
+        }
+      ]
     },
     "typedValueMap": {
       "type": "object",
       "minProperties": 1,
-      "additionalProperties": {"$ref": "#/$defs/typedValue"},
-      "propertyNames": {"pattern": "^/"}
+      "additionalProperties": {
+        "$ref": "#/$defs/typedValue"
+      },
+      "propertyNames": {
+        "$ref": "#/$defs/correctionPath"
+      }
     },
     "historicalCorrection": {
       "type": "object",
@@ -124,53 +339,280 @@
         "correctedValue"
       ],
       "properties": {
-        "correctionType": {"enum": ["ADDITION", "CORRECTION", "CLARIFICATION"]},
-        "reason": {"type": "string", "minLength": 1},
-        "valueSchemaVersion": {"type": "string", "minLength": 1},
-        "expectedHistoryViewHash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "correctionType": {
+          "enum": [
+            "ADDITION",
+            "CORRECTION",
+            "CLARIFICATION"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "valueSchemaVersion": {
+          "const": "2.0"
+        },
+        "expectedHistoryViewHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
         "correctedFields": {
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
-          "items": {"type": "string", "pattern": "^/"}
+          "items": {
+            "$ref": "#/$defs/correctionPath"
+          }
         },
-        "previousValue": {"$ref": "#/$defs/typedValueMap"},
-        "correctedValue": {"$ref": "#/$defs/typedValueMap"}
+        "previousValue": {
+          "$ref": "#/$defs/typedValueMap"
+        },
+        "correctedValue": {
+          "$ref": "#/$defs/typedValueMap"
+        }
       }
     },
     "operation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["op"],
+      "required": [
+        "op"
+      ],
       "properties": {
-        "op": {"enum": ["ADD", "REPLACE", "REMOVE", "CONNECT", "DISCONNECT"]},
-        "path": {"type": "string", "pattern": "^/"},
-        "value": {"$ref": "#/$defs/typedValue"},
-        "relationshipType": {"type": "string", "pattern": "^[A-Z][A-Z_]*$"},
-        "direction": {"enum": ["OUTGOING", "INCOMING"]},
-        "otherEntityId": {"type": "string", "format": "uuid"},
+        "op": {
+          "enum": [
+            "ADD",
+            "REPLACE",
+            "REMOVE",
+            "CONNECT",
+            "DISCONNECT"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/(?:actualEnd|actualStart|affectedCount|allocation|bootstrapKey|capturedAt|changeType|changedCount|checkedCriterionRevision|checksum|completedAt|condition|conflictCount|conflictKey|conflictType|contentHash|contributionMode|correctionCount|createdAt|criterion|decisionKey|definition|description|detectedAt|displayName|effect|entityType|errorCode|errorMessage|evaluatedResultRevision|evaluationMode|evidenceType|externalReference|governedTypes|historyCount|horizonEnd|horizonStart|id|idempotencyKey|legalName|measurementType|memberType|method|name|notCiV|objectType|occurredAt|operator|orgType|originalEntityId|originalEntityType|originalRevision|outcome|plannedEnd|plannedStart|priority|producedAt|reason|reference|relationshipData|requestedRevision|requirementLevel|resolution|resolvedAt|responsibility|resultType|revision|roleName|roleType|ruleType|runId|scopeType|selfCiV|snapshotSchemaVersion|startedAt|stateData|statement|status|targetDate|targetEntityId|targetEntityType|targetState|targetValue|taskKind|taskType|teamType|toServeCiV|type|unit|updatedAt|validFrom|validUntil|value|verifiedAt|version)(?:/(?:[^~/]|~[01])*)*$"
+        },
+        "value": {
+          "$ref": "#/$defs/typedValue"
+        },
+        "relationshipType": {
+          "enum": [
+            "ACCOUNTABLE_MEMBER",
+            "ACTIVATES_ROLE",
+            "AFFECTS",
+            "APPLIES_IN",
+            "CAUSED_BY",
+            "CHANGED_BY",
+            "CHECKS",
+            "CONFLICTING_RULE",
+            "CONTRIBUTES_TO",
+            "CORRECTED_BY",
+            "CORRECTS",
+            "CREATED_BY",
+            "CREATES_CORRECTION",
+            "CREATES_HISTORY",
+            "DECOMPOSES_INTO",
+            "DEPENDS_ON",
+            "DETECTED_BY",
+            "EVALUATES",
+            "EXECUTED_BY",
+            "EXECUTES",
+            "GOVERNS",
+            "HAS_ASSIGNMENT",
+            "HAS_HISTORICAL_STATE",
+            "HAS_MEMBER",
+            "HAS_ROLE",
+            "HAS_SUCCESS_CRITERIA",
+            "HAS_TEAM",
+            "HELD_BY",
+            "INFORMED_BY",
+            "INSCRIBES_PURPOSE_IN",
+            "IN_TEAM",
+            "OWNED_BY",
+            "PRODUCES",
+            "PROTECTS",
+            "PROVIDES_CONTEXT_TO",
+            "REPLACED_BY",
+            "REPRESENTED_BY",
+            "REQUESTED_BY",
+            "RESOLVED_BY",
+            "RESOLVED_THROUGH",
+            "RESPONSIBLE_TEAM",
+            "SOURCE_ORG",
+            "SUPERSEDES",
+            "TARGETS_HISTORY",
+            "TARGET_ORG",
+            "TRIGGERS",
+            "USES",
+            "USES_EVIDENCE"
+          ]
+        },
+        "direction": {
+          "enum": [
+            "OUTGOING",
+            "INCOMING"
+          ]
+        },
+        "otherEntityId": {
+          "type": "string",
+          "format": "uuid"
+        },
         "properties": {
           "type": "object",
-          "additionalProperties": {"$ref": "#/$defs/typedValue"}
+          "additionalProperties": {
+            "$ref": "#/$defs/typedValue"
+          }
         }
       },
       "allOf": [
         {
           "if": {
-            "properties": {"op": {"enum": ["CONNECT", "DISCONNECT"]}},
-            "required": ["op"]
+            "properties": {
+              "op": {
+                "enum": [
+                  "CONNECT",
+                  "DISCONNECT"
+                ]
+              }
+            },
+            "required": [
+              "op"
+            ]
           },
-          "then": {"required": ["relationshipType", "direction", "otherEntityId"]},
-          "else": {"required": ["path"]}
+          "then": {
+            "required": [
+              "relationshipType",
+              "direction",
+              "otherEntityId"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "path"
+                  ]
+                },
+                {
+                  "required": [
+                    "value"
+                  ]
+                }
+              ]
+            }
+          },
+          "else": {
+            "required": [
+              "path"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "relationshipType"
+                  ]
+                },
+                {
+                  "required": [
+                    "direction"
+                  ]
+                },
+                {
+                  "required": [
+                    "otherEntityId"
+                  ]
+                },
+                {
+                  "required": [
+                    "properties"
+                  ]
+                }
+              ]
+            }
+          }
         },
         {
           "if": {
-            "properties": {"op": {"enum": ["ADD", "REPLACE"]}},
-            "required": ["op"]
+            "properties": {
+              "op": {
+                "enum": [
+                  "ADD",
+                  "REPLACE"
+                ]
+              }
+            },
+            "required": [
+              "op"
+            ]
           },
-          "then": {"required": ["value"]}
+          "then": {
+            "required": [
+              "value"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "op": {
+                "const": "REMOVE"
+              }
+            },
+            "required": [
+              "op"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "value"
+              ]
+            }
+          }
         }
       ]
+    },
+    "jsonValue": {
+      "anyOf": [
+        {
+          "type": [
+            "null",
+            "boolean",
+            "integer",
+            "string"
+          ]
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/jsonValue"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/jsonValue"
+          },
+          "allOf": [
+            {
+              "if": {
+                "required": [
+                  "valueType",
+                  "value"
+                ]
+              },
+              "then": {
+                "$ref": "#/$defs/typedValue"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "correctionPath": {
+      "type": "string",
+      "pattern": "^(?:/stateData/properties/(?:actualEnd|actualStart|allocation|bootstrapKey|capturedAt|checkedCriterionRevision|checksum|condition|conflictKey|conflictType|contributionMode|criterion|decisionKey|definition|description|detectedAt|displayName|effect|evaluatedResultRevision|evaluationMode|evidenceType|externalReference|governedTypes|horizonEnd|horizonStart|legalName|measurementType|memberType|method|name|notCiV|objectType|operator|orgType|outcome|plannedEnd|plannedStart|priority|producedAt|reason|reference|requirementLevel|resolution|resolvedAt|responsibility|resultType|roleName|roleType|ruleType|scopeType|selfCiV|statement|status|targetDate|targetState|targetValue|taskKind|taskType|teamType|toServeCiV|type|unit|validFrom|validUntil|value|verifiedAt|version)|/relationshipData/(?:INCOMING|OUTGOING):(?:ACCOUNTABLE_MEMBER|ACTIVATES_ROLE|AFFECTS|APPLIES_IN|CAUSED_BY|CHANGED_BY|CHECKS|CONFLICTING_RULE|CONTRIBUTES_TO|CORRECTED_BY|CORRECTS|CREATED_BY|CREATES_CORRECTION|CREATES_HISTORY|DECOMPOSES_INTO|DEPENDS_ON|DETECTED_BY|EVALUATES|EXECUTED_BY|EXECUTES|GOVERNS|HAS_ASSIGNMENT|HAS_HISTORICAL_STATE|HAS_MEMBER|HAS_ROLE|HAS_SUCCESS_CRITERIA|HAS_TEAM|HELD_BY|INFORMED_BY|INSCRIBES_PURPOSE_IN|IN_TEAM|OWNED_BY|PRODUCES|PROTECTS|PROVIDES_CONTEXT_TO|REPLACED_BY|REPRESENTED_BY|REQUESTED_BY|RESOLVED_BY|RESOLVED_THROUGH|RESPONSIBLE_TEAM|SOURCE_ORG|SUPERSEDES|TARGETS_HISTORY|TARGET_ORG|TRIGGERS|USES|USES_EVIDENCE):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:/properties/(?:validFrom|validUntil))?)$"
     }
-  }
+  },
+  "description": "Profile 2.0. Transport validation is followed by canonical pointer resolution, type-specific snapshot properties, structural overlap, revision ownership and graph validation. Use an exact JSON parser: non-integral JSON number tokens are forbidden even inside OBJECT/ARRAY; represent decimals as TypedValue DECIMAL strings."
 }

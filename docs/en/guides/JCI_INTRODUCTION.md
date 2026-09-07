@@ -42,6 +42,12 @@ Each `CiV` describes one value through the NOT, SELF, and TO SERVE dimensions. `
 
 JCI is not a finished software or an organizational chart. It is a technology-independent professional model. For example, an application can implement it in Neo4j, but must comply with the documented entities, relationships, state rules and invariants.
 
+## Controlled evolution in version 2.0
+
+New verification and event references do not change the referenced domain state merely by referring to it. Target achievement uses the explicitly confirmed current task and criterion scope. A Composite's own prerequisites take precedence over child aggregation; hierarchy and dependencies are checked together for completion cycles. The final decision and adoption occur under a shared technical write lock. Historical corrections use versioned paths checked for overlap.
+
+The [six implementation steps](../changes/JCI_LOGIC_2_0.md) describe impacts, migration, and acceptance cases. The reference functions are not a complete SYNC application.
+
 ## Next step
 
 Next, read the [JCI Element Overview](JCI_ELEMENTS.md) or follow the [Walkthrough Example](JCI_EXAMPLE.md).

@@ -108,9 +108,21 @@ flowchart TD
     Parent -->|DECOMPOSES_INTO| Send
     Draft -->|DEPENDS_ON| Analyse
     Send -->|DEPENDS_ON| Draft
+    Goal -->|DECOMPOSES_INTO| Prerequisite[ATOMIC: Freigabe vorbereiten]
+    Parent -->|DEPENDS_ON| Prerequisite
+    Parent -. eigene Voraussetzung vor aktuellen Kindern .-> Status[Status nach Freigabe]
+    Parent -. gemeinsame Abschlussprüfung .-> CycleCheck[DECOMPOSES_INTO und DEPENDS_ON zyklusfrei]
 ```
 
-Nur die atomaren Tasks besitzen `EXECUTED_BY`, `USES` und `PRODUCES`. Der Status des zusammengesetzten Tasks wird aus seinen direkten Untertasks abgeleitet.
+Nur die atomaren Tasks besitzen `EXECUTED_BY`, `USES` und `PRODUCES`. Eigene unerfüllte `DEPENDS_ON`-Voraussetzungen setzen den freigegebenen Composite zuerst auf `BLOCKED`; sonst wird sein Status aus den aktuellen direkten Untertasks abgeleitet.
+
+### 4.1 Ersatz, Freigabe und gemeinsamer Abschlussgraph
+
+Wird `Antwort erstellen` ersetzt, bleibt der frühere Task mit dem `PiF1o` verbunden und erhält `REPLACED`. Sein ausdrücklich eingebundener Nachfolger zählt im aktuellen Umfang. `REVOKED`-Tasks und zurückgezogene Kriterien werden ebenfalls nur nach bestätigter Umfangsänderung ausgeschlossen. Das Ziel verlangt mindestens einen aktuellen Task und ein aktuelles `REQUIRED`-Kriterium; alle aktuellen Tasks müssen `COMPLETED` und alle aktuellen Pflichtkriterien aktiv und erfüllt sein. Aufhebung eines Composite lässt dessen aktuelle Nachkommen nicht verschwinden. Ein ungeklärter Teilbaum führt zu `CONFLICT`.
+
+Benötigt der Composite zusätzlich eine Freigabe als `DEPENDS_ON`, bleibt er bis zu deren Abschluss `BLOCKED`. Diese Voraussetzung wird nicht automatisch auf jedes Kind übertragen. Bleiben nach bestätigter Umfangsänderung nur `DRAFT`-Kinder, wird ein schon freigegebener Composite `ACTIVE`. Ein noch nicht freigegebener Entwurf darf nicht durch Umfangsreduktion direkt `COMPLETED` werden.
+
+Wenn der Parent den Abschluss von `Antwort erstellen` benötigt und dieser Task über `DEPENDS_ON` wiederum den Parent benötigt, entsteht im berechneten Abschlussgraphen ein Zyklus. `SYNC` weist den Auftrag ab, bevor eine Teiländerung übernommen wird. Alle übrigen Tasks werden in der gemeinsamen Reihenfolge ihrer Abschlussvoraussetzungen ausgewertet.
 
 ## 5. Umwelt
 
@@ -160,6 +172,8 @@ Verification
 ```
 
 Die `Verification` ist nur anwendbar, solange sie nicht ersetzt wurde und die aktuellen Revisionen beider Ziele weiterhin diesen gebundenen Revisionen entsprechen. Wird das Kriterium später auf zwölf Stunden geändert und dadurch zu Revision 3, bleibt die frühere Prüfung unveränderlich erhalten, ist für den neuen Zielzustand aber revisionsveraltet. Eine neue Prüfung bindet die aktuellen Zielrevisionen und kann über `SUPERSEDES` auf die frühere `Verification` verweisen.
+
+Das Anlegen von `EVALUATES` und `CHECKS` verändert die geprüften Zielrevisionen nicht. Die neue Prüfung bleibt deshalb nach dem Commit anwendbar. Dasselbe gilt für neue Evidence- und Ablösungsbezüge. Für die aktuelle Zielerreichung zählen nur Results aktuell berücksichtigter Tasks; die Übernahme früherer Arbeit benötigt eine ausdrückliche Entscheidung, ein aktuelles Result und einen nachvollziehbaren Nachweis. Ein bereits `ACHIEVED` gewordener PiF1o wird nicht wieder geöffnet.
 
 ## 7. RaN-Typen und Aufbau
 
@@ -250,7 +264,7 @@ flowchart LR
 
 ## 9. Änderung und SYNC
 
-Später soll die Antwortzeit von 24 auf 12 Stunden verkürzt werden. Anna beantragt die Änderung an einem bereits vorhandenen `PiF1o`:
+Später soll die Antwortzeit von 24 auf 12 Stunden verkürzt werden. Der `PiF1o` ist in diesem Beispiel noch `ACTIVE`. Anna beantragt seine Änderung; bei bereits erreichtem Ziel wäre ein neues Zukunftselement nötig:
 
 ```text
 PiF1o      ── CHANGED_BY ───► ChangeEvent
@@ -267,14 +281,17 @@ flowchart TD
     ChangeEvent -. ausstehend: TRIGGERS = 0 .-> Pending[noch kein abgeschlossenes Ereignis]
     ChangeEvent -. plant Versuch .-> Run[SyncRun: eindeutige runId]
     Run -. verwendet .-> Definition[SYNC]
-    Run -. prüft Modell, Revisionen und RaN .-> Decision{outcome}
+    Run --> Gate[gemeinsame technische Schreibsperre]
+    Gate --> Validate[vollständiger Kandidat, Prüfungsmenge und Entscheidungszeitpunkt]
+    Validate --> Decision{outcome}
+    Gate -. bis Commit oder Rollback .-> Protected[Eigenschaften, Beziehungen, Mengen und Abwesenheiten geschützt]
     Decision --> Success[SUCCESS]
     Decision --> Conflict[CONFLICT]
     Decision --> Failed[FAILED]
-    Success --> Apply[atomar übernehmen]
+    Success --> Apply[atomarer Abschluss: Delta, PiH, SyncEvent und Beleg]
     Conflict --> Rollback[vollständig zurückrollen]
     Failed --> Rollback
-    Apply --> Event[SyncEvent]
+    Apply -. includes / enthält .-> Event[SyncEvent]
     Rollback --> Event
     ChangeEvent -->|TRIGGERS| Event[SyncEvent: erst nach Abschluss, runId eindeutig]
     Event -->|EXECUTES| Definition
@@ -282,6 +299,8 @@ flowchart TD
 ```
 
 Gestrichelte Pfeile sind technische Prozessschritte, keine gespeicherten Beziehungen. Jeder beendete oder kontrolliert abgebrochene Versuch erzeugt genau ein eigenes `SyncEvent` mit derselben `runId` wie sein `SyncRun`. Ein Wiederholungsversuch erzeugt eine neue `runId`, ein neues `SyncEvent` und eine weitere append-only ergänzte `TRIGGERS`-Beziehung.
+
+Vor der abschließenden Entscheidung schützt eine gemeinsame technische Schreibsperre den Modellbestand aller beteiligten Organisationen. `SYNC` liest Regeln, Rollen, Prüfungsmenge, Beziehungen und Abwesenheiten unter dieser Sperre erneut. Ein serverseitiger fachlicher Entscheidungszeitpunkt bestimmt die geprüfte Zeitgültigkeit. Zwei parallele Aufträge dürfen weder gemeinsam einen Abschlusszyklus erzeugen noch dieselbe veraltete Prüfungsmenge übernehmen. Ein reiner Ereignisbezug erzeugt keine Revision der referenzierten SYNC-Definition oder Entität.
 
 ## 10. Die drei SYNC-Ausgänge
 
@@ -328,7 +347,9 @@ flowchart LR
 
 Vor dem Commit berechnet `SYNC` die wirksame `HistoryView` aus dem unveränderten `PiH` und seinen aktiven Korrekturen. Nur wenn deren aktueller Hash mit `expectedHistoryViewHash` des Auftrags übereinstimmt, darf die neue Korrektur mit demselben Wert als `baseHistoryViewHash` entstehen. Die Verarbeitung wird je `PiH` serialisiert; ein veralteter Hash führt zu `CONFLICT` und erzeugt keine Korrektur.
 
-Zwei aktive `HistoricalCorrections` desselben `PiH` dürfen parallel bestehen, wenn ihre `correctedFields` disjunkt sind, beispielsweise `/stateData/name` und `/relationshipData/HAS_MEMBER:OUT:team-7/validUntil`. Überschneiden sich die Felder, muss die neue Korrektur genau eine aktive Vorgängerkorrektur über `SUPERSEDES` vollständig ersetzen und alle weiterhin gültigen Werte übernehmen. Unklare oder mehrfache Überlappungen führen zu `CONFLICT`. Das ursprüngliche `PiH` und alle Korrekturen bleiben unveränderlich.
+Zwei aktive `HistoricalCorrections` desselben `PiH` dürfen parallel bestehen, wenn ihre `correctedFields` disjunkt sind, beispielsweise `/stateData/properties/name` und `/relationshipData/INCOMING:HAS_MEMBER:00000000-0000-0000-0000-000000000007/properties/validUntil`. Überschneiden sich die Felder, muss die neue Korrektur genau eine aktive Vorgängerkorrektur über `SUPERSEDES` vollständig ersetzen und alle weiterhin gültigen Werte übernehmen. Unklare oder mehrfache Überlappungen führen zu `CONFLICT`. Das ursprüngliche `PiH` und alle Korrekturen bleiben unveränderlich.
+
+Korrekturprofil 2.0 prüft Überschneidungen auf dekodierten JSON-Pointer-Segmenten: Eine ganze Beziehung und eine ihrer Properties überschneiden sich; `name` und `nameLong` nicht. Arrayindizes und Teilpfade innerhalb eines TypedValue sind unzulässig. `ADDITION` verlangt einen fehlenden Pfad; ein vorhandener `NULL`-Wert ist nicht fehlend. `previousValue` wird gegen die damalige wirksame Sicht geprüft. Später überlagern die absoluten `correctedValue`-Werte der nicht abgelösten Korrekturen das Original. Ältere Profile erhalten eigene Resolver; vorhandene PiH und Hashes bleiben unverändert.
 
 ## 12. Vollständige Rückverfolgung
 

@@ -2,7 +2,9 @@
 
 ## 1. Status und Zweck
 
-Dieses Dokument legt technologieunabhängige Kardinalitäten und Invarianten des JCI-Graphen fest. Die fachliche Bedeutung stammt aus [JCI_CONTEXT.md](JCI_CONTEXT.md), der zulässige Typkatalog aus [JCI_ONTOLOGY.md](JCI_ONTOLOGY.md). Bei einem Konflikt gilt [`JCI_CONTEXT.md`](JCI_CONTEXT.md).
+Dieses Dokument legt technologieunabhängige Kardinalitäten und Invarianten des JCI-Graphen fest. Die fachliche Bedeutung stammt aus [`JCI_CONTEXT.md`](JCI_CONTEXT.md), der zulässige Typkatalog aus [`JCI_ONTOLOGY.md`](JCI_ONTOLOGY.md). Bei einem Konflikt gilt [`JCI_CONTEXT.md`](JCI_CONTEXT.md).
+
+**Regelpaket 2.0:** Ontologie, Graphregeln, SYNC, neue Snapshots, Korrekturwerte und das Austauschformat verwenden Version `2.0`. JSON-LD bleibt `1.1`; bestehende Namespace-IRIs mit `/1.0#` bleiben stabile Vokabularidentitäten und bezeichnen nicht die Regelversion. Frühere Datensätze werden ausschließlich nach ihren ausdrücklich angegebenen Versionsprofilen gelesen.
 
 ## 2. Allgemeine Entitätsregeln
 
@@ -13,7 +15,7 @@ Dieses Dokument legt technologieunabhängige Kardinalitäten und Invarianten des
 5. Jeder fachliche Statuswechsel ist eine tatsächliche Änderung.
 6. `updatedAt` liegt nicht vor `createdAt`; bei unveränderlichen Entitäten sind beide Werte gleich.
 7. `PiH`, `ChangeEvent`, `SyncEvent` und `HistoricalCorrection` besitzen dauerhaft `status = RECORDED` und `revision = 1`.
-8. Diese vier Entitätstypen werden inhaltlich nicht verändert, gelöscht oder erneut historisiert. Bei `ChangeEvent` sind nur append-only `TRIGGERS` zu abgeschlossenen Versuchen und bei erfolgreichem `CREATED` genau eine nachträglich hergestellte eingehende `CHANGED_BY`-Kante zulässig; Eigenschaften, bestehende Kanten, `revision` und `updatedAt` bleiben unverändert.
+8. Diese vier Typen behalten unveränderliche Eigenschaften und eigene Provenienz und werden weder gelöscht noch erneut historisiert. Einem anderen neuen Objekt zugeordnete Bezugnahmen folgen Abschnitt 2.2.8 von `JCI_CONTEXT`. Append-only `TRIGGERS` und die erfolgreiche Erstellungsverknüpfung `CHANGED_BY` verändern Revision und Zeitstempel des bestehenden `ChangeEvent` nicht.
 9. Leere Pflichtfelder sind unzulässig.
 10. Fachliche Beziehungen werden ausschließlich als Kanten und nicht zusätzlich als ID-Listen gespeichert.
 11. `ChangeEvent.targetEntityId` und `targetEntityType` sind unveränderliche Audit-Koordinaten des angenommenen Auftrags. Sie ersetzen keine Kante. Sobald eine kanonische Zielbeziehung vorhanden ist, muss sie dieselbe Entität bezeichnen; bei einem noch nicht erfolgreichen oder gescheiterten `CREATED` darf der Zielknoten fehlen.
@@ -46,7 +48,7 @@ Verbindliche Übergangsregeln:
 9. `PiH`, `ChangeEvent`, `SyncEvent` und `HistoricalCorrection` werden unmittelbar als `RECORDED` erzeugt.
 10. Prozessartefakte und ein durch SYNC erzeugter offener `RaNConflict` lösen für ihre eigene Erzeugung kein rekursives `ChangeEvent` aus.
 11. Deterministisch aus einem Veränderungsauftrag abgeleitete Folgeänderungen erzeugen kein eigenes rekursives `ChangeEvent`; sie bleiben über das gemeinsame `SyncEvent`, `AFFECTS`, Revision und `PiH` nachvollziehbar.
-12. Eine fachliche Beziehungsänderung ändert beide bereits vorhandenen veränderlichen Endpunkte. Beide erhalten eine neue Revision und jeweils ein `PiH`; ein im selben Auftrag neu erzeugter Endpunkt erhält noch kein `PiH`.
+12. Beziehungsänderungen folgen der Endpunktzuordnung aus Abschnitt 2.2.8 von `JCI_CONTEXT`: Nur vorhandene veränderliche Eigentümer mit tatsächlichem Delta erhalten je Auftrag genau eine Revision und ein `PiH`. Prüf- und Auditbezüge revisionieren ihre Ziele nicht; jeder Graphschreibvorgang bleibt durch den technischen Commit-Gate geschützt.
 
 ## 4. Kardinalitäten
 
@@ -225,18 +227,18 @@ Bedingte Invarianten:
 
 1. Jedes `SuccessCriterion` besitzt genau ein `requirementLevel = REQUIRED | OPTIONAL`, ein `evaluationMode = ALL | ANY`, einen zum `measurementType` passenden `operator` und einen gültigen `targetValue`.
 2. Ohne ausdrücklich abweichende Festlegung gelten `requirementLevel = REQUIRED` und `evaluationMode = ALL`.
-3. Jedes `PiF1o` besitzt mindestens ein `REQUIRED`-Kriterium.
+3. Jedes fachlich vollständige `PiF1o` besitzt mindestens ein aktuelles `SuccessCriterion` mit `requirementLevel = REQUIRED`. Ausgeschiedene Pflichtkriterien erfüllen diese Mindestmenge nicht.
 4. Jede `Verification` besitzt positive Ganzzahlen `evaluatedResultRevision` und `checkedCriterionRevision`.
-5. Das über `EVALUATES` verbundene `Result` besitzt `status = COMPLETED`; das über `CHECKS` verbundene `SuccessCriterion` besitzt `status = ACTIVE`. Result und Kriterium gehören zum selben `PiF1o`.
-6. Bei der Erzeugung entsprechen `evaluatedResultRevision` und `checkedCriterionRevision` exakt den in einer konsistenten Sicht gelesenen Zielrevisionen. Unmittelbar vor dem Commit werden beide Revisionen erneut gelesen; jede Abweichung erzeugt `CONFLICT`, und die Verification wird nicht gespeichert.
-7. Eine Verification ist nur anwendbar, wenn sie `COMPLETED`, nicht über `SUPERSEDES` abgelöst und weiterhin an die aktuellen Revisionen ihres Results und Kriteriums gebunden ist.
+5. Eine `Verification` bewertet genau ein `COMPLETED`-Result und prüft genau ein `ACTIVE`-SuccessCriterion. Bei ihrer Erzeugung und für die aktuelle Zielauswertung gehören der erzeugende Task und das Kriterium zum aktuellen Umfang desselben `PiF1o`.
+6. Bei der Erzeugung entsprechen `evaluatedResultRevision` und `checkedCriterionRevision` exakt den unter dem Commit-Gate nach Abschnitt 12.8 geprüften Zielrevisionen. Jede Abweichung erzeugt `CONFLICT`. `EVALUATES`, `CHECKS` und eigene Prüfungsprovenienz verändern diese Zielrevisionen nach Abschnitt 2.2.8 nicht.
+7. Eine anwendbare aktuelle `Verification` ist `COMPLETED`, nicht über `SUPERSEDES` abgelöst und bindet weiterhin die aktuellen Revisionen ihres `COMPLETED`-Results und `ACTIVE`-Kriteriums. Für die Zielauswertung müssen erzeugender Task und Kriterium zusätzlich zum aktuellen Umfang desselben `PiF1o` gehören.
 8. `SUPERSEDES` verbindet nur Verifications mit demselben `Result` und demselben `SuccessCriterion`.
 9. Verification-Ketten sind zeitlich vorwärts gerichtet, besitzen keine Verzweigung und sind zyklusfrei.
 10. Bei `evaluationMode = ALL` ist ein Kriterium erfüllt, wenn mindestens eine anwendbare aktuelle Verification existiert und alle anwendbaren aktuellen Verifications `VALID` sind.
 11. Bei `evaluationMode = ANY` ist ein Kriterium erfüllt, wenn mindestens eine anwendbare aktuelle Verification `VALID` ist.
 12. `INVALID`, `INCONCLUSIVE` und eine fehlende anwendbare aktuelle Verification erfüllen ein Kriterium nicht; bei `ALL` verhindert bereits eine davon die Erfüllung.
-13. Berücksichtigt werden ausschließlich anwendbare aktuelle Verifications von Results, deren Tasks zum selben `PiF1o` gehören wie das geprüfte Kriterium.
-14. Ein `PiF1o` darf `ACHIEVED` erreichen, wenn alle `REQUIRED`-Kriterien erfüllt, alle zugeordneten Tasks `COMPLETED`, alle Task-Abhängigkeiten erfüllt, alle berücksichtigten Verifications anwendbar und alle relevanten Modell- und `RaN`-Regeln eingehalten sind.
+13. Es zählen nur Results aktueller Tasks desselben `PiF1o` wie das aktuelle Kriterium. Ausgeschiedene Tasks und Kriterien behalten ihre gespeicherten Zuordnungen, ohne zur aktuellen Erreichung zu zählen.
+14. Ein `PiF1o` darf `ACHIEVED` nur erreichen, wenn seine aktuelle Taskmenge nicht leer und vollständig `COMPLETED` ist, mindestens ein aktuelles `REQUIRED`-Kriterium besteht, jedes aktuelle Pflichtkriterium `ACTIVE` und durch anwendbare aktuelle Verifications erfüllt ist und alle relevanten Abhängigkeits-, WHY-, WHO-, Modell- und `RaN`-Bedingungen eingehalten sind.
 15. `OPTIONAL`-Kriterien werden ausgewertet und dokumentiert, blockieren `ACHIEVED` aber nicht.
 16. `ACHIEVED` ist terminal. Spätere Ziel-, Kriterien- oder Rahmenänderungen werden durch ein neues operatives Zukunftselement abgebildet.
 17. Für `BOOLEAN` sind nur `EQUALS` und `NOT_EQUALS`, für `NUMERIC` nur numerische Vergleichsoperatoren und für `TEXTUAL` nur `EQUALS`, `NOT_EQUALS`, `CONTAINS` und `MATCHES` zulässig.
@@ -247,47 +249,49 @@ Bedingte Invarianten:
 
 ## 9. Task-Hierarchie, Abhängigkeiten und Status
 
-1. Jeder Task besitzt genau ein `taskKind = ATOMIC | COMPOSITE`, genau ein `RESPONSIBLE_TEAM` und über `PiF1o ── DECOMPOSES_INTO ──► Task` genau einen operativen Zielkontext.
+1. Jeder Task besitzt genau ein `taskKind = ATOMIC | COMPOSITE`, genau ein `RESPONSIBLE_TEAM` und über `PiF1o ── DECOMPOSES_INTO ──► Task` genau einen gespeicherten operativen Zielkontext; die Zuordnung bleibt für ausgeschiedene Tasks erhalten.
 2. Ein `ATOMIC`-Task besitzt keine ausgehende `DECOMPOSES_INTO`-Beziehung zu einem Task.
-3. Ein `COMPOSITE`-Task besitzt mindestens einen direkten Untertask und keine Beziehungen `EXECUTED_BY`, `USES` oder `PRODUCES`.
-4. Ein Task besitzt höchstens einen direkten übergeordneten Task. Übergeordneter Task und Untertask gehören zum selben `PiF1o`.
-5. Die durch `Task ── DECOMPOSES_INTO ──► Task` gebildete Hierarchie ist zyklusfrei.
-6. `DEPENDS_ON` darf Tasks desselben oder verschiedener `PiF1o` verbinden, bildet aber keine Selbstbezüge oder Zyklen.
-7. Eine `DEPENDS_ON`-Voraussetzung ist nur erfüllt, wenn der Ziel-Task `COMPLETED` ist. `REPLACED` und `REVOKED` erfüllen sie nicht.
-8. Ein Task mit mindestens einer nicht erfüllten Voraussetzung besitzt `status = BLOCKED`. Sind danach alle Voraussetzungen erfüllt, darf `SYNC` den zulässigen Folgestatus neu bestimmen.
-9. Ein `ATOMIC`-Task in `ACTIVE` oder `COMPLETED` besitzt mindestens ein `EXECUTED_BY`; mindestens eines dieser RoleAssignments gehört zum verantwortlichen Team.
-10. Ein `ATOMIC`-Task darf `COMPLETED` erreichen, wenn alle Voraussetzungen abgeschlossen, die Ausführungs- und Teamregeln erfüllt, relevante `RaN` eingehalten und der Abschluss bestätigt sind. Ein Result ist keine universelle Abschlussbedingung.
-11. Der Status eines `COMPOSITE`-Tasks wird aus den effektiven direkten Untertasks abgeleitet: ausschließlich `DRAFT` ergibt `DRAFT`; alle `COMPLETED` ergeben `COMPLETED`; mindestens ein `ACTIVE` sowie eine Mischung aus `DRAFT` und `COMPLETED` ergeben `ACTIVE`; ohne `ACTIVE`, aber mit mindestens einem `BLOCKED`, ergibt sich `BLOCKED`.
-12. Ein `REPLACED`-Untertask wird nur durch einen über `REPLACED_BY` verbundenen Nachfolger ersetzt, der selbst direkter Untertask desselben Parents ist. Ein weiterhin verbundener `REVOKED`-Untertask oder ein Ersatz ohne diese Einbindung erzeugt einen Konflikt.
-13. Jeder abgeleitete Statuswechsel ist eine fachliche Änderung und unterliegt Historisierung und Revision.
+3. Ein `COMPOSITE`-Task besitzt mindestens einen direkten Untertask und keine Beziehungen `EXECUTED_BY`, `USES` oder `PRODUCES`. Ein aktueller Composite besitzt mindestens einen aktuellen direkten Untertask.
+4. Ein Task besitzt höchstens einen direkten übergeordneten Task. Parent und Untertask gehören zum selben `PiF1o`; ein aktueller Untertask benötigt einen aktuellen Parent oder eine ausdrückliche gültige Neuzuordnung.
+5. Die gespeicherte Task-Hierarchie bleibt zyklusfrei.
+6. `DEPENDS_ON` darf Tasks verschiedener `PiF1o` verbinden, bildet aber weder Selbstbezüge noch Zyklen. Zusätzlich ist die gemeinsame Abschlussprüfsicht aus aktuellen Hierarchiebeziehungen und ausdrücklichen Voraussetzungen über alle erreichbaren Ziele zyklusfrei; ein gemischter Zyklus erzeugt `CONFLICT` mit Zykluspfad.
+7. Eine `DEPENDS_ON`-Voraussetzung ist nur erfüllt, wenn ihr Ziel `COMPLETED` ist. `REPLACED` und `REVOKED` bleiben unerfüllte Voraussetzungen; kein automatisches Umhängen auf einen Nachfolger.
+8. Ein freigegebener Task in `ACTIVE` oder `BLOCKED` mit einer eigenen unerfüllten Voraussetzung wird `BLOCKED`. `DRAFT` erfordert reguläre ausdrückliche Freigabe; terminale Tasks werden nicht wieder geöffnet.
+9. Ein `ATOMIC`-Task in `ACTIVE` oder `COMPLETED` besitzt mindestens ein gültiges `EXECUTED_BY`; mindestens eines dieser RoleAssignments gehört zum verantwortlichen Team.
+10. Ein atomarer Abschluss verlangt erfüllte Voraussetzungen, gültige Ausführungs- und Teamregeln, einschlägige `RaN` und ausdrückliche Abschlussbestätigung. Ein Result ist keine universelle Abschlussbedingung.
+11. Für freigegebene Composites hat eine eigene unerfüllte Voraussetzung Vorrang und ergibt `BLOCKED`. Danach gilt für aktuelle direkte Untertasks: alle `COMPLETED` ergeben `COMPLETED`; mindestens ein `ACTIVE` ergibt `ACTIVE`; ohne `ACTIVE`, aber mit `BLOCKED`, ergibt sich `BLOCKED`; nur `DRAFT` oder `DRAFT`/`COMPLETED` ergeben `ACTIVE`.
+12. Aktuell bedeutet weder `REPLACED` noch `REVOKED`; `COMPLETED` bleibt aktuell. Ersatz und Widerruf benötigen ausdrückliche Autorisierung, gültige aktuelle Ziel-/Parent-Zuordnung und nicht leere aktuelle Mengen. Ein ausgeschiedener Composite verbirgt keine aktuellen Nachfahren.
+13. Jeder tatsächliche abgeleitete Statuswechsel wird je Auftrag einmal historisiert und revisioniert. Atomare und zusammengesetzte Tasks werden gemeinsam in Voraussetzung-vor-Nachfolger-Reihenfolge ausgewertet.
+14. Eine Composite-Voraussetzung wird nicht automatisch auf Untertasks vererbt. Eine zusätzliche Ausführungssperre wird durch ausdrückliche Voraussetzungen der betroffenen Tasks modelliert.
+15. Alle Operationen eines Auftrags bilden einen gemeinsamen Kandidatengraphen. Die Zyklusprüfung und Commit-Validierung erfolgen geschützt nach Abschnitt 12.8 des kanonischen Kontextdokuments.
 
 ## 10. Historisierungs- und Korrekturregeln
 
 1. Nur eine tatsächliche Änderung eines vorhandenen Zustands erzeugt ein `PiH`.
 2. `CREATED` erzeugt für die neu angelegte Entität kein `PiH`.
-3. Jedes `PiH` bildet Eigenschaften und Beziehungen genau einer Revision der ursprünglichen Entität ab.
+3. Jedes `PiH` bildet Eigenschaften und nach der Eigentümermatrix zugeordnete Beziehungen genau einer Revision ab; neue Snapshots verwenden Profil `2.0`.
 4. Eine Abweichung in einem `PiH` erzeugt kein `PiH` des `PiH`, sondern eine `HistoricalCorrection`.
-5. Der gültige historische Lesestand, die `HistoryView`, besteht deterministisch aus dem unveränderten `PiH` und seinen nicht abgelösten Korrekturen.
-6. `correctedFields` enthält eindeutige, lexikografisch sortierte kanonische JSON-Pointer. `previousValue` und `correctedValue` besitzen genau dieselbe Schlüsselmenge; bei `ADDITION` ist der vorherige Wert des ergänzten Pfads `NULL`.
-7. Mehrere aktive Korrekturen desselben `PiH` besitzen paarweise disjunkte `correctedFields`.
-8. Überschneidet eine neue Korrektur eine aktive Korrektur, muss sie genau diese eine Korrektur vollständig über `SUPERSEDES` ersetzen. Ihre `correctedFields` enthalten mindestens die vollständige Feldmenge der Vorgängerin; zusätzliche Felder dürfen mit keiner weiteren aktiven Korrektur überlappen. Eine nur teilweise Übernahme der Vorgängerfelder oder eine Überschneidung mit mehreren aktiven Korrekturen ist unzulässig.
+5. Die gültige `HistoryView` setzt ausschließlich aktive `correctedValue` als absolute Überlagerung auf den unveränderten Ursprung. Abgelöste Operationen werden nicht wieder abgespielt; ihre früheren `previousValue` werden beim Neuaufbau nicht gegen den Ursprung geprüft. Dadurch bleibt eine später berichtigte Ergänzung erhalten.
+6. `correctedFields` folgt der geschlossenen Pointergrammatik aus Abschnitt 2.2.9 des kanonischen Kontextdokuments. Die Pointer sind eindeutig, kanonisch und nach Unicode-Codepunkten sortiert; beide Wertmaps besitzen exakt dieselben Schlüssel.
+7. Nicht abgelöste Korrekturen eines `PiH` besitzen untereinander und jeweils intern überlappungsfreie kanonische Pfade nach Abschnitt 2.2.9. Gleichheit sowie Vorfahr-/Nachfahrbeziehungen zählen als Überlappung.
+8. Keine Überlappung erlaubt kein `SUPERSEDES`. Genau eine überlappte aktive Korrektur muss vollständig abgelöst werden. Mehr als eine überlappte aktive Korrektur erzeugt wegen `SUPERSEDES = 0..1` einen `CONFLICT`. Eine ablösende Korrektur gehört zum selben `PiH` und enthält alle kanonischen Feldpfade der aktiven Vorgängerin unverändert mit ihren erneut angegebenen wirksamen Werten. Zusätzliche Pfade sind intern und gegenüber allen anderen aktiven Korrekturen überlappungsfrei. `SUPERSEDES` bleibt zeitlich vorwärts gerichtet und zyklusfrei.
 9. `SUPERSEDES` verbindet nur Korrekturen desselben `PiH`, ist zeitlich vorwärts gerichtet und zyklusfrei.
-10. `baseHistoryViewHash` entspricht SHA-256 der kanonischen `HistoryView` unmittelbar vor der neuen Korrektur. Der Auftrag liefert denselben Wert als `expectedHistoryViewHash`.
-11. Korrektur-Commits werden je `PiH` serialisiert. Unmittelbar vor dem Commit wird die `HistoryView` erneut berechnet; ein abweichender Hash erzeugt `CONFLICT` und keine `HistoricalCorrection`.
+10. Snapshot und wirksame Sicht hashen dasselbe kanonische `{stateData, relationshipData}`-Objekt nach Profil 2.0. `baseHistoryViewHash` bindet die Sicht vor Annahme und entspricht dem angeforderten `expectedHistoryViewHash`.
+11. `SYNC` serialisiert alle JCI-Schreibwege nach Abschnitt 12.8 und berechnet die aktuelle `HistoryView` unter dem Gate erneut. Ein abweichender `expectedHistoryViewHash`, ein Profilfehler oder eine Pfadüberlappung außerhalb der Ablöseregel erzeugt `CONFLICT` ohne Korrektur.
 12. Das `CAUSED_BY`-Ereignis einer Korrektur muss dasselbe Ereignis sein, das den über `CREATES_CORRECTION` verbundenen `SyncEvent` ausgelöst hat. Dieses `ChangeEvent` besitzt genau ein `TARGETS_HISTORY` zu demselben `PiH` und keine `CHANGED_BY`-Quelle.
 13. Eine historische Korrektur verändert nicht automatisch den aktuellen Zustand der ursprünglichen Entität.
-14. Ein `PiH` enthält genau die Eigenschaften und zu diesem Zeitpunkt gültigen ein- und ausgehenden fachlichen Beziehungen der angegebenen `originalRevision`.
-15. `contentHash` entspricht SHA-256 der kanonischen Serialisierung aus `StateSnapshot` und sortierten `RelationshipSnapshot`-Einträgen.
-16. Jeder `RelationshipSnapshot` besitzt Typ, Richtung, Gegenentitäts-ID, Gegenentitätstyp und eine typisierte Property-Map.
+14. Ein `PiH` enthält genau den eigenen fachlichen Zustand der `originalRevision` gemäß Snapshotprofil und Revisionszuordnung. Fremde revisionsneutrale Dokumentationsbezüge schreiben diesen Zustand nicht rückwirkend um.
+15. `contentHash` verwendet das kanonische Inhaltsobjekt und den exakten Unicode-/Zahlvertrag aus Abschnitt 2.2.9. Frühere Profile und Hashes bleiben unverändert; unbekannte oder inkompatible Profile werden abgewiesen.
+16. Jeder `RelationshipSnapshot` besitzt Typ, Richtung, Gegenentitäts-ID, Gegenentitätstyp und typisierte Properties. Die stabile Schlüsselprojektion ist eindeutig; Korrekturen ändern unter einem vorhandenen Schlüssel keine Beziehungsidentität. Ganzbeziehung und Property überlappen.
 
-**Kurzes Beispiel:** Korrigiert eine aktive Korrektur `/stateData/name`, darf eine zweite aktive Korrektur gleichzeitig `/relationshipData/...` berichtigen. Eine neue Korrektur von `/stateData/name` muss die bisherige vollständig über `SUPERSEDES` ablösen und gegen die inzwischen aktuelle `HistoryView` geprüft werden.
+**Kurzes Beispiel:** `/stateData/properties/name` und `/stateData/properties/description` sind unabhängig. Eine ganze Beziehung und ihre `/properties/validFrom` überlappen. Eine solche Überlappung verlangt die vollständige Ablösung genau einer aktiven Vorgängerin gegen die aktuelle Sicht; Überschneidung mit mehreren Vorgängerinnen wird abgewiesen.
 
 ## 11. SYNC- und Revisionsregeln
 
 1. Ein `SyncRun` ist technischer Zustand und kein Knoten des JCI-Graphen.
 2. Ein angenommenes `ChangeEvent` besitzt unveränderlich `idempotencyKey`, `targetEntityId`, `targetEntityType` und `requestedRevision` und plant mindestens einen technischen `SyncRun`.
 3. Solange noch kein Versuch beendet wurde, ist `TRIGGERS = 0` zulässig. Jeder beendete oder kontrolliert abgebrochene `SyncRun` erzeugt genau ein `SyncEvent` mit eindeutiger `runId` und ergänzt genau eine `TRIGGERS`-Kante append-only.
-4. Bei `changeType = CREATED` müssen die Ziel-ID frei und `requestedRevision = null` sein. Nur bei `SUCCESS` entstehen Zielentität mit `revision = 1`, `CREATED_BY` und `CHANGED_BY`; ein `PiH` entsteht nicht. Bei `CONFLICT` oder `FAILED` entsteht nichts davon.
+4. Bei `CREATED` müssen Ziel-ID frei und `requestedRevision = null` sein. Nur `SUCCESS` erzeugt das neue Ziel mit `revision = 1`, `CREATED_BY` und genau einem `CHANGED_BY`. Für dieses neue Ziel entsteht kein `PiH`; vorhandene veränderliche Eigentümer, deren fachliche Beziehungen sich dabei ändern, erhalten nach Abschnitt 2.2.8 ein eigenes `PiH`. `CONFLICT` oder `FAILED` übernimmt weder das Ziel noch ein Fachdelta oder Historie.
 5. Bei allen normalen Änderungen muss das Ziel vorhanden und `requestedRevision` gleich seiner aktuellen Revision sein.
 6. Bei `HISTORICAL_CORRECTION` muss das Ziel ein vorhandenes `PiH`, `requestedRevision = 1`, `TARGETS_HISTORY = 1` und `CHANGED_BY = 0` sein.
 7. Ein fehlgeschlagener Versuch erzeugt ein `SyncEvent` mit `outcome = FAILED`.
@@ -301,12 +305,17 @@ Bedingte Invarianten:
 15. `REPLACED_BY` besitzt keine Selbstbezüge oder Zyklen; ein Nachfolger darf mehrere Vorgänger zusammenführen.
 16. Bei `CONFLICT` oder `FAILED` entstehen für nicht übernommene Zustände weder neue Revisionen noch `PiH`; das abschließende `SyncEvent` und erforderliche `RaNConflict`-Objekte bleiben davon getrennte Versuchsdokumentation.
 17. Ist die Speicherung eines abschließenden `SyncEvent` vorübergehend technisch unmöglich, muss sie mit derselben `runId`, demselben `ChangeEvent` und derselben `idempotencyKey` nachgeholt werden, ohne die Fachänderung erneut auszuführen.
-18. Das technologieunabhängige Austauschformat verwendet `schemaVersion = "1.1"`. `HISTORICAL_CORRECTION` verwendet einen strukturierten Payload mit `expectedHistoryViewHash` statt generischer `operations`.
+18. Das technologieunabhängige Austauschformat verwendet `schemaVersion = "2.0"`. `HISTORICAL_CORRECTION` verwendet einen strukturierten Payload mit `expectedHistoryViewHash` statt generischer `operations`.
+19. Alle JCI-Schreibwege verwenden einen gemeinsamen technischen Commit-Gate je Datenbank-/Modellbestand und erhöhen bei Übernahme die `graphEpoch`, auch bei revisionsneutralen Nachweisen. Der Gate ist kein JCI-Knoten.
+20. Die Sperre wird vor dem Lesen der vollständigen relevanten Graphsicht erworben. Neue Regeln, Nachweise, Kanten, Abwesenheiten und Zeitgültigkeiten werden mitgeprüft; eine bloße Revisionsprüfung der Schreibmenge genügt nicht.
+21. Der vollständige normalisierte Payload und seine unveränderliche Identitätsbindung werden dauerhaft gespeichert. Gleiche Kennung mit anderem Payload ist unzulässig; geänderte Ausgangsrevision verlangt einen neuen Auftrag.
+22. Run-Eigentümerschaft, Fencing und idempotenter Commitbeleg verhindern Doppelübernahme. Bei `SUCCESS` werden Fachdelta, `PiH`, Beziehungen und `SyncEvent` zusammen mit dem Commitbeleg atomar gespeichert. Unbekannter Commit-Ausgang wird vor Wiederholung geklärt.
+23. Alle zeitabhängigen Prüfungen gelten für den dokumentierten Datenbank-Entscheidungszeitpunkt unmittelbar vor Übernahme unter der Sperre. Ein No-op darf `SUCCESS` mit `changedCount = 0` ohne neue Revision und ohne `PiH` liefern.
 
 ## 12. Initialer Bootstrap
 
 1. Der Bootstrap ist nur in einem vollständig leeren Graphen und genau einmal zulässig.
-2. Er wird in genau einer atomaren Transaktion ausgeführt; bei einem Fehler bleibt kein Teilgraph bestehen.
+2. Er läuft in einer atomaren Transaktion unter dem eindeutigen vorab eingerichteten technischen Gate; bei Fehler bleibt kein fachlicher Teilgraph bestehen. Ein technischer Gate verletzt die Leerheitsbedingung für `JCIEntity` nicht.
 3. Der Minimalgraph enthält eine `RoFOrg`, ein `RoFTeam`, ein technisches `RoFTeamMember`, eine `RoFRole`, genau ein Root-`RoleAssignment` mit `bootstrapKey = "ROOT"` und eine `SYNC`-Definition samt erforderlichen RoF-Beziehungen.
 4. Alle sechs Bootstrap-Entitäten entstehen unmittelbar mit `status = ACTIVE`, `revision = 1` sowie demselben `createdAt` und `updatedAt`. Vorhandene `validFrom`-Werte der Typen und Beziehungen entsprechen demselben Bootstrapzeitpunkt. Dies ist die einzige Ausnahme vom regulären `DRAFT`-Start.
 5. Nur das Root-`RoleAssignment` darf dauerhaft ohne `CREATED_BY` bestehen. Alle übrigen Bootstrap-Entitäten besitzen genau ein `CREATED_BY` zum Root-`RoleAssignment`.

@@ -1,0 +1,130 @@
+{
+  "profile": "2.0",
+  "vectors": [
+    {
+      "name": "task_state",
+      "payload": {
+        "stateData": {
+          "entityType": "Task",
+          "revision": 1,
+          "properties": {
+            "name": {
+              "valueType": "STRING",
+              "value": "API"
+            },
+            "status": {
+              "valueType": "STRING",
+              "value": "ACTIVE"
+            },
+            "taskKind": {
+              "valueType": "STRING",
+              "value": "ATOMIC"
+            }
+          }
+        },
+        "relationshipData": []
+      },
+      "canonicalUtf8": "{\"relationshipData\":[],\"stateData\":{\"entityType\":\"Task\",\"properties\":{\"name\":{\"value\":\"API\",\"valueType\":\"STRING\"},\"status\":{\"value\":\"ACTIVE\",\"valueType\":\"STRING\"},\"taskKind\":{\"value\":\"ATOMIC\",\"valueType\":\"STRING\"}},\"revision\":1}}",
+      "sha256": "a6464b86f209f4751ca0d525410fdad69e7c052bd3505b75ff52434478f6964a"
+    },
+    {
+      "name": "relationship_order",
+      "payload": {
+        "stateData": {
+          "entityType": "RoFTeamMember",
+          "revision": 1,
+          "properties": {
+            "name": {
+              "valueType": "STRING",
+              "value": "Anna"
+            },
+            "status": {
+              "valueType": "STRING",
+              "value": "ACTIVE"
+            },
+            "memberType": {
+              "valueType": "STRING",
+              "value": "HUMAN"
+            }
+          }
+        },
+        "relationshipData": [
+          {
+            "relationshipType": "HAS_ROLE",
+            "direction": "OUTGOING",
+            "otherEntityId": "00000000-0000-4000-8000-000000000003",
+            "otherEntityType": "RoFRole",
+            "properties": {
+              "validFrom": {
+                "valueType": "DATETIME",
+                "value": "2026-08-10T00:00:00Z"
+              }
+            }
+          },
+          {
+            "relationshipType": "HAS_MEMBER",
+            "direction": "INCOMING",
+            "otherEntityId": "00000000-0000-4000-8000-000000000002",
+            "otherEntityType": "RoFTeam",
+            "properties": {
+              "validFrom": {
+                "valueType": "DATETIME",
+                "value": "2026-08-10T00:00:00Z"
+              }
+            }
+          }
+        ]
+      },
+      "canonicalUtf8": "{\"relationshipData\":[{\"direction\":\"INCOMING\",\"otherEntityId\":\"00000000-0000-4000-8000-000000000002\",\"otherEntityType\":\"RoFTeam\",\"properties\":{\"validFrom\":{\"value\":\"2026-08-10T00:00:00Z\",\"valueType\":\"DATETIME\"}},\"relationshipType\":\"HAS_MEMBER\"},{\"direction\":\"OUTGOING\",\"otherEntityId\":\"00000000-0000-4000-8000-000000000003\",\"otherEntityType\":\"RoFRole\",\"properties\":{\"validFrom\":{\"value\":\"2026-08-10T00:00:00Z\",\"valueType\":\"DATETIME\"}},\"relationshipType\":\"HAS_ROLE\"}],\"stateData\":{\"entityType\":\"RoFTeamMember\",\"properties\":{\"memberType\":{\"value\":\"HUMAN\",\"valueType\":\"STRING\"},\"name\":{\"value\":\"Anna\",\"valueType\":\"STRING\"},\"status\":{\"value\":\"ACTIVE\",\"valueType\":\"STRING\"}},\"revision\":1}}",
+      "sha256": "239b4e8d7ccff7ac785dc113450f1b9edd942b0d99887c2e3e07c75e6ce5200f"
+    },
+    {
+      "name": "unicode_exact_numbers",
+      "payload": {
+        "stateData": {
+          "entityType": "Result",
+          "revision": 1,
+          "properties": {
+            "name": {
+              "valueType": "STRING",
+              "value": "ä/~\n"
+            },
+            "status": {
+              "valueType": "STRING",
+              "value": "ACTIVE"
+            },
+            "resultType": {
+              "valueType": "STRING",
+              "value": "DATA"
+            },
+            "producedAt": {
+              "valueType": "DATETIME",
+              "value": "2026-08-10T00:00:00Z"
+            },
+            "value": {
+              "valueType": "OBJECT",
+              "value": {
+                "integer": 9007199254740993,
+                "decimal": {
+                  "valueType": "DECIMAL",
+                  "value": "-0.001"
+                },
+                "array": [
+                  "b",
+                  "a",
+                  null
+                ],
+                "": "BMP",
+                "𐀀": "supplementary",
+                "controls": "\b\t\n\f\r\u0000\u001f\"\\"
+              }
+            }
+          }
+        },
+        "relationshipData": []
+      },
+      "canonicalUtf8": "{\"relationshipData\":[],\"stateData\":{\"entityType\":\"Result\",\"properties\":{\"name\":{\"value\":\"ä/~\\n\",\"valueType\":\"STRING\"},\"producedAt\":{\"value\":\"2026-08-10T00:00:00Z\",\"valueType\":\"DATETIME\"},\"resultType\":{\"value\":\"DATA\",\"valueType\":\"STRING\"},\"status\":{\"value\":\"ACTIVE\",\"valueType\":\"STRING\"},\"value\":{\"value\":{\"array\":[\"b\",\"a\",null],\"controls\":\"\\b\\t\\n\\f\\r\\u0000\\u001f\\\"\\\\\",\"decimal\":{\"value\":\"-0.001\",\"valueType\":\"DECIMAL\"},\"integer\":9007199254740993,\"\":\"BMP\",\"𐀀\":\"supplementary\"},\"valueType\":\"OBJECT\"}},\"revision\":1}}",
+      "sha256": "0b67f10ae0de4cb52b24a5492828aa3c86423967b38c43e848c9863b4a2530fa"
+    }
+  ]
+}

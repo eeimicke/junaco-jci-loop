@@ -2,9 +2,11 @@
 
 ## 1. Status und Zweck
 
-Dieses Dokument übersetzt die fachliche Bedeutung aus [JCI_CONTEXT.md](JCI_CONTEXT.md) in eindeutig benannte Entitäts- und Beziehungstypen. [`JCI_CONTEXT.md`](JCI_CONTEXT.md) bleibt die kanonische fachliche Quelle. Bei einem Konflikt gilt der dort dokumentierte Stand; der Konflikt muss vor einer Modelländerung gemeldet werden.
+Dieses Dokument übersetzt die fachliche Bedeutung aus [`JCI_CONTEXT.md`](JCI_CONTEXT.md) in eindeutig benannte Entitäts- und Beziehungstypen. [`JCI_CONTEXT.md`](JCI_CONTEXT.md) bleibt die kanonische fachliche Quelle. Bei einem Konflikt gilt der dort dokumentierte Stand; der Konflikt muss vor einer Modelländerung gemeldet werden.
 
-Kardinalitäten und Invarianten stehen in [JCI_GRAPH_RULES.md](JCI_GRAPH_RULES.md). Der Ablauf von `SYNC` steht in [JCI_SYNC_SPEC.md](JCI_SYNC_SPEC.md). Datenbankspezifische Labels, Properties, Constraints und Indizes gehören in [implementations/neo4j/JCI_NEO4J_SCHEMA.md](implementations/neo4j/JCI_NEO4J_SCHEMA.md).
+Kardinalitäten und Invarianten stehen in [`JCI_GRAPH_RULES.md`](JCI_GRAPH_RULES.md). Der Ablauf von `SYNC` steht in [`JCI_SYNC_SPEC.md`](JCI_SYNC_SPEC.md). Datenbankspezifische Labels, Properties, Constraints und Indizes gehören in [`implementations/neo4j/JCI_NEO4J_SCHEMA.md`](implementations/neo4j/JCI_NEO4J_SCHEMA.md).
+
+**Regelpaket 2.0:** Ontologie, Graphregeln, SYNC, neue Snapshots, Korrekturwerte und das Austauschformat verwenden Version `2.0`. JSON-LD bleibt `1.1`; bestehende Namespace-IRIs mit `/1.0#` bleiben stabile Vokabularidentitäten und bezeichnen nicht die Regelversion. Frühere Datensätze werden ausschließlich nach ihren ausdrücklich angegebenen Versionsprofilen gelesen.
 
 ## 2. Abstrakte Typen
 
@@ -85,7 +87,7 @@ Für die hier präzisierten Entitätstypen gelten insbesondere folgende typspezi
 
 `requestedRevision` ist ausschließlich bei `changeType = CREATED` `null`; andernfalls ist es eine positive Ganzzahl. Die Zielangaben des `ChangeEvent` sind unveränderliche Audit-Koordinaten des Auftrags und ersetzen keine fachliche Beziehung. `runId` identifiziert genau einen technischen Versuch. `baseHistoryViewHash` bindet eine historische Korrektur an die vor ihr wirksame historische Sicht.
 
-Typspezifische Pflichtfelder und Aufzählungswerte sind in Abschnitt 2.2.5 von [JCI_CONTEXT.md](JCI_CONTEXT.md) kanonisch beschrieben. Die verbindlichen Statusübergänge stehen in Abschnitt 2.2.4. Eine Datenbankimplementierung darf sie technisch konkretisieren, aber nicht abschwächen oder semantisch umdeuten.
+Typspezifische Pflichtfelder und Aufzählungswerte sind in Abschnitt 2.2.5 von [`JCI_CONTEXT.md`](JCI_CONTEXT.md) kanonisch beschrieben. Die verbindlichen Statusübergänge stehen in Abschnitt 2.2.4. Eine Datenbankimplementierung darf sie technisch konkretisieren, aber nicht abschwächen oder semantisch umdeuten.
 
 Komplexe Werte verwenden ausschließlich die in Abschnitt 2.2.7 definierten Typen `TypedValue`, `StateSnapshot`, `RelationshipSnapshot`, `TypedValueMap`, `RuleExpression` und `SyncDefinition`. Unstrukturierte, implementierungsabhängige Objektinhalte sind nicht zulässig.
 
@@ -200,11 +202,13 @@ ersetzbare JCIEntity REPLACED_BY gleicher konkreter JCIEntity-Typ
 
 `AFFECTS` kann leer sein, wenn ein Versuch mit `outcome = FAILED` bereits vor erfolgreicher Zielauflösung endet. Ein `SyncEvent` mit `SUCCESS` oder `CONFLICT` besitzt mindestens ein `AFFECTS`-Ziel.
 
-Eine `HistoricalCorrection` speichert mit `baseHistoryViewHash` den Hash der wirksamen `HistoryView` unmittelbar vor ihrer Erzeugung. Nicht abgelöste Korrekturen desselben `PiH` müssen feldweise disjunkt sein. Eine neue Korrektur mit überlappenden `correctedFields` ersetzt genau eine aktive Vorgängerkorrektur vollständig über `SUPERSEDES`; andernfalls entsteht ein Konflikt.
+Eine `HistoricalCorrection` bindet den wirksamen Inhalt vor ihrer Erzeugung durch `baseHistoryViewHash`. Profil `2.0` definiert kanonische Property- und stabile Beziehungspfade, segmentbasierte Vorfahr-/Nachfahrüberlappung, vollständige Ablösung genau einer aktiven Vorgängerin und absolute Wertüberlagerung beim Neuaufbau. Snapshot- und Sicht-Hashes verwenden dasselbe Inhaltsobjekt. Fehlende Werte sind von vorhandenem `NULL` verschieden; frühere Profildaten und Hashes bleiben unveränderlich. Abschnitt 2.2.9 von [`JCI_CONTEXT.md`](JCI_CONTEXT.md) definiert den verbindlichen Vertrag.
 
 **Kurzes Beispiel:** Während der erste SyncRun noch läuft, besitzt das `ChangeEvent` noch kein `TRIGGERS`-Ziel. Erst sein Abschluss erzeugt das `SyncEvent`. Eine spätere historische Berichtigung verweist bereits mit `TARGETS_HISTORY` auf das betroffene `PiH`, ohne dieses zu verändern.
 
 `REPLACED_BY` ist die gespeicherte Nachfolgebeziehung einer Entität mit `status = REPLACED`. Quelle und Ziel besitzen denselben konkreten `entityType`; Selbstbezüge und Zyklen sind unzulässig.
+
+Revisionszuordnung gehört zum Beziehungsvertrag und ist kein neuer Kanten- oder Entitätstyp. `EVALUATES`, `CHECKS` und Prüfungs-`SUPERSEDES` gehören zur neuen `Verification`; ihre Ziele behalten ihre Revisionen. `CREATED_BY` revisioniert niemals das referenzierte `RoleAssignment`. Neue Snapshots verwenden `snapshotSchemaVersion = "2.0"` und enthalten nur den der Entität zugeordneten Beziehungszustand. Die vollständige Matrix in Abschnitt 2.2.8 von [`JCI_CONTEXT.md`](JCI_CONTEXT.md) ist für jede Implementierung verbindlich.
 
 ## 6. Inverse Lesarten
 
@@ -230,7 +234,7 @@ SyncEvent
 HistoricalCorrection
 ```
 
-Diese vier Typen sind inhaltlich unveränderlich und werden nicht erneut historisiert. Ausschließlich die oben beschriebenen append-only Provenienzergänzungen am `ChangeEvent` sind zulässig. Eine Abweichung in einem `PiH` wird durch ein neues `HistoricalCorrection`-Objekt dokumentiert. Das `PiH` selbst bleibt unverändert. `TARGETS_HISTORY` adressiert nur den Anlass der Korrektur und ist keine Änderung des historischen Zustands.
+Diese vier Typen besitzen unveränderliche Eigenschaften und eigene Provenienz und werden nicht erneut historisiert. Die Endpunktzuordnung ist in Abschnitt 2.2.8 von [`JCI_CONTEXT.md`](JCI_CONTEXT.md) definiert: Neue Bezugnahmen, die einem anderen Objekt zugeordnet sind, revisionieren den referenzierten Datensatz nicht. `TRIGGERS`, `CHANGED_BY`, `TARGETS_HISTORY` und `CORRECTS` folgen dieser ausdrücklichen Matrix. Eine Abweichung in einem `PiH` erzeugt eine eigenständige `HistoricalCorrection`, ohne das `PiH` umzuschreiben.
 
 ## 8. Task-Typen und Task-Graph
 
@@ -245,16 +249,22 @@ COMPOSITE = Strukturknoten aus mindestens einem untergeordneten Task
 
 `HAS_MEMBER` und `HAS_ROLE` besitzen `validFrom` und optional `validUntil`. Der Zeitraum eines `RoleAssignment` liegt vollständig innerhalb der gleichzeitig gültigen Mitgliedschaft und des Rollenbesitzes. `OWNED_BY` ermöglicht die organisationsbezogene Ableitung von internem und externem Umweltkontext; tatsächliche Interaktion bleibt über `USES` personengebunden.
 
-Nur `ATOMIC`-Tasks besitzen `EXECUTED_BY`, `USES` und `PRODUCES`. Ein aktiver oder abgeschlossener atomarer Task besitzt mindestens ein ausführendes `RoleAssignment`. Der Status eines `COMPOSITE`-Tasks wird aus seinen direkten Untertasks abgeleitet.
+Nur `ATOMIC`-Tasks besitzen `EXECUTED_BY`, `USES` und `PRODUCES`. Ein aktiver oder abgeschlossener atomarer Task besitzt mindestens ein ausführendes `RoleAssignment`. Der Status eines freigegebenen `COMPOSITE`-Tasks folgt eigenen Voraussetzungen und danach seinen aktuellen direkten Untertasks nach Abschnitt 9.4.2 des kanonischen Kontextdokuments.
+
+Der aktuelle Umfang schließt `REPLACED` und `REVOKED` aus, erhält aber gespeicherte Zielzuordnungen und abgeschlossene Tasks. Ein erreichtes `PiF1o` benötigt eine nicht leere abgeschlossene aktuelle Taskmenge und mindestens ein aktuelles Pflichtkriterium; aktuelle Pflichtkriterien müssen aktiv und erfüllt sein. Ersatz und Widerruf benötigen ausdrückliche Autorisierung; alte Results werden nicht automatisch übernommen. Der genaue Umfangsvertrag steht in Abschnitt 9.4.2 von [`JCI_CONTEXT.md`](JCI_CONTEXT.md).
+
+Der Abschlussgraph ist eine virtuelle Vereinigung aus aktueller Hierarchie und ausdrücklichen Voraussetzungen; die Quelle wartet auf das Ziel. Er führt keinen Entitäts- oder Beziehungstyp ein. Gemischte Zyklen über Ziele hinweg sind verboten. Atomare und zusammengesetzte Tasks werden gemeinsam mit Voraussetzungen zuerst ausgewertet. Eine eigene unerfüllte Voraussetzung eines freigegebenen Composite ergibt vor der Kinderaggregation `BLOCKED`; `DRAFT` benötigt ausdrückliche Freigabe und terminale Zustände werden nicht wieder geöffnet.
 
 ## 9. Maschinenlesbarer Austausch und Erweiterung
 
 Vollständige Graph- und Ontologieexporte verwenden JSON-LD 1.1 mit dem Kontext [`schemas/jci-context.jsonld`](schemas/jci-context.jsonld). Entitäten werden als `urn:jci:<UUID>` identifiziert; konkrete Typen und Beziehungen verwenden den öffentlichen, versionierten Namensraum `https://eeimicke.github.io/junaco-jci-loop/ns/jci/1.0#`.
 
-`JCIChangeRequest` und `JCISyncResult` verwenden `schemaVersion = "1.1"`. Für `HISTORICAL_CORRECTION` ersetzt ein strukturiertes `historicalCorrection`-Objekt die allgemeinen `operations`; es enthält insbesondere `expectedHistoryViewHash`, eindeutige lexikografisch sortierte `correctedFields`, `previousValue` und `correctedValue`.
+`JCIChangeRequest` und `JCISyncResult` verwenden `schemaVersion = "2.0"`. Für `HISTORICAL_CORRECTION` ersetzt ein strukturiertes `historicalCorrection`-Objekt die allgemeinen `operations`; es enthält insbesondere `expectedHistoryViewHash`, eindeutige lexikografisch sortierte `correctedFields`, `previousValue` und `correctedValue`.
 
 Komplexe Eigenschaften verwenden die strukturierten Typen aus [`JCI_CONTEXT.md`](JCI_CONTEXT.md) und werden als JSON-LD-kompatible JSON-Werte übertragen. Die Neo4j-Projektion als kanonische JSON-Zeichenkette verändert das Austauschformat nicht.
 
 Die in dieser Version aufgeführten konkreten Entitäts-, Enum- und Beziehungstypen bilden einen geschlossenen Katalog. Eine neue Unterart oder Beziehung benötigt eine versionierte semantische Modelländerung in [`JCI_CONTEXT.md`](JCI_CONTEXT.md), die anschließende Aktualisierung aller Folgedokumente, des JSON-LD-Kontexts, der Schemas und der Tests. Implementierungen dürfen unbekannte Typen nicht stillschweigend als bekannte Typen behandeln.
+
+Technischer Commit-Gate, `graphEpoch`, dauerhafter Payload, Run-Eigentümerschaft und idempotenter Commitbeleg nach Abschnitt 12.8 von [`JCI_CONTEXT.md`](JCI_CONTEXT.md) sind Implementierungsinfrastruktur außerhalb von `JCIEntity`. Sie schützen alle JCI-Schreibvorgänge, ohne ein Kernelement, eine fachliche Kante oder eine Domänenkardinalität einzuführen. Ältere Austauschschemas bleiben gesondert verfügbar; Version `2.0` schreibt frühere Snapshots oder Hashes nicht um.
 
 **Kurzes Beispiel:** Eine exportierte Task-Entität besitzt `@id = "urn:jci:<UUID>"`, `@type = "jci:Task"` und Beziehungen wie `jci:RESPONSIBLE_TEAM`. Beim Import entstehen daraus wieder die kanonischen Knoten und Kanten.

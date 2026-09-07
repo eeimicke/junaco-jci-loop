@@ -75,6 +75,14 @@ flowchart LR
 
 A `Verification` records not only its relationships to exactly one `Result` and one `SuccessCriterion`, but also the revisions that were actually checked. For example, a verification with `evaluatedResultRevision = 3` and `checkedCriterionRevision = 2` remains applicable only while those exact revisions are current and the verification has not been superseded through `SUPERSEDES`. If either target changes later, the verification remains as evidence but is stale for the current state.
 
+### Current work scope and revision binding
+
+Every Task retains its direct PiF1o context. Current target achievement excludes Tasks and criteria in `REPLACED` or `REVOKED`; `COMPLETED` remains a current Task contribution. A target still needs at least one current Task and at least one current `REQUIRED` criterion. All current Tasks must be completed and all current mandatory criteria active and satisfied. Empty sets, unresolved descendants, or rule violations do not permit completion. Earlier Results and Verifications are not silently adopted for new work.
+
+A Composite may have its own `DEPENDS_ON` prerequisites: while any is unmet, the released Composite remains `BLOCKED`, even when its children are completed. Once prerequisites are met, the current child scope determines its status. With only `DRAFT` children remaining, a released Composite becomes `ACTIVE` rather than returning to draft. `DRAFT` first requires regular release and cannot become `COMPLETED` merely by reducing scope. The combined completion graph of `DECOMPOSES_INTO` and `DEPENDS_ON` must be acyclic.
+
+New `EVALUATES`, `CHECKS`, `USES_EVIDENCE`, and `SUPERSEDES` references from a Verification belong to the new verification. They do not increment the referenced targets' revisions. A genuine criterion change still makes the earlier verification stale. The [change documentation](../changes/JCI_LOGIC_2_0.md) explains these rules.
+
 ## Environment
 
 ```mermaid
@@ -115,10 +123,12 @@ An accepted `ChangeEvent` may initially have no `TRIGGERS` relationship: `TRIGGE
 `CHANGED_BY` and `AFFECTS` are therefore conditional:
 
 - When an existing entity is changed, that entity points to the `ChangeEvent` through `CHANGED_BY`.
-- For `CREATED`, no source entity exists before the successful commit. Only `SUCCESS` creates the new entity with `revision = 1`, `CREATED_BY`, and `CHANGED_BY`; no `PiH` is created. `CONFLICT` or `FAILED` creates neither the target node nor those relationships.
+- For `CREATED`, no source entity exists before the successful commit. Only `SUCCESS` creates the new entity with `revision = 1`, `CREATED_BY`, and `CHANGED_BY`; no `PiH` is created for that new entity. Existing mutable owners changed by its structural relationships receive their own history. `CONFLICT` or `FAILED` creates neither the target node nor those relationships.
 - A `SyncEvent` with `SUCCESS` or `CONFLICT` has at least one `AFFECTS` target. Only an early `FAILED` attempt that could not yet resolve the target may have no `AFFECTS` relationship.
 
-A historical correction neither changes the `PiH` nor creates another `PiH`. Its `ChangeEvent` instead points through `TARGETS_HISTORY` to exactly the affected `PiH`. Before commit, `SYNC` compares the expected hash of the effective `HistoryView` with the current hash. Active corrections may affect only distinct `correctedFields`; an overlapping correction must fully supersede exactly one active predecessor through `SUPERSEDES`. Otherwise the attempt ends with `CONFLICT`.
+A historical correction neither changes the `PiH` nor creates another `PiH`. Its `ChangeEvent` instead points through `TARGETS_HISTORY` to exactly the affected `PiH`. Before commit, `SYNC` compares the expected hash of the effective `HistoryView` with the current hash. Active corrections may affect only `correctedFields` that do not overlap at decoded segment level; an overlapping correction must fully supersede exactly one active predecessor through `SUPERSEDES`. Otherwise the attempt ends with `CONFLICT`.
+
+Correction paths in profile 2.0 identify complete properties, such as `/stateData/properties/name`, or stable relationship entries and their complete properties. Parent and descendant paths overlap; list indices are prohibited. Existing PiH and hashes are not rewritten. The shared technical write lock protects the verification set, rules, relationships, and temporal validity until atomic adoption.
 
 The [canonical specification](../../JCI_CONTEXT.md) defines all required fields and cardinalities.
 

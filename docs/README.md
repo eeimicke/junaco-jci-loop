@@ -14,6 +14,10 @@ Diese Seite führt vom verständlichen Einstieg zur formalen und technischen Spe
 6. [SYNC-Spezifikation](JCI_SYNC_SPEC.md) – Verarbeitung, Historisierung und Konflikte.
 7. [Implementierungsleitfaden](guides/JCI_IMPLEMENTATION_GUIDE.md) und [Neo4j-Schema](implementations/neo4j/JCI_NEO4J_SCHEMA.md).
 
+8. [Logikänderungen 2.0](changes/JCI_LOGIC_2_0.md) – sechs Korrekturen, Auswirkungen, Migration und 23 Abnahmefälle.
+
+Neue Regel-, Snapshot-, Werte- und Austauschprofile verwenden `2.0`. JSON-LD `1.1` und der bestehende Vokabularnamensraum bleiben unverändert. Das [Snapshot-Payloadschema](schemas/jci-history-snapshot.schema.json) beschreibt historische Nutzdaten; [Legacy-Schemas](schemas/legacy/1.1/) erhalten ältere Profile.
+
 ## Sprachregel
 
 [`docs/JCI_CONTEXT.md`](JCI_CONTEXT.md) ist die kanonische Spezifikation. Die englischen Dokumente sind kontrollierte Übersetzungen. Bei einer Abweichung gilt vorläufig die deutsche Fassung, bis die Übersetzung korrigiert und erneut geprüft wurde.

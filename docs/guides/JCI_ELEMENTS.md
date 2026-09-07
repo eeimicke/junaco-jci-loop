@@ -73,6 +73,14 @@ flowchart LR
 
 Eine `Verification` hält nicht nur die Beziehungen zu genau einem `Result` und genau einem `SuccessCriterion` fest, sondern auch deren tatsächlich geprüfte Revisionen. Beispiel: Eine Prüfung mit `evaluatedResultRevision = 3` und `checkedCriterionRevision = 2` ist nur anwendbar, solange genau diese Revisionen aktuell sind und die Prüfung nicht durch `SUPERSEDES` ersetzt wurde. Wird eines der beiden Ziele später geändert, bleibt die Prüfung als Nachweis erhalten, gilt für den aktuellen Zustand aber als revisionsveraltet.
 
+### Aktueller Arbeitsumfang und Revisionsbezug
+
+Alle Tasks behalten ihren direkten PiF1o-Kontext. Für die aktuelle Zielerreichung werden Tasks und Kriterien in `REPLACED` oder `REVOKED` ausgeschlossen; `COMPLETED` bleibt ein aktueller Task-Beitrag. Ein Ziel benötigt weiterhin mindestens einen aktuellen Task und mindestens ein aktuelles `REQUIRED`-Kriterium. Alle aktuellen Tasks müssen abgeschlossen und alle aktuellen Pflichtkriterien aktiv und erfüllt sein. Leere Mengen, ungeklärte Nachkommen oder Regelverletzungen erlauben keinen Abschluss. Alte Results und Verifications werden nicht stillschweigend für neue Arbeit übernommen.
+
+Ein Composite kann eigene `DEPENDS_ON`-Voraussetzungen besitzen: Solange eine unerfüllt ist, bleibt der freigegebene Composite `BLOCKED`, auch wenn seine Kinder abgeschlossen sind. Bei erfüllten Voraussetzungen bestimmt der aktuelle Kinderumfang den Status. Ein freigegebener Composite fällt bei nur noch `DRAFT`-Kindern auf `ACTIVE`, nicht zurück in den Entwurf. `DRAFT` benötigt zunächst die reguläre Freigabe und darf nicht durch Umfangsreduktion `COMPLETED` werden. Der gemeinsame Abschlussgraph aus `DECOMPOSES_INTO` und `DEPENDS_ON` muss zyklusfrei sein.
+
+Neue `EVALUATES`, `CHECKS`, `USES_EVIDENCE` und `SUPERSEDES` einer Verification gehören zur neuen Prüfung. Sie erhöhen die Revisionen der referenzierten Ziele nicht. Eine echte Kriterienänderung macht die ältere Prüfung dagegen weiterhin revisionsveraltet. Die [Änderungsdokumentation](../changes/JCI_LOGIC_2_0.md) erläutert diese Regeln.
+
 ## Umwelt
 
 ```mermaid
@@ -113,10 +121,12 @@ Ein angenommenes `ChangeEvent` darf zunächst noch keine `TRIGGERS`-Beziehung be
 `CHANGED_BY` und `AFFECTS` gelten deshalb bedingt:
 
 - Bei der Änderung einer vorhandenen Entität verweist diese über `CHANGED_BY` auf das `ChangeEvent`.
-- Bei `CREATED` gibt es vor dem erfolgreichen Commit noch keine Quellentität. Nur bei `SUCCESS` entstehen die neue Entität mit `revision = 1`, `CREATED_BY` und `CHANGED_BY`; ein `PiH` entsteht nicht. Bei `CONFLICT` oder `FAILED` entstehen weder Zielknoten noch diese Beziehungen.
+- Bei `CREATED` gibt es vor dem erfolgreichen Commit noch keine Quellentität. Nur bei `SUCCESS` entstehen die neue Entität mit `revision = 1`, `CREATED_BY` und `CHANGED_BY`; für diese neue Entität entsteht kein `PiH`. Vorhandene veränderliche Eigentümer mit geänderten Strukturbeziehungen erhalten eine eigene Historie. Bei `CONFLICT` oder `FAILED` entstehen weder Zielknoten noch diese Beziehungen.
 - Ein `SyncEvent` mit `SUCCESS` oder `CONFLICT` besitzt mindestens ein `AFFECTS`-Ziel. Nur ein früher `FAILED`-Versuch, der das Ziel noch nicht auflösen konnte, darf kein `AFFECTS` besitzen.
 
-Eine historische Korrektur verändert weder das `PiH` noch erzeugt sie ein neues `PiH`. Das zugehörige `ChangeEvent` verweist stattdessen mit `TARGETS_HISTORY` auf genau das betroffene `PiH`. Vor dem Commit vergleicht `SYNC` den erwarteten Hash der wirksamen `HistoryView` mit dem aktuellen Hash. Aktive Korrekturen dürfen nur unterschiedliche `correctedFields` betreffen; eine überlappende Korrektur muss genau eine aktive Vorgängerkorrektur vollständig über `SUPERSEDES` ersetzen. Andernfalls endet der Versuch mit `CONFLICT`.
+Eine historische Korrektur verändert weder das `PiH` noch erzeugt sie ein neues `PiH`. Das zugehörige `ChangeEvent` verweist stattdessen mit `TARGETS_HISTORY` auf genau das betroffene `PiH`. Vor dem Commit vergleicht `SYNC` den erwarteten Hash der wirksamen `HistoryView` mit dem aktuellen Hash. Aktive Korrekturen dürfen nur auf dekodierter Segmentebene überschneidungsfreie `correctedFields` betreffen; eine überlappende Korrektur muss genau eine aktive Vorgängerkorrektur vollständig über `SUPERSEDES` ersetzen. Andernfalls endet der Versuch mit `CONFLICT`.
+
+Korrekturpfade des Profils 2.0 benennen vollständige Properties, beispielsweise `/stateData/properties/name`, oder stabile Beziehungseinträge und deren vollständige Properties. Eltern- und Unterpfade überschneiden sich; Listenindizes sind unzulässig. Vorhandene PiH und Hashes werden nicht umgeschrieben. Die gemeinsame technische Schreibsperre schützt Prüfungsmenge, Regeln, Beziehungen und Zeitgültigkeit bis zur atomaren Übernahme.
 
 Für sämtliche Pflichtfelder und Kardinalitäten ist die [kanonische Spezifikation](../JCI_CONTEXT.md) maßgeblich.
 

@@ -1,0 +1,879 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/eeimicke/junaco-jci-loop/main/docs/schemas/jci-history-snapshot.schema.json",
+  "title": "JCI history snapshot payload 2.0",
+  "description": "Payload only; the owning PiH selects snapshotSchemaVersion 2.0. Endpoint ownership and unique stable relationship keys require semantic validation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "stateData",
+    "relationshipData"
+  ],
+  "properties": {
+    "stateData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entityType",
+        "revision",
+        "properties"
+      ],
+      "properties": {
+        "entityType": {
+          "enum": [
+            "CiV",
+            "ERoFObject",
+            "Evidence",
+            "PiF1o",
+            "PiF1s",
+            "PiF1t",
+            "PiF2",
+            "RaN",
+            "RaNConflict",
+            "Result",
+            "RoFOrg",
+            "RoFOrgRelationship",
+            "RoFRole",
+            "RoFTeam",
+            "RoFTeamMember",
+            "RoleAssignment",
+            "SYNC",
+            "SuccessCriterion",
+            "Task",
+            "Verification"
+          ]
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/typedValue"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "CiV"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "properties": {
+                "propertyNames": {
+                  "enum": [
+                    "description",
+                    "name",
+                    "notCiV",
+                    "selfCiV",
+                    "status",
+                    "toServeCiV"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "ERoFObject"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "properties": {
+                "propertyNames": {
+                  "enum": [
+                    "description",
+                    "externalReference",
+                    "name",
+                    "objectType",
+                    "status",
+                    "validFrom",
+                    "validUntil"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "Evidence"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "properties": {
+                "propertyNames": {
+                  "enum": [
+                    "capturedAt",
+                    "checksum",
+                    "description",
+                    "evidenceType",
+                    "name",
+                    "reference",
+                    "status"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "PiF1o"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "properties": {
+                "propertyNames": {
+                  "enum": [
+                    "description",
+                    "horizonEnd",
+                    "horizonStart",
+                    "name",
+                    "status",
+                    "targetDate",
+                    "targetState"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "PiF1s"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "properties": {
+                "propertyNames": {
+                  "enum": [
+                    "contributionMode",
+                    "description",
+                    "horizonEnd",
+                    "horizonStart",
+                    "name",
+                    "status",
+                    "targetDate",
+                    "targetState"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "PiF1t"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "properties": {
+                "propertyNames": {
+                  "enum": [
+                    "contributionMode",
+                    "description",
+                    "horizonEnd",
+                    "horizonStart",
+                    "name",
+                    "status",
+                    "targetDate",
+                    "targetState"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "PiF2"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "properties": {
+                "propertyNames": {
+                  "enum": [
+                    "contributionMode",
+                    "description",
+                    "horizonEnd",
+                    "horizonStart",
+                    "name",
+                    "status",
+                    "targetDate",
+                    "targetState"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "RaN"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "properties": {
+                "propertyNames": {
+                  "enum": [
+                    "condition",
+                    "decisionKey",
+                    "description",
+                    "effect",
+                    "governedTypes",
+                    "name",
+                    "priority",
+                    "ruleType",
+                    "scopeType",
+                    "statement",
+                    "status",
+                    "validFrom",
+                    "validUntil"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "RaNConflict"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "properties": {
+                "propertyNames": {
+                  "enum": [
+                    "conflictKey",
+                    "conflictType",
+                    "description",
+                    "detectedAt",
+                    "name",
+                    "reason",
+                    "resolution",
+                    "resolvedAt",
+                    "status"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "Result"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "properties": {
+                "propertyNames": {
+                  "enum": [
+                    "description",
+                    "name",
+                    "producedAt",
+                    "resultType",
+                    "status",
+                    "value"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "RoFOrg"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "properties": {
+                "propertyNames": {
+                  "enum": [
+                    "description",
+                    "externalReference",
+                    "legalName",
+                    "name",
+                    "orgType",
+                    "status"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "RoFOrgRelationship"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "properties": {
+                "propertyNames": {
+                  "enum": [
+                    "description",
+                    "name",
+                    "status",
+                    "type",
+                    "validFrom",
+                    "validUntil"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "RoFRole"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "properties": {
+                "propertyNames": {
+                  "enum": [
+                    "description",
+                    "name",
+                    "responsibility",
+                    "roleName",
+                    "roleType",
+                    "status"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "RoFTeam"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "properties": {
+                "propertyNames": {
+                  "enum": [
+                    "description",
+                    "name",
+                    "status",
+                    "teamType",
+                    "validFrom",
+                    "validUntil"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "RoFTeamMember"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "properties": {
+                "propertyNames": {
+                  "enum": [
+                    "description",
+                    "displayName",
+                    "externalReference",
+                    "memberType",
+                    "name",
+                    "status"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "RoleAssignment"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "properties": {
+                "propertyNames": {
+                  "enum": [
+                    "allocation",
+                    "bootstrapKey",
+                    "description",
+                    "name",
+                    "status",
+                    "validFrom",
+                    "validUntil"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "SYNC"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "properties": {
+                "propertyNames": {
+                  "enum": [
+                    "definition",
+                    "description",
+                    "name",
+                    "status",
+                    "validFrom",
+                    "validUntil",
+                    "version"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "SuccessCriterion"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "properties": {
+                "propertyNames": {
+                  "enum": [
+                    "criterion",
+                    "description",
+                    "evaluationMode",
+                    "measurementType",
+                    "name",
+                    "operator",
+                    "requirementLevel",
+                    "status",
+                    "targetValue",
+                    "unit"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "Task"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "properties": {
+                "propertyNames": {
+                  "enum": [
+                    "actualEnd",
+                    "actualStart",
+                    "description",
+                    "name",
+                    "plannedEnd",
+                    "plannedStart",
+                    "status",
+                    "taskKind",
+                    "taskType"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "Verification"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "properties": {
+                "propertyNames": {
+                  "enum": [
+                    "checkedCriterionRevision",
+                    "description",
+                    "evaluatedResultRevision",
+                    "method",
+                    "name",
+                    "outcome",
+                    "reason",
+                    "status",
+                    "verifiedAt"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "relationshipData": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "relationshipType",
+          "direction",
+          "otherEntityId",
+          "otherEntityType",
+          "properties"
+        ],
+        "properties": {
+          "relationshipType": {
+            "enum": [
+              "ACCOUNTABLE_MEMBER",
+              "ACTIVATES_ROLE",
+              "AFFECTS",
+              "APPLIES_IN",
+              "CAUSED_BY",
+              "CHANGED_BY",
+              "CHECKS",
+              "CONFLICTING_RULE",
+              "CONTRIBUTES_TO",
+              "CORRECTED_BY",
+              "CORRECTS",
+              "CREATED_BY",
+              "CREATES_CORRECTION",
+              "CREATES_HISTORY",
+              "DECOMPOSES_INTO",
+              "DEPENDS_ON",
+              "DETECTED_BY",
+              "EVALUATES",
+              "EXECUTED_BY",
+              "EXECUTES",
+              "GOVERNS",
+              "HAS_ASSIGNMENT",
+              "HAS_HISTORICAL_STATE",
+              "HAS_MEMBER",
+              "HAS_ROLE",
+              "HAS_SUCCESS_CRITERIA",
+              "HAS_TEAM",
+              "HELD_BY",
+              "INFORMED_BY",
+              "INSCRIBES_PURPOSE_IN",
+              "IN_TEAM",
+              "OWNED_BY",
+              "PRODUCES",
+              "PROTECTS",
+              "PROVIDES_CONTEXT_TO",
+              "REPLACED_BY",
+              "REPRESENTED_BY",
+              "REQUESTED_BY",
+              "RESOLVED_BY",
+              "RESOLVED_THROUGH",
+              "RESPONSIBLE_TEAM",
+              "SOURCE_ORG",
+              "SUPERSEDES",
+              "TARGETS_HISTORY",
+              "TARGET_ORG",
+              "TRIGGERS",
+              "USES",
+              "USES_EVIDENCE"
+            ]
+          },
+          "direction": {
+            "enum": [
+              "INCOMING",
+              "OUTGOING"
+            ]
+          },
+          "otherEntityId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "otherEntityType": {
+            "enum": [
+              "ChangeEvent",
+              "CiV",
+              "ERoFObject",
+              "Evidence",
+              "HistoricalCorrection",
+              "PiF1o",
+              "PiF1s",
+              "PiF1t",
+              "PiF2",
+              "PiH",
+              "RaN",
+              "RaNConflict",
+              "Result",
+              "RoFOrg",
+              "RoFOrgRelationship",
+              "RoFRole",
+              "RoFTeam",
+              "RoFTeamMember",
+              "RoleAssignment",
+              "SYNC",
+              "SuccessCriterion",
+              "SyncEvent",
+              "Task",
+              "Verification"
+            ]
+          },
+          "properties": {
+            "type": "object",
+            "propertyNames": {
+              "enum": [
+                "validFrom",
+                "validUntil"
+              ]
+            },
+            "additionalProperties": {
+              "$ref": "#/$defs/typedValue"
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "typedValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "valueType",
+        "value"
+      ],
+      "properties": {
+        "valueType": {
+          "enum": [
+            "NULL",
+            "BOOLEAN",
+            "INTEGER",
+            "DECIMAL",
+            "STRING",
+            "DATE",
+            "DATETIME",
+            "OBJECT",
+            "ARRAY"
+          ]
+        },
+        "value": {}
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "valueType": {
+              "const": "NULL"
+            },
+            "value": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "properties": {
+            "valueType": {
+              "const": "BOOLEAN"
+            },
+            "value": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "properties": {
+            "valueType": {
+              "const": "INTEGER"
+            },
+            "value": {
+              "type": "integer"
+            }
+          }
+        },
+        {
+          "properties": {
+            "valueType": {
+              "const": "DECIMAL"
+            },
+            "value": {
+              "type": "string",
+              "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]*[1-9])?$",
+              "not": {
+                "const": "-0"
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "valueType": {
+              "const": "STRING"
+            },
+            "value": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "properties": {
+            "valueType": {
+              "const": "DATE"
+            },
+            "value": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        },
+        {
+          "properties": {
+            "valueType": {
+              "const": "DATETIME"
+            },
+            "value": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2})$"
+            }
+          }
+        },
+        {
+          "properties": {
+            "valueType": {
+              "const": "OBJECT"
+            },
+            "value": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/jsonValue"
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "valueType": {
+              "const": "ARRAY"
+            },
+            "value": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/jsonValue"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "jsonValue": {
+      "anyOf": [
+        {
+          "type": [
+            "null",
+            "boolean",
+            "integer",
+            "string"
+          ]
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/jsonValue"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/jsonValue"
+          },
+          "allOf": [
+            {
+              "if": {
+                "required": [
+                  "valueType",
+                  "value"
+                ]
+              },
+              "then": {
+                "$ref": "#/$defs/typedValue"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
