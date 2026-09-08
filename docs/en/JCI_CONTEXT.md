@@ -1,6 +1,8 @@
 # JUNACO Continuous Integration for Organizations
 ## 1. JUNACO Continuous Integration for Organizations
 
+**Rule package 2.0:** Ontology, graph rules, SYNC, new snapshots, correction values, and the exchange format use version `2.0`. JSON-LD remains `1.1`; existing namespace IRIs ending in `/1.0#` remain stable vocabulary identities and are not the rule version. Earlier records are interpreted only through their explicit version profiles.
+
 ### 1.1 Origin and purpose
 
 This document describes the **JUNACO Continuous Integration Model for Organizations** and the resulting **JCI Loop**. The model is based on the Viable System Model (VSM) by Stafford Beer and the Intrinsic Value Based System Model developed by Ernst Rother, now Ernst Eimicke, in his master's thesis. In the practice of Junaco Organizationsentwicklung GmbH it was further developed into today's JCI model by Jana Eimicke and Julian Ulbricht.
@@ -174,7 +176,7 @@ Core element: RoF
     └── RoleAssignment "Anna as Developer in Engineering"
 ```
 
-In principle, every existing `JCIEntity` can be historized. The exceptions are `PiH`, `ChangeEvent`, `SyncEvent` and `HistoricalCorrection`: a `PiH` is immutable after creation and is not historized again. A `ChangeEvent` records an accepted change request; `SyncEvent` and `HistoricalCorrection` record completed facts. Their stored content and existing provenance relationships are not changed later. The `TRIGGERS` relationship created when a technical `SyncRun` ends is added append-only. When an entity is created successfully for the first time, exactly one `CHANGED_BY` relationship from that new entity to the existing `ChangeEvent` may also be added. These additions change neither `revision` nor `updatedAt` of the `ChangeEvent`. Creating a `JCIEntity` for the first time does not create a `PiH` because no previous state exists.
+Existing `JCIEntity` instances are historizable except `PiH`, `ChangeEvent`, `SyncEvent`, and `HistoricalCorrection`. Their properties and owned provenance are immutable. Permitted references owned by a different new object follow section 2.2.8 and do not rewrite the referenced record. `TRIGGERS` is added append-only when a run ends; a successful `CREATED` establishes exactly one `CHANGED_BY` from the new entity. These links change neither `revision` nor `updatedAt` of the existing `ChangeEvent`. First creation has no previous state and creates no `PiH` of the new entity.
 
 #### 2.2.2 Common properties of all JCI entities
 
@@ -191,7 +193,7 @@ Each stored `JCIEntity` has an immutable identity, a specific type and traceable
 | `revision`    | Integers  | yes  | positive revision of the current state |
 | `status`      | Enum      | yes  | type-dependent technical status        |
 
-`revision = 1` and `updatedAt = createdAt` apply during generation. Every independently requested or observed technical change, including a status change, generates a `ChangeEvent` and a synchronization run. Subsequent changes derived deterministically through this run remain part of the same change process and do not generate a recursive `ChangeEvent`; they are documented by `SyncEvent`, `AFFECTS`, revision and historization. If an initial state already exists, it is recorded as `PiH` before the change is applied; then `revision` of the current element is increased by exactly one. Purely technical read operations do not change either `updatedAt` or `revision`.
+Creation uses `revision = 1` and `updatedAt = createdAt`. An independently requested or observed domain change, including a status change, starts a `ChangeEvent` and synchronization run. Deterministic follow-up changes stay in the same request, without recursive `ChangeEvent`. Each existing entity whose properties or owned relationship state actually change under section 2.2.8 receives exactly one `PiH`, one revision increment, and a new `updatedAt` per successful request. Merely affected entities and audit reference targets keep their domain revision. Pure reads change neither `updatedAt` nor `revision`.
 
 `PiH`, `ChangeEvent`, `SyncEvent` and `HistoricalCorrection` permanently retain `revision = 1` and `updatedAt = createdAt`. Their properties are not changed after creation. Only the append-only provenance additions described in section 2.2.1 apply to `ChangeEvent`.
 
@@ -235,28 +237,28 @@ Every permissible change in status is a technical change. A status may only be a
 
 #### 2.2.4 Binding status transitions
 
-A status change is only permitted if it is listed in the following table. `SYNC` additionally checks all type-specific conditions, relationships and applicable `RaN`. The entry `Erzeugung` denotes the initial state of a new entity; This does not produce a `PiH`.
+A status change is only permitted if it is listed in the following table. `SYNC` additionally checks all type-specific conditions, relationships and applicable `RaN`. The entry `Generation` denotes the initial state of a new entity; this creates no `PiH` of that new entity.
 
-| Entity type or group                                      | Permitted transition                | `ChangeEvent.changeType` | Central condition                                                              |
-| --------------------------------------------------------- | ----------------------------------- | ------------------------ | ------------------------------------------------------------------------------ |
-| six bootstrap entities under section 12.7                 | bootstrap → `ACTIVE`                | –                        | completely empty graph; atomic and fully validated minimal graph               |
-| mutable subject entity                                    | Generation → `DRAFT`                | `CREATED`                | Mandatory fields for a draft are present                                       |
-| mutable subject entity                                    | `DRAFT` → `ACTIVE`                  | `CHANGED`                | all mandatory fields, actors and active cardinalities are fulfilled            |
-| mutable subject entity                                    | `DRAFT` → `REVOKED`                 | `REVOKED`                | Draft is discarded                                                             |
-| mutable subject entity                                    | `ACTIVE` → `REPLACED`               | `REPLACED`               | a technically valid successor takes over the function                          |
-| mutable subject entity                                    | `ACTIVE` → `REVOKED`                | `REVOKED`                | Validity will end without successor                                            |
-| `PiF2`, `PiF1s`, `PiF1t`, `PiF1o`                         | `ACTIVE` → `ACHIEVED`               | `ACHIEVED`               | Type-specific target and contribution conditions are met                       |
-| `Task`                                                    | `DRAFT` → `BLOCKED`                 | `CHANGED`                | at least one necessary dependency is not fulfilled                             |
-| `Task`                                                    | `ACTIVE` → `BLOCKED`                | `CHANGED`                | at least one necessary dependency is unfulfilled                               |
-| `Task`                                                    | `BLOCKED` → `ACTIVE`                | `CHANGED`                | all necessary dependencies are fulfilled again                                 |
-| `Task`                                                    | `BLOCKED` → `COMPLETED`             | `COMPLETED`              | all dependencies and completion conditions are satisfied in the same SyncRun   |
-| `Task`                                                    | `ACTIVE` → `COMPLETED`              | `COMPLETED`              | Execution, dependency and completion conditions are met                        |
-| `Task`                                                    | `BLOCKED` → `REPLACED` or `REVOKED` | `REPLACED` or `REVOKED`  | blocked Task is replaced or canceled                                           |
-| `Result`                                                  | `ACTIVE` → `COMPLETED`              | `COMPLETED`              | Result is fully generated and immutable ready for testing                      |
-| `RaNConflict`                                             | Generation → `OPEN`                 | –                        | Conflict is confirmed within the triggering change process                     |
-| `RaNConflict`                                             | `OPEN` → `RESOLVED`                 | `RESOLVED`               | explicit model change and successful subsequent SyncRun eliminate the conflict |
-| `Verification`                                            | Generation → `COMPLETED`            | `CREATED`                | Method, result, time, Result and SuccessCriterion are fixed                    |
-| `PiH`, `ChangeEvent`, `SyncEvent`, `HistoricalCorrection` | Generation → `RECORDED`             | –                        | all mandatory information in the unchangeable document is fixed                |
+| Entity type or group                                      | Permitted transition                | `ChangeEvent.changeType` | Central condition                                                                                |
+| --------------------------------------------------------- | ----------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------ |
+| six bootstrap entities under section 12.7                 | bootstrap → `ACTIVE`                | –                        | completely empty graph; atomic and fully validated minimal graph                                 |
+| mutable subject entity                                    | Generation → `DRAFT`                | `CREATED`                | Mandatory fields for a draft are present                                                         |
+| mutable subject entity                                    | `DRAFT` → `ACTIVE`                  | `CHANGED`                | all mandatory fields, actors and active cardinalities are fulfilled                              |
+| mutable subject entity                                    | `DRAFT` → `REVOKED`                 | `REVOKED`                | Draft is discarded                                                                               |
+| mutable subject entity                                    | `ACTIVE` → `REPLACED`               | `REPLACED`               | a technically valid successor takes over the function                                            |
+| mutable subject entity                                    | `ACTIVE` → `REVOKED`                | `REVOKED`                | Validity will end without successor                                                              |
+| `PiF2`, `PiF1s`, `PiF1t`, `PiF1o`                         | `ACTIVE` → `ACHIEVED`               | `ACHIEVED`               | Type-specific target and contribution conditions are met                                         |
+| `Task`                                                    | `DRAFT` → `BLOCKED`                 | `CHANGED`                | explicit release, complete activation checks, and own or aggregated blocking under section 9.4.2 |
+| `Task`                                                    | `ACTIVE` → `BLOCKED`                | `CHANGED`                | at least one necessary dependency is unfulfilled                                                 |
+| `Task`                                                    | `BLOCKED` → `ACTIVE`                | `CHANGED`                | all necessary dependencies are fulfilled again                                                   |
+| `Task`                                                    | `BLOCKED` → `COMPLETED`             | `COMPLETED`              | all dependencies and completion conditions are satisfied in the same SyncRun                     |
+| `Task`                                                    | `ACTIVE` → `COMPLETED`              | `COMPLETED`              | Execution, dependency and completion conditions are met                                          |
+| `Task`                                                    | `BLOCKED` → `REPLACED` or `REVOKED` | `REPLACED` or `REVOKED`  | blocked Task is replaced or canceled                                                             |
+| `Result`                                                  | `ACTIVE` → `COMPLETED`              | `COMPLETED`              | Result is fully generated and immutable ready for testing                                        |
+| `RaNConflict`                                             | Generation → `OPEN`                 | –                        | Conflict is confirmed within the triggering change process                                       |
+| `RaNConflict`                                             | `OPEN` → `RESOLVED`                 | `RESOLVED`               | explicit model change and successful subsequent SyncRun eliminate the conflict                   |
+| `Verification`                                            | Generation → `COMPLETED`            | `CREATED`                | Method, result, time, Result and SuccessCriterion are fixed                                      |
+| `PiH`, `ChangeEvent`, `SyncEvent`, `HistoricalCorrection` | Generation → `RECORDED`             | –                        | all mandatory information in the unchangeable document is fixed                                  |
 
 For `CiV`, `RaN`, `SYNC`, `RoFOrg`, `RoFOrgRelationship`, `RoFTeam`, `RoFTeamMember`, `RoFRole`, `RoleAssignment`, `SuccessCriterion`, `Evidence` and `ERoFObject` apply the transitions of the variable subject entities. `Result` may be completed additionally. Future elements may also be achieved and tasks may be blocked or completed due to dependencies.
 
@@ -407,13 +409,72 @@ otherEntityType
 properties = Map<String, TypedValue>
 ```
 
-For each functional link that exists at the end of its validity, exactly one snapshot is saved from the perspective of the historized entity. The list is sorted into `relationshipType`, `direction` and `otherEntityId` for hashing. `contentHash` is the hexadecimal SHA-256 value of the canonically serialized combination of `StateSnapshot` and sorted `RelationshipSnapshots`.
+For each relationship owned by the entity under section 2.2.8 at the end of the domain state, exactly one `RelationshipSnapshot` is stored. Profile `2.0` sorts the list by `relationshipType`, `direction`, and `otherEntityId`; duplicate stable keys are invalid. `contentHash` is the hexadecimal SHA-256 of the canonical `{stateData, relationshipData}` object under section 2.2.9. Foreign documentary references are not an owned state change. Earlier snapshots keep their original contents, profile, and hash.
 
-A `TypedValueMap` assigns exactly one typed old and corrected value to each entry in `correctedFields`. `correctedFields` contains unique, lexicographically sorted canonical JSON Pointers. A historical relationship is addressed through a stable key composed of `direction`, `relationshipType` and `otherEntityId`, never through a mutable array index. For `ADDITION`, the old value is `NULL`. A correction may only change the listed paths; other snapshot content remains effectively unchanged.
+A `TypedValueMap` assigns exactly one typed old and corrected value to each path in `correctedFields`. Canonicalization, allowed path depth, stable relationship keys, overlap, and missing-value semantics follow section 2.2.9. A correction changes only its declared paths.
 
-The effective `HistoryView` of a `PiH` is produced by applying all non-superseded `HistoricalCorrection` objects in deterministic order to the immutable snapshot. `baseHistoryViewHash` is the hexadecimal SHA-256 value of the canonical serialization of the exact effective view on which a new correction is based.
+The effective `HistoryView` is reconstructed from the immutable `PiH` and absolute `correctedValue` overlays of its non-superseded corrections. Snapshot and effective-view hashes use the same canonical content object under section 2.2.9; `baseHistoryViewHash` binds the effective view immediately before the accepted correction.
 
 **Short example:** If Anna's team relationship is historicized, `relationshipData` contains an outgoing or incoming edge with type `HAS_MEMBER`, the team ID, and `validFrom` and `validUntil`. A later correction names exactly this relationship path and does not replace the entire snapshot.
+
+#### 2.2.8 Revision ownership and snapshot profile 2.0
+
+`revision` denotes the entity's domain state. Every property change and every change to its owned relationship state increments an existing mutable node's revision exactly once within a successful request and creates exactly one `PiH`. A reference from a new verification or event object does not change the referenced state. Ownership applies to creating, adding, removing, and changing an edge; it never permits rewriting the owned content of an immutable object.
+
+| Relationship context                                                                                                                             | Owned domain state                                                                                                             |
+| ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `Verification`: `EVALUATES`, `CHECKS`, `USES_EVIDENCE`, `SUPERSEDES`                                                                             | the new `Verification`; no revision of the referenced targets                                                                  |
+| `HistoricalCorrection`: `CORRECTS`, `CAUSED_BY`, `CORRECTED_BY`, `USES_EVIDENCE`, `SUPERSEDES`                                                   | the new `HistoricalCorrection`; no revision of the referenced targets                                                          |
+| `ChangeEvent`: `REQUESTED_BY`, `TARGETS_HISTORY`, `USES_EVIDENCE`                                                                                | the `ChangeEvent` created on acceptance; no revision of the referenced targets                                                 |
+| `SyncEvent`: `EXECUTES`, `AFFECTS`, `CREATES_HISTORY`, `CREATES_CORRECTION`                                                                      | the new `SyncEvent`; no revision of the referenced targets                                                                     |
+| `TRIGGERS`, `CHANGED_BY`, `HAS_HISTORICAL_STATE`                                                                                                 | the respective new target object `SyncEvent`, `ChangeEvent`, or `PiH`; no further revision solely for documentation            |
+| `CREATED_BY`                                                                                                                                     | the created entity, or its existing imported draft when provenance is validly completed; never the referenced `RoleAssignment` |
+| `RaNConflict`: `CONFLICTING_RULE`, `AFFECTS`, `DETECTED_BY`, `USES_EVIDENCE`, `RESOLVED_BY`, `RESOLVED_THROUGH`                                  | the conflict; its resolution creates exactly one revision and one `PiH`, not revisions of its referenced targets               |
+| `PiH` — `PROVIDES_CONTEXT_TO` — `CiV`                                                                                                            | the `CiV` whose historical context is selected; never the `PiH`                                                                |
+| `HELD_BY`, `INFORMED_BY`, `INSCRIBES_PURPOSE_IN`, `CONTRIBUTES_TO`                                                                               | both existing mutable endpoints                                                                                                |
+| `HAS_SUCCESS_CRITERIA`, `ACCOUNTABLE_MEMBER`, `DECOMPOSES_INTO`, `DEPENDS_ON`, `RESPONSIBLE_TEAM`, `EXECUTED_BY`, `USES`, `OWNED_BY`, `PRODUCES` | both existing mutable endpoints                                                                                                |
+| `HAS_TEAM`, `HAS_MEMBER`, `HAS_ROLE`, `HAS_ASSIGNMENT`, `IN_TEAM`, `ACTIVATES_ROLE`, `SOURCE_ORG`, `TARGET_ORG`, `REPRESENTED_BY`                | both existing mutable endpoints                                                                                                |
+| `PROTECTS`, `GOVERNS`, `APPLIES_IN`, `REPLACED_BY`                                                                                               | both existing mutable endpoints                                                                                                |
+
+Concrete source and target types must still match the complete relationship catalogue. Unknown relationship contexts are rejected. New entities start at `revision = 1` without predecessor history of their own. Multiple changes to one existing entity in the same request are combined into one domain delta before historization. No actual state change means no new revision and no `PiH`.
+
+New historization uses `snapshotSchemaVersion = "2.0"`: `relationshipData` contains only relationships owned by the historized entity according to this table. References from other verification and event objects remain accessible on their independent immutable documentation objects. Later evidence therefore does not become part of an earlier domain state retroactively. Immutability protects properties and owned relationship state; permitted external references do not rewrite that state. Existing `PiH`, their older profiles, and their hashes remain unchanged.
+
+**Short example:** A new `Verification` binds criterion revision `2` and creates `CHECKS`. The criterion remains at revision `2`; the verification is applicable. Only a later domain change to the criterion creates revision `3` and makes the old verification inapplicable to the new state. New audit relationships change the technical `graphEpoch` under section 12 even when no domain target revision increases.
+
+**Creation example:** A new Task starts at revision `1` without its own `PiH`. Explicitly assigning it to an existing active `PiF1o` changes that goal’s owned `DECOMPOSES_INTO` state, so the goal receives one revision increment and one `PiH` in the same request. The referenced creation role remains unchanged.
+
+#### 2.2.9 Correction paths and canonical hash profile 2.0
+
+New snapshots and their correction values use `snapshotSchemaVersion = "2.0"` and `valueSchemaVersion = "2.0"`, respectively. These versions select the resolver and hash algorithm. Unknown or incompatible profiles cause `CONFLICT`; there is no silent reinterpretation. Earlier `PiH` retain their contents and hashes. A legacy resolver must establish the earlier profile actually used; the preserved exchange schemas alone do not define such a resolver.
+
+Stored `relationshipData` remains a list. Only for path resolution is it projected as a map, using the stable key `direction + ":" + relationshipType + ":" + otherEntityId`. `otherEntityId` is the canonical lowercase UUID with hyphens. Duplicate keys are invalid. Only these three address forms are permitted:
+
+```text
+/stateData/properties/<property>
+/relationshipData/<direction:relationshipType:otherEntityId>
+/relationshipData/<direction:relationshipType:otherEntityId>/properties/<property>
+```
+
+A property path addresses exactly one complete `TypedValue`; `<property>` must match the relevant snapshot type and profile. An entire relationship entry is transferred as a `TypedValue` with `valueType = OBJECT`, whose `value` contains the complete `RelationshipSnapshot`. Its type, direction, other entity ID, and other entity type must match the key and permitted relationship context. Correction preserves these identity attributes. Root replacement, array indices, wildcards, `-`, `/stateData/name`, and deeper paths inside a `TypedValue`, such as `/value`, are prohibited. Rewriting an old relationship key must not create a new identity.
+
+After JSON string decoding, the pointer is split at `/`. Within each segment, `~1` is decoded to `/` and then `~0` to `~`; other or incomplete tilde escapes are invalid. Neither URI percent decoding nor Unicode normalization occurs. Canonical output first encodes `~` as `~0`, then `/` as `~1`. `correctedFields` contains unique canonical pointers in Unicode code point order. Two paths overlap when their decoded segment sequences are equal or form a proper ancestor/descendant relationship. A mere string prefix is insufficient: `name` and `nameLong` are different fields. An entire relationship entry and one of its properties do overlap.
+
+All paths must already be pairwise non-overlapping within one request. Against active corrections: no overlap means no `SUPERSEDES`; exactly one overlapping active correction must be fully superseded; more than one means `CONFLICT`. The new field set contains every previous canonical field path unchanged and repeats its intended effective value; additional paths remain non-overlapping internally and against every other active correction. An ancestor path does not replace this complete field carry-forward. The existing `SUPERSEDES` cardinality `0..1` remains unchanged.
+
+At correction acceptance, `previousValue` is checked against the immediately preceding effective view. `ADDITION` requires an actually missing path and a typed old value of `NULL`; an existing `NULL` value is not missing. `CORRECTION` and `CLARIFICATION` require an existing path. `NULL` is a value, not a deletion command. Reconstruction of `HistoryView` applies active corrections’ `correctedValue` values as absolute overlays on the immutable origin. It does not replay superseded operations or recheck `previousValue` against the origin. An original addition therefore remains visible when a later correction supersedes it. Missing relationship parents are not invented from a single property; a complete relationship entry must be added instead.
+
+Exactly the same content object is hashed for `contentHash`, `baseHistoryViewHash`, and `expectedHistoryViewHash`:
+
+```text
+SHA-256(UTF8(canonicalJSON({stateData, relationshipData})))
+relationshipData: sorted by (relationshipType, direction, otherEntityId)
+Output: 64 lowercase hexadecimal characters
+```
+
+`canonicalJSON` uses UTF-8 without a BOM or insignificant whitespace; object keys are sorted recursively by Unicode code points. Other arrays retain their domain order. Quotes and backslashes use `\"` and `\\`; control characters U+0008, U+0009, U+000A, U+000C, and U+000D use `\b`, `\t`, `\n`, `\f`, and `\r`. Other control characters U+0000–U+001F use `\u00xx` with lowercase hexadecimal digits. `/` is not escaped; other Unicode scalar values are encoded directly as UTF-8. Unpaired surrogates and duplicate JSON object keys are invalid. Integers are serialized exactly without a binary floating-point size limit. `DECIMAL` is a string matching `-?(0|[1-9][0-9]*)(\.[0-9]*[1-9])?`; `-0`, exponents, leading zeros, and trailing decimal zeros are prohibited. Raw fractional JSON numbers inside `OBJECT` or `ARRAY` are prohibited in this profile; decimal values there also require an explicitly typed canonical representation. Non-finite numbers are invalid. No silent rounding occurs. IDs, hash fields, runtimes, or provenance outside `stateData` and `relationshipData` are not included in an additional hash envelope. An unchanged content object without effective corrections has the same hash for snapshot and historical view.
+
+**Short example:** `/relationshipData/INCOMING:HAS_MEMBER:00000000-0000-4000-8000-000000000002` and the same path followed by `/properties/validFrom` overlap. Corrections of these paths must not be active simultaneously. By contrast, `/stateData/properties/name` and `/stateData/properties/description` may be corrected independently.
 
 ### 2.3 Basic structure
 
@@ -583,7 +644,7 @@ An existing `PiH` will never be overwritten. If missing, incorrect or ambiguous 
 
 An accepted change request is recorded as an immutable `ChangeEvent` before its first technical attempt. Its `id` equals the `requestId`; target ID, target type, expected revision and idempotency key therefore remain traceable even if no target entity exists yet or the attempt fails. Every `ChangeEvent` schedules at least one technical `SyncRun`, which executes exactly one SYNC definition. It determines the affected `JCIEntity` instances and checks which existing state would be superseded. After completion or controlled termination, the immutable `SyncEvent` is created with its unique `runId` and outcome. Only then is `ChangeEvent ── TRIGGERS ──► SyncEvent` added append-only. The technical `SyncRun` is not stored as a JCI node.
 
-Before the new state is adopted, the synchronization run records the previous state of the affected element, including its relationships valid at that time, as its own `PiH`. The changed state is then considered the current state. An additional `HistoricalSnapshot` is not required.
+Before the new state is adopted, the synchronization run records the previous state of the affected element, including its owned relationship state valid at that time under section 2.2.8, as its own `PiH`. The changed state is then considered the current state. An additional `HistoricalSnapshot` is not required.
 
 ```text
 current state → ChangeEvent → technical SyncRun → new current state
@@ -632,7 +693,7 @@ RoFTeamMember ── HAS_ASSIGNMENT ──► RoleAssignment
 
 For a `ACTIVE` or `COMPLETED` atomic Task, WHY and WHO must be complete. A draft may be temporarily incomplete. `SYNC` may only activate it when each step can be clearly navigated. Environmental and control paths may be empty if neither an environmental object nor an applicable `RaN` actually exists; However, they must not appear empty due to a lack of modeling.
 
-Adding, removing, or technically changing a saved relationship changes the relationship state of both endpoints. For each existing, changeable endpoint, the revision and `updatedAt` are increased and the previous state is recorded as a separate `PiH`. An endpoint newly created in the same order does not yet have a previous state. The `ChangeEvent` remains connected to the immediately requested origin point; all other endpoints appear above `SyncEvent ── AFFECTS`.
+Adding, removing, or changing a relationship changes only the domain state of its owners according to section 2.2.8. Every existing mutable owner with an actual delta receives exactly one revision increment, a new `updatedAt`, and one `PiH` in the request. New entities start at revision `1`; audit targets do not change solely because of a new reference. `SYNC` still traverses both endpoints and protects the entire relevant graph view, including revision-neutral changes.
 
 **Short example:** The Task “Deploy API” belongs to the operational goal “Response time under 24 hours”. Through tactical and strategic states, this contributes to the long-term goal grounded by the organization-held CiV “Clarity” and “Responsibility”. The Task is executed by Anna's Developer RoleAssignment in the responsible team. Value grounding, scope, and responsibility are therefore fully traceable from the Task.
 
@@ -709,18 +770,18 @@ A `SyncEvent` is not a `PiH`. However, it can generate several `PiH` if a synchr
 2. Each state replaced by an actual change is recorded as a separate `PiH`.
 3. Each `PiH` belongs to exactly one original `JCIEntity`.
 4. A historizable `JCIEntity` can have several `PiH` arranged in time over `recordedAt`.
-5. A `PiH` is unchangeable after its creation, is not added to and is not historicized again.
-6. The properties of `ChangeEvent`, `SyncEvent` and `HistoricalCorrection` are not changed or historized after creation. Only the append-only provenance additions explicitly defined for a `ChangeEvent` are permitted.
-7. With `changeType = CREATED`, no `PiH` is created because no previous state exists. The `ChangeEvent` and, after every completed synchronization attempt, one `SyncEvent` are still created. Only `SUCCESS` also creates the new entity with `revision = 1` and exactly one `CHANGED_BY` relationship.
+5. A `PiH` and its owned snapshot state are immutable and are never historized again. References owned by other objects under section 2.2.8 do not modify the `PiH`.
+6. The properties and owned provenance of `ChangeEvent`, `SyncEvent`, and `HistoricalCorrection` remain immutable. The explicitly permitted append-only additions and foreign references under section 2.2.8 cause no revision or history of the referenced record.
+7. For `CREATED`, the target ID must be free and `requestedRevision = null`. Only `SUCCESS` creates the new target with `revision = 1`, `CREATED_BY`, and exactly one `CHANGED_BY`. No `PiH` is created for that new target; existing mutable owners changed by its domain relationships receive their own `PiH` under section 2.2.8. `CONFLICT` or `FAILED` commits neither the target nor any domain delta or history. The accepted `ChangeEvent` and the completed attempt’s `SyncEvent` remain traceable.
 8. Any later clarification or correction is stored as a new `HistoricalCorrection` object and may not overwrite the existing `PiH`.
 9. Every `HistoricalCorrection` corrects exactly one `PiH` via `CORRECTS` and belongs to exactly one `SyncEvent` via `CREATES_CORRECTION`.
 10. Every `HistoricalCorrection` requires exactly one `ChangeEvent` via `CAUSED_BY`. It has `changeType = HISTORICAL_CORRECTION`, exactly one `TARGETS_HISTORY` to the same `PiH`, and no `CHANGED_BY` source. `ChangeEvent.reason` records the reported discrepancy; `HistoricalCorrection.reason` records the correction confirmed after validation.
-11. Several active corrections of one `PiH` are permitted only if their `correctedFields` are pairwise disjoint.
-12. If a new correction overlaps an active correction, it must supersede exactly that one correction via `SUPERSEDES`. An overlap with several active corrections is not resolved automatically.
-13. A superseding correction may only supersede a correction of the same `PiH`, must include its predecessor's complete set of `correctedFields`, and must repeat all values that remain effective. Additional fields must not overlap any other active correction. `SUPERSEDES` chains are time-forward and acyclic.
-14. For every path, `previousValue` must equal the value effective in the `HistoryView` immediately before the new correction; for `ADDITION`, it is `NULL`. `baseHistoryViewHash` must match that base view.
-15. Before commit, `SYNC` compares the request's `expectedHistoryViewHash` with the newly calculated effective `HistoryView` hash. A mismatch produces `CONFLICT` and no correction.
-16. Correction commits for the same `PiH` are serialized. After acquiring the write lock, `SYNC` calculates the effective view and overlap again to prevent lost updates.
+11. Non-superseded corrections of one `PiH` have canonical paths that do not overlap with each other or internally under section 2.2.9. Equality and ancestor/descendant relationships count as overlap.
+12. No overlap permits no `SUPERSEDES`. Exactly one overlapping active correction must be fully superseded. More than one overlapping active correction causes `CONFLICT` because `SUPERSEDES = 0..1`.
+13. A superseding correction belongs to the same `PiH` and contains every canonical field path of its active predecessor unchanged, with its effective value restated. Additional paths do not overlap internally or with any other active correction. `SUPERSEDES` remains temporally forward and acyclic.
+14. At acceptance, `previousValue` exactly matches the preceding effective `HistoryView`. `ADDITION` requires a missing path with a typed old `NULL`; existing `NULL` is not missing. `CORRECTION` and `CLARIFICATION` require existing paths. `baseHistoryViewHash` binds this base view under profile 2.0.
+15. `SYNC` serializes all JCI write paths under section 12.8 and recomputes the current `HistoryView` under the gate. A mismatching `expectedHistoryViewHash`, profile error, or path overlap outside the supersession rule causes `CONFLICT` without a correction.
+16. The valid `HistoryView` applies only active `correctedValue` as absolute overlays on the immutable origin. Superseded operations are not replayed; their earlier `previousValue` is not checked against the origin during reconstruction. This preserves an addition that was subsequently corrected.
 17. The effective historical view results deterministically from the immutable `PiH` and all active, non-superseded corrections. The current model state remains separate.
 18. The `ChangeEvent` connected via `CAUSED_BY` must be the same `ChangeEvent` that triggered the synchronization run connected via `CREATES_CORRECTION`.
 
@@ -772,7 +833,7 @@ CORRECTION    = correct incorrect historical information
 CLARIFICATION = explain ambiguous historical information
 ```
 
-The properties of a `HistoricalCorrection` object only describe the deviation and its correction. They do not replace the corrected `PiH` nor do they constitute a completely new historical state if left unchecked.
+The properties of a `HistoricalCorrection` describe the discrepancy and its correction, not a replacement `PiH`. `expectedHistoryViewHash` must match the effective view at the protected commit. Path overlap, full supersession, and absolute replay follow section 2.2.9, so a second correction cannot silently commit against a stale base.
 
 The responsible person is connected to their specific `RoleAssignment` via `CORRECTED_BY`. Optional credentials are mapped via `USES_EVIDENCE` as standalone `Evidence` nodes. Neither actor IDs nor evidence references are additionally stored in the correction object.
 
@@ -808,9 +869,9 @@ HistoricalCorrection
   ├── correctionType: ADDITION
   ├── reason: the team assignment at the time was incompletely documented
   ├── baseHistoryViewHash: <SHA-256 of the effective view>
-  ├── correctedFields: /stateData/teamB
+  ├── correctedFields: /relationshipData/INCOMING:HAS_MEMBER:00000000-0000-4000-8000-000000000002
   ├── previousValue: NULL
-  ├── correctedValue: Team B
+  ├── correctedValue: OBJECT containing the complete RelationshipSnapshot to Team B
   ├── CORRECTED_BY ──► RoleAssignment: responsible reviewer
   ├── USES_EVIDENCE ──► Evidence: team assignment at that time
   └── CORRECTS ──► PiH: Anna am 10.08.2026
@@ -1283,33 +1344,33 @@ PiF1o
 1. Each `PiF1o` must contribute to at least one `PiF1t` and can support multiple `PiF1t`.
 2. Each `PiF1o` has at least one `SuccessCriterion`.
 3. Each `PiF1o` is assigned to exactly one responsible `RoFTeamMember`.
-4. Each `PiF1o` is broken down into at least one `Task`; Each Task is directly assigned to exactly one `PiF1o`, regardless of its hierarchy level.
+4. Each `PiF1o` is decomposed into at least one `Task`; every Task remains directly assigned to exactly one `PiF1o`, regardless of hierarchy level and current status. Completion evaluation uses the current scope under section 9.4.2.
 5. Each Task has exactly one `taskKind = ATOMIC | COMPOSITE` and exactly one responsible `RoFTeam`.
 6. A `ATOMIC`-Task has no child tasks. In `ACTIVE` or `COMPLETED` it has at least one executive `RoleAssignment`; at least one of them belongs to the responsible team via `IN_TEAM`.
-7. A `COMPOSITE`-Task has at least one direct subtask and no `EXECUTED_BY`, `USES` or `PRODUCES` relationships. Its status is derived exclusively from the direct subtasks.
+7. A `COMPOSITE` Task has at least one direct subtask and no `EXECUTED_BY`, `USES`, or `PRODUCES` relationships. Current composites require at least one current direct subtask. Own prerequisites take precedence over status aggregation.
 8. A Task can have at most one direct parent Task. Parent Task and subtask belong to the same `PiF1o`; the Task hierarchy is cycle-free.
 9. Additional `RoleAssignments` from other teams may support an atomic Task.
 10. The `ACCOUNTABLE_MEMBER` of a `PiF1o` may execute its atomic tasks, but does not have to belong to an executing `RoleAssignment`.
 11. Accountability for the `PiF1o`, team responsibility for the Task and the actual execution of atomic tasks by `RoleAssignments` remain technically separate.
 12. An atomic Task can have none, one or more relationships with `ERoFObjects`. If he uses an environment object, at least one executing `RoleAssignment` must use the same `ERoFObject`.
-13. `DEPENDS_ON` may exist between tasks of the same or different `PiF1o`, but may not form self-references or cycles. One requirement is only met with `status = COMPLETED`.
-14. If a Task has at least one unfulfilled prerequisite, its status is `BLOCKED`. `REPLACED` or `REVOKED` does not meet a requirement; a valid successor must be explicitly reconnected via `DEPENDS_ON`.
+13. `DEPENDS_ON` may connect Tasks of the same or different `PiF1o`, but must have no self-links or cycles. In addition, the joint completion view combining hierarchy and prerequisites under section 9.4.2 must be acyclic. A prerequisite is satisfied only with `status = COMPLETED`.
+14. A released Task in `ACTIVE` or `BLOCKED` with at least one own unmet prerequisite becomes `BLOCKED`; completion is then prohibited. `DRAFT` first needs explicit release, and terminal Tasks are not rewritten. `REPLACED` and `REVOKED` do not satisfy a prerequisite; a valid successor must be explicitly connected through `DEPENDS_ON`.
 15. An atomic Task may only achieve `COMPLETED` if all prerequisites are completed, at least one valid executing RoleAssignment is on the responsible team, relevant `RaN` are met and completion is confirmed. A `Result` is not mandatory for every Task.
-16. The status of a composite task is derived from its effective direct subtasks: only `DRAFT` gives `DRAFT`; all `COMPLETED` result in `COMPLETED`; at least one `ACTIVE` results in `ACTIVE`; a mixture of `DRAFT` and `COMPLETED` produces `ACTIVE`; without `ACTIVE`, but with at least one `BLOCKED`, results in `BLOCKED`. A `REPLACED` subtask is only replaced by its successor if it is connected via `REPLACED_BY` and is also a direct subtask of the same composite task. A `REVOKED` subtask that remains connected or a `REPLACED` subtask without such a connected successor creates a conflict.
+16. Derivation of a released composite status follows only the ordered table in section 9.4.2: own unmet prerequisite before subtask aggregation; current direct subtasks only; no automatic return to `DRAFT`. Replacement, revocation, and a non-empty current hierarchy are checked explicitly.
 17. An atomic Task may not yet have produced one, one or more `Results`; each Result belongs to exactly one atomic Task.
-18. A `Verification` evaluates exactly one `Result`, checks exactly one `SuccessCriterion`, and may only be created when the Result is `COMPLETED`, the criterion is `ACTIVE`, and both belong to the same `PiF1o` context.
-19. `evaluatedResultRevision` equals the current revision of the evaluated Result; `checkedCriterionRevision` equals the current revision of the checked SuccessCriterion. `SYNC` reads both from one consistent view and checks them again immediately before commit.
+18. A `Verification` evaluates exactly one `COMPLETED` Result and checks exactly one `ACTIVE` SuccessCriterion. At creation and for current goal evaluation, the producing Task and criterion belong to the current scope of the same `PiF1o`.
+19. At creation, `evaluatedResultRevision` and `checkedCriterionRevision` exactly match the target revisions checked under the commit gate in section 12.8. Any mismatch causes `CONFLICT`. Under section 2.2.8, `EVALUATES`, `CHECKS`, and the verification’s own provenance do not change those target revisions.
 20. The test result is stored on `Verification` as `VALID`, `INVALID` or `INCONCLUSIVE`.
 21. `Evidence` is used only as a separate node when evidence must be managed, reused or audited independently.
 22. `PiF1o` is a state and never itself a Task.
 23. A PiF1o draft is only domain-complete when its future contribution, success criteria, accountability and tasks exist.
-24. A `Verification` is current and applicable only if it has not been superseded and its bound revisions still match the current revisions of Result and criterion.
+24. An applicable current `Verification` is `COMPLETED`, not superseded through `SUPERSEDES`, and still binds the current revisions of its `COMPLETED` Result and `ACTIVE` criterion. For goal evaluation, the producing Task and criterion must additionally belong to the current scope of the same `PiF1o`.
 25. A later change to the Result or criterion does not change the immutable `Verification`. It remains as a test fact but is no longer applicable to the new state; until a new test exists, the affected criterion is not satisfied by that verification.
 26. `SUPERSEDES` only connects Verifications that evaluate the same `Result` and check the same `SuccessCriterion`. A successor's bound target revisions may not be lower than those of its predecessor; equal revisions are permitted for retesting with a new method or Evidence. The chain is time-forward and acyclic.
 27. For the same combination of Result, SuccessCriterion and both bound revisions, at most one non-superseded `Verification` exists.
 28. `verifiedAt` is not earlier than `updatedAt` of either bound target revision.
-29. Each `PiF1o` has at least one `SuccessCriterion` with `requirementLevel = REQUIRED`.
-30. A `PiF1o` may only reach `ACHIEVED` if all mandatory success criteria are satisfied by applicable current Verifications, all assigned Tasks are `COMPLETED`, all Task dependencies are satisfied, and no relevant model or `RaN` violation exists.
+29. Every domain-complete `PiF1o` has at least one current `SuccessCriterion` with `requirementLevel = REQUIRED`. Retired required criteria do not satisfy this minimum.
+30. A `PiF1o` may reach `ACHIEVED` only if its current Task set is non-empty and entirely `COMPLETED`, at least one current `REQUIRED` criterion exists, every current required criterion is `ACTIVE` and satisfied by applicable current Verifications, and all relevant dependency, WHY, WHO, model, and `RaN` conditions hold.
 31. `ACHIEVED` is terminal. A later goal or criterion change is modeled as a new operational future element.
 
 #### 9.4.1 Aggregation of success criteria
@@ -1328,19 +1389,58 @@ no applicable current Verification = not satisfied
 only revision-stale Verifications = not satisfied
 ```
 
-The criteria condition of a `PiF1o` is satisfied if all of its `REQUIRED` criteria are satisfied. `OPTIONAL` criteria are evaluated and documented, but do not block `ACHIEVED`. Only applicable current Verifications evaluating Results from Tasks of the same `PiF1o` are considered. All Task and model conditions must also be satisfied for `ACHIEVED`.
+The criteria condition uses only `K_current(P)` under section 9.4.2. At least one current `REQUIRED` criterion must exist, and each must be `ACTIVE` and satisfied. `OPTIONAL` criteria are evaluated and documented without blocking `ACHIEVED`. Only applicable current Verifications whose Results originate from `T_current(P)` are considered; all Task and model conditions must additionally hold.
 
 The measured value of a Verification is determined from the evaluated `Result` according to the method specified in the success criterion and compared with `operator`, `targetValue` and, if applicable, `unit`. `outcome = VALID` is only allowed if this comparison is successful and reproducible using the specified method. If no clear comparison is possible, the result is `INCONCLUSIVE`.
 
 ```text
 PiF1o.ACHIEVED
-= at least one REQUIRED criterion exists
-+ all REQUIRED criteria satisfied
-+ all assigned Tasks COMPLETED
-+ all Task dependencies satisfied
-+ all considered Verifications completed and revision-applicable
-+ no relevant model or RaN violation
+= T_current(P) is non-empty and every member is COMPLETED
++ at least one current REQUIRED criterion exists
++ every current REQUIRED criterion is ACTIVE and satisfied
++ dependencies and applicable verification revisions are valid
++ all relevant WHY, WHO, model, and RaN conditions hold
 ```
+
+#### 9.4.2 Current scope and joint completion evaluation
+
+Stored assignments describe origin and goal context. They remain present for `REPLACED` and `REVOKED` objects. Current evaluation uses derived sets:
+
+```text
+T_all(P)     = all Tasks directly assigned through PiF1o DECOMPOSES_INTO
+T_current(P) = T_all(P) excluding status REPLACED or REVOKED
+K_all(P)     = all criteria assigned through HAS_SUCCESS_CRITERIA
+K_current(P) = K_all(P) excluding status REPLACED or REVOKED
+children_current(C) = direct subtasks of C excluding REPLACED or REVOKED
+```
+
+`COMPLETED` remains current and continues to count towards completion. `ACHIEVED` requires at least one current Task, its entire current Task set to be `COMPLETED`, and at least one current `REQUIRED` criterion. Every current required criterion must be `ACTIVE` and satisfied. An empty filtered set is not success. A Verification counts only when its producing Task is currently assigned to the same `PiF1o`. Results from retired Tasks remain available but do not automatically satisfy the current scope. An intended uptake requires a current Task with its own Result and a new verification; the earlier Result may provide traceable evidence, while its original `PRODUCES` assignment remains intact.
+
+Revocation, replacement, and changes to required scope need an expressly authorized change request. `SYNC` does not remove an obligation merely to enable `ACHIEVED`. A replacement counts only after explicit assignment to the same `PiF1o` and, where applicable, the same current parent; the earlier assignment remains present. Dependencies on a retired Task remain unmet until explicitly changed. A current composite has at least one current direct subtask. A retired composite must not hide current descendants from evaluation: they remain current through their direct goal assignment and need a consistent current hierarchy; otherwise the outcome is `CONFLICT`. No automatic subtree revocation occurs. After `ACHIEVED`, changed scope is represented by a new goal.
+
+For an already released `COMPOSITE` in `ACTIVE` or `BLOCKED`, the following order applies:
+
+| Check in this order                                            | Result      |
+| -------------------------------------------------------------- | ----------- |
+| at least one own unmet `DEPENDS_ON` prerequisite               | `BLOCKED`   |
+| all current direct subtasks `COMPLETED`                        | `COMPLETED` |
+| at least one current direct subtask `ACTIVE`                   | `ACTIVE`    |
+| no `ACTIVE`, but at least one current direct subtask `BLOCKED` | `BLOCKED`   |
+| only `DRAFT`, or a mixture of `DRAFT` and `COMPLETED`          | `ACTIVE`    |
+
+A `DRAFT` becomes `ACTIVE` or `BLOCKED` only through explicit regular release with complete activation checks. At explicit composite release, the same prerequisite and child-blocking priority determines `ACTIVE` or `BLOCKED`; even if every child is completed, release first produces `ACTIVE`. Completion requires a later evaluation of that released state. A scope change does not replace release and never directly causes `DRAFT → COMPLETED`. A released composite does not return to `DRAFT` when all its subtasks are drafts. Derivation does not reopen terminal Tasks. An own composite prerequisite blocks its completion; it is not implicitly inherited by subtasks. If their execution must also wait, the affected Tasks need their own explicit prerequisites.
+
+A virtual graph combining both stored relationship types determines completion order. It is a validation view, not a new relationship type:
+
+```text
+waits(C, child) for every current direct subtask of a current composite C
+waits(T, prerequisite) for every explicit DEPENDS_ON prerequisite of a current T
+Edge direction: source waits for target.
+Cycle check: joint candidate graph across all reachable PiF1o.
+Evaluation: prerequisites first, then waiting Tasks; ATOMIC and COMPOSITE together.
+```
+
+Existing checks of stored hierarchy, dependencies, and replacement chains remain in place. Additionally, every cycle in the joint completion view causes `CONFLICT` with a complete cycle witness. Example: `C DECOMPOSES_INTO A` and `A DEPENDS_ON C` yield `C → A → C`, although each relationship type is acyclic on its own. A retired prerequisite Task remains an unmet target and is not hidden as a satisfied or absent condition. All operations in a request are checked together on the candidate graph; the commit gate under section 12.8 prevents concurrent changes from jointly producing an unchecked cycle.
 
 ### 9.5 Example
 
@@ -1712,29 +1812,29 @@ implementationChecksum
 
 The version information determines exactly which ontology, graph rules and SYNC specification are checked against. `implementationReference` means the executable rules package or artifact; `implementationChecksum` is its SHA-256 value. A SYNC definition may only become `ACTIVE` if all concrete entity and relationship types present in the model are supported and the checksum comparison is successful.
 
-**Short example:** `SYNC 1.0` refers to ontology 1.0, graph rules 1.0 and the handler package `jci-sync-1.0` with its checksum. A `SyncEvent` not only records “SYNC 1.0”, but also the exact definition in a comprehensible manner.
+**Short example:** `SYNC 2.0` refers to ontology 2.0, graph rules 2.0 and the handler package `jci-sync-2.0` with its checksum. A `SyncEvent` not only records “SYNC 2.0”, but also the exact definition in a comprehensible manner.
 
 ### 12.2 Origin
 
 A synchronization attempt originates from an accepted change request:
 
-1. Before execution, the request is recorded as an immutable `ChangeEvent`. This applies to changes of existing entities, `CREATED` and `HISTORICAL_CORRECTION`.
+1. Before execution, acceptance durably and atomically records the full normalized request, its immutable `ChangeEvent`, and resumable run scheduling under section 12.8. This applies to normal changes, `CREATED`, and `HISTORICAL_CORRECTION`.
 2. The `ChangeEvent` schedules at least one technical `SyncRun`.
 3. The `SyncRun` uses exactly one saved SYNC definition.
-4. The `SYNC` definition used identifies all directly and indirectly affected elements and relationships.
+4. After acquiring the store-wide technical gate, the `SYNC` definition freshly reads all directly and indirectly relevant elements, relationships, and required absences under section 12.8.
 5. It checks `RaN`, cardinalities and other model conditions.
 6. It determines applicable `RaN`, checks their compatibility and applies the expressly saved priority if a contradiction is detected. Ties or non-evaluable semantics produce an open `RaNConflict`.
 7. It distinguishes between elements that are merely affected and those that actually need to be changed.
-8. For Task changes, it traverses parent, subtask, and dependency relationships, determines affected `PiF1o`, and infers Task status upward from the atomic tasks.
-9. When a `Verification` is completed, it determines applicable current Verifications, checks their bound target revisions, and aggregates all `REQUIRED` criteria of the associated `PiF1o`.
-10. Immediately before commit, it checks again whether the revisions of `Result` and `SuccessCriterion` bound by a `Verification` are still current.
+8. For Task changes, it builds the joint completion view of hierarchy and prerequisites, checks the complete candidate graph, and evaluates atomic and composite Tasks together with prerequisites first.
+9. For a completed `Verification`, it checks bound revisions, current Task and criterion scope, and all current `REQUIRED` criteria of the associated `PiF1o`.
+10. Immediately before applying changes, it checks the complete relevant graph view, run ownership, bound revisions, and time-dependent preconditions at the protected domain decision point.
 11. Before every actual change to an existing historizable entity, the previous state is prepared as a separate `PiH`.
-12. With `SUCCESS`, the requested domain change, permitted subsequent changes, associated `PiH`, corrections, conflict resolutions and relationships are committed atomically.
+12. With `SUCCESS`, the actual domain delta, permitted subsequent changes, associated `PiH`, corrections, conflict resolutions, relationships, successful `SyncEvent`, and idempotent commit record are persisted in one atomic transaction.
 13. With `CONFLICT` or `FAILED`, the requested domain change and all uncommitted subsequent changes are rolled back completely. Neither a new revision nor a `PiH` arises from an uncommitted state.
 14. Upon completion or controlled abort, exactly one immutable `SyncEvent` with a unique `runId` is created and `TRIGGERS` is added append-only. A newly recognized `RaNConflict` is also retained as final documentation.
 15. The `SyncEvent` documents start, end, outcome, SYNC definition used, elements checked, changes actually committed, `PiH` created, corrections, rule conflicts and errors.
 
-Atomicity refers to the requested technical change and its permitted subsequent changes. The final `SyncEvent` and required conflict documents, however, form the permanent documentation of the experiment. With `SUCCESS`, subject changes and closing documentation can be saved in the same transaction. With `CONFLICT` or `FAILED`, the technical transaction is first rolled back and then the final documentation is permanently saved.
+On `SUCCESS`, domain changes, final documentation, and the idempotent commit record must be atomic. On `CONFLICT` or `FAILED`, no invalid domain delta is committed. If a database abort prevents final documentation, it is recovered in a new gated transaction with the same `runId`; uncertain success must be resolved from the durable commit record before any retry. Section 12.8 defines the complete recovery contract.
 
 ```text
 Domain transaction
@@ -1818,7 +1918,7 @@ PiH and associated HistoricalCorrections for historical discrepancies
 6. A `SyncEvent` with `SUCCESS` or `CONFLICT` names at least one affected `JCIEntity`. Only a `FAILED` attempt ending before successful target resolution may have no `AFFECTS` target.
 7. Being affected alone creates no `PiH`. Only a state actually superseded is historized.
 8. A `SyncEvent` may create zero, one or more `PiH`. Every created `PiH` remains connected to exactly this `SyncEvent` via `CREATES_HISTORY` and to its original `JCIEntity` via `HAS_HISTORICAL_STATE`.
-9. For `changeType = CREATED`, the target ID must be unused and `requestedRevision = null`. Only `SUCCESS` creates the new entity with `revision = 1`, `CREATED_BY` and exactly one `CHANGED_BY`; no `PiH` is created. `CONFLICT` or `FAILED` creates no target node, `CHANGED_BY` or history.
+9. For `CREATED`, the target ID must be free and `requestedRevision = null`. Only `SUCCESS` creates the new target with `revision = 1`, `CREATED_BY`, and exactly one `CHANGED_BY`. No `PiH` is created for that new target; existing mutable owners changed by its domain relationships receive their own `PiH` under section 2.2.8. `CONFLICT` or `FAILED` commits neither the target nor any domain delta or history.
 10. The executed SYNC definition checks all `RaN` and model conditions relevant to the change.
 11. Clearly derivable and permissible adjustments may be processed. When applicable `RaN` conflict, the higher `priority` decides only that concrete contradiction. A tie or unevaluable semantics creates an open `RaNConflict` and is not resolved silently.
 12. `SYNC` is the stored process definition; `SyncRun` is mutable technical runtime state; `SyncEvent` is immutable completion documentation. If the SYNC definition itself changes, its previous state is recorded as `PiH` like any other historizable `JCIEntity`.
@@ -1826,19 +1926,19 @@ PiH and associated HistoricalCorrections for historical discrepancies
 14. A `ChangeEvent` for `HISTORICAL_CORRECTION` has exactly one `TARGETS_HISTORY`, no `CHANGED_BY` source, and `requestedRevision = 1`. The `PiH` later connected through `CORRECTS` must be the same target.
 15. A confirmed historical discrepancy creates a `HistoricalCorrection` after successful validation and never a new `PiH` of the existing `PiH`.
 16. Every `HistoricalCorrection` created by a run remains connected to exactly one `SyncEvent` via `CREATES_CORRECTION`, to that event's triggering `ChangeEvent` via `CAUSED_BY`, and to exactly one unchanged `PiH` via `CORRECTS`.
-17. Before a historical correction, `SYNC` computes the effective `HistoryView`, compares its hash with `expectedHistoryViewHash`, and serializes commits per `PiH`. A stale hash produces `CONFLICT` and no correction.
-18. Multiple active corrections of one `PiH` may only have disjoint `correctedFields`. An overlapping correction must fully supersede exactly one active predecessor via `SUPERSEDES`; ambiguous or multiple overlaps produce `CONFLICT`.
+17. `SYNC` serializes all JCI write paths under section 12.8 and recomputes the current `HistoryView` under the gate. A mismatching `expectedHistoryViewHash`, profile error, or path overlap outside the supersession rule causes `CONFLICT` without a correction.
+18. Non-superseded corrections of one `PiH` have canonical paths that do not overlap with each other or internally under section 2.2.9. Equality and ancestor/descendant relationships count as overlap. No overlap permits no `SUPERSEDES`. Exactly one overlapping active correction must be fully superseded. More than one overlapping active correction causes `CONFLICT` because `SUPERSEDES = 0..1`.
 19. A correction to the current model is processed separately from the historical correction and has its own change process.
 20. A `SyncEvent` is created only after the technical attempt has completed or been stopped in a controlled manner and all required facts are known.
 21. If final `SyncEvent` storage is temporarily impossible, it is retried with the same `runId`, the same `ChangeEvent` and the same idempotency key.
 22. A failed attempt creates a `SyncEvent` with `outcome = FAILED`; incomplete domain changes must not remain as current model state. Retrying event storage must not re-execute the failed domain change.
 23. Repeated submission of the same change request must be detected through immutable `idempotencyKey`. Every actual attempt receives a unique `runId` and its own `SyncEvent`, but must not apply the same domain change more than once.
-24. A new `Verification` binds the tested revisions through `evaluatedResultRevision` and `checkedCriterionRevision`. `SYNC` validates them in a consistent view and again immediately before commit.
+24. A new `Verification` binds exactly the checked target revisions. Under the gate, `SYNC` checks the full relevant state and final time validity; creating verification references does not itself change the bound revisions.
 25. A `Verification` is applicable only if it has not been superseded and the current revisions of its `Result` and `SuccessCriterion` still equal the bound revisions. A later target change makes the prior Verification revision-stale.
 26. For a new `Verification`, `SYNC` checks the `SUPERSEDES` chain, determines all applicable current Verifications of the criterion, and evaluates its `evaluationMode`.
-27. `SYNC` sets a `PiF1o` to `ACHIEVED` only if at least one mandatory criterion exists, every `REQUIRED` criterion is satisfied, all assigned Tasks are `COMPLETED`, all Task dependencies are satisfied, and no model or `RaN` violation exists. Optional criteria do not block the transition.
+27. A `PiF1o` may reach `ACHIEVED` only if its current Task set is non-empty and entirely `COMPLETED`, at least one current `REQUIRED` criterion exists, every current required criterion is `ACTIVE` and satisfied by applicable current Verifications, and all relevant dependency, WHY, WHO, model, and `RaN` conditions hold. Optional criteria do not block the transition.
 28. Missing, revision-stale or inapplicable Verifications, `INVALID`, `INCONCLUSIVE` or a rule conflict prevent automatic achievement. `SYNC` reports the reason and does not change the status.
-29. For Task changes, `SYNC` checks Task kind, hierarchy, parent, subtasks, prerequisites, dependent Tasks and all affected `PiF1o`. Derived Task statuses are determined bottom-up and historized like any domain change.
+29. For Task changes, `SYNC` checks kind, current scope, parents, subtasks, explicit prerequisites, dependents, and affected `PiF1o`. The joint completion view must be acyclic; atomic and composite states are derived together with prerequisites first and historized only for an actual domain delta.
 30. An open `RaNConflict` blocks every automatic change whose permissibility depends on its resolution. A resolved conflict remains traceable to the detecting `SyncEvent`, resolving `ChangeEvent` and responsible `RoleAssignment`.
 31. When CiV, `HELD_BY`, or `INFORMED_BY` changes, `SYNC` validates the three required dimensions, the permitted value holder, human decision provenance, and the shared scope of every `PiF2` grounded by it. It neither creates nor adopts a value decision automatically.
 
@@ -1854,20 +1954,20 @@ PiF1o: Response within 48 hours
                                           └── schedules ──► SyncRun (technical)
                                                                │
                                                                └── completion ──► SyncEvent
-                                                                                     ├── EXECUTES ──► SYNC: JCI-Standardprozess 1.0
+                                                                                     ├── EXECUTES ──► SYNC: JCI-Standardprozess 2.0
                                                                                      ├── AFFECTS ──► PiF1o
                                                                                      ├── AFFECTS ──► SuccessCriterion
                                                                                      ├── AFFECTS ──► Task
                                                                                      └── CREATES_HISTORY ──► PiH
 ```
 
-The technical `SyncRun` uses the SYNC definition `JCI-Standardprozess 1.0`. This checks the `PiF1o`, its success criteria, tasks, responsibilities, role activations and used `ERoFObjects`. The previous PiF1o state is recorded as `PiH`. Dependent elements only get their own `PiH` when their state is actually changed. Only after atomic completion is the immutable `SyncEvent` created; it documents the definition used as well as all checks, changes and conflicts.
+The technical `SyncRun` uses the SYNC definition `JCI-Standardprozess 2.0`. This checks the `PiF1o`, its success criteria, tasks, responsibilities, role activations and used `ERoFObjects`. The previous PiF1o state is recorded as `PiH`. Dependent elements only get their own `PiH` when their state is actually changed. The immutable `SyncEvent` is persisted atomically with the domain delta and commit record; it documents the definition used as well as all checks, changes and conflicts.
 
 ---
 
 ### 12.6 Technology-independent exchange format
 
-JCI uses UTF-8 encoded JSON documents for change requests and SYNC results. The form described here is incompatibly refined from version 1.0 and uses `schemaVersion = "1.1"`. UUIDs are transmitted as strings, timestamps follow ISO 8601 with a time zone, and domain values use `TypedValue`.
+JCI uses UTF-8 encoded JSON documents for change requests and SYNC results. The form described here is incompatibly refined from version 1.1 and uses `schemaVersion = "2.0"`. UUIDs are transmitted as strings, timestamps follow ISO 8601 with a time zone, and domain values use `TypedValue`.
 
 A `JCIChangeRequest` contains at least:
 
@@ -1899,7 +1999,7 @@ historicalCorrection = {
 }
 ```
 
-`correctedFields` contains unique, lexicographically sorted canonical JSON Pointers. `previousValue` and `correctedValue` are `TypedValueMaps` with exactly the same key set. `expectedHistoryViewHash` binds the request to the effective historical view, which is checked again before commit. A historical correction must not contain generic operations because the addressed `PiH` itself is never modified.
+`correctedFields`, `previousValue`, and `correctedValue` follow the canonical path, overlap, value, and hash contract in section 2.2.9 with exactly matching key sets. `expectedHistoryViewHash` binds the view rechecked under the gate. Historical correction contains no generic operations because the `PiH` is never rewritten.
 
 When stored, `requestId` becomes `ChangeEvent.id`, while `idempotencyKey`, target ID, target type and `requestedRevision` are copied unchanged to the `ChangeEvent`. This keeps even a failed or not-yet-completed request uniquely addressable.
 
@@ -1928,7 +2028,7 @@ For `JCISyncResult`, `affectedCount >= 1` applies to `SUCCESS` and `CONFLICT`. O
 
 Full graph or ontology exports use JSON-LD 1.1. Each entity has `@id = "urn:jci:<UUID>"` and its concrete type in `@type`. Relationships use only the canonical relationship names; Relationship properties are transferred as standalone JSON-LD relationship objects. The export contains the used versions of context, ontology and graph rules.
 
-The mandatory machine-readable schemas are under `docs/schemas/`.
+The binding machine-readable schemas are [`jci-change-request.schema.json`](../schemas/jci-change-request.schema.json), [`jci-sync-result.schema.json`](../schemas/jci-sync-result.schema.json), and [`jci-history-snapshot.schema.json`](../schemas/jci-history-snapshot.schema.json). The snapshot schema describes the content payload `{stateData, relationshipData}`; profile selection remains at `PiH.snapshotSchemaVersion`. Earlier transport schemas remain unchanged under [legacy 1.1](../schemas/legacy/1.1/). Structural schema validation does not replace candidate graph, pointer overlap, or protected commit validation.
 
 **Short example:** A change to the Task label is transmitted as `REPLACE` on the path `/name`. The role ID in the transport becomes `REQUESTED_BY`; after successful processing, the result names the generated `SyncEvent` and the historical state of the previous Task name.
 
@@ -1957,6 +2057,27 @@ Bootstrap is permitted only while no `JCIEntity` exists. Uniqueness of `bootstra
 A data import is not a bootstrap. Imported entities without provable creation provenance remain `DRAFT` until a regular synchronization run requested by a `RoleAssignment` confirms their provenance and model validity.
 
 **Short example:** In an empty database, deployment atomically creates the organization “Junaco”, a technical administration team, a technical member, its administration role, the root `RoleAssignment` and the active SYNC definition. Only after that may this root `RoleAssignment` submit a normal `CREATED` request for the first domain entity.
+
+### 12.8 Protected commit and durable recovery
+
+All JCI write paths in a database/model store use the same technical commit gate. It is outside the JCI entity and relationship catalogue and applies across organizational boundaries and currently connected graph components. This includes request acceptance, domain changes, new Verifications, historical corrections, conflict and completion documentation, imports, and migrations. Bootstrap checks the empty `JCIEntity` store under the same unique lock; a pre-initialized technical gate is not a domain bootstrap entity. Exclusive maintenance may replace the gate only when no other write path can demonstrably be active.
+
+Request acceptance durably stores the complete normalized payload and binds it immutably with `requestId`, `idempotencyKey`, target, `requestedRevision`, and profile versions. Reusing an identifier with a different payload is rejected. A transient handler invocation or a hash without a recoverable payload is insufficient. Technical request, run, outbox, and commit records are operational state outside `JCIEntity`. Each run has exclusive ownership with fencing; a superseded worker may commit neither changes nor a contradictory completion record.
+
+The binding sequence inside an explicit transaction is:
+
+1. Lock the unique existing gate before reading domain decision data.
+2. Check the durable request, run ownership, and any existing commit record. Return recorded success without reapplying the domain change.
+3. Under the lock, freshly read target revisions and the entire relevant graph view: WHY/WHO paths, valid roles and memberships, capacity, all applicable rules, current evidence, scope, correction hashes, hierarchy, prerequisites, and required absences and uniqueness conditions. Checking only revisions in the write set is insufficient.
+4. Combine all requested operations into one candidate graph; derive current sets, statuses, and rule effects together. Plan revisions and `PiH` from the ownership matrix for the actual delta. A no-op creates no fictitious predecessor state.
+5. Immediately before applying changes, determine a database timestamp as the domain decision point and validate all time-dependent preconditions and dependent derivations against it. This timestamp is inside the held lock and documented in the technical commit record. The guarantee applies at that decision point; later physical commit confirmation is not a second domain evaluation time.
+6. Atomically persist the domain delta, associated `PiH`, permitted corrections and conflict resolutions, relationships, exactly one successful `SyncEvent`, and the idempotent commit record. Only then may success be acknowledged.
+
+Every committed JCI write increments the technical `graphEpoch`, even when it only adds revision-neutral evidence. This detects new rules, edges, and Verifications that checking existing entity revisions alone would miss. Precomputation outside the lock is permitted only with a consistently read epoch and comparison against exactly the same epoch under the gate; a mismatch requires complete reevaluation or `CONFLICT`. Time validation remains mandatory. Technical heartbeats may be exempt if they do not change domain decision data; ownership is still checked under the gate.
+
+`CONFLICT` or `FAILED` commits no invalid domain changes. If the database aborted the transaction, completion documentation is recovered in a new protected transaction with the same `runId`. For an unknown commit outcome, first consult the durable record to determine whether that exact run already succeeded; a timeout alone does not justify reexecution. Unchanged retries retain the requested revision. A newly desired starting revision or different payload requires a new request. A documented no-op may return `SUCCESS` with `changedCount = 0` and no `PiH`.
+
+The Neo4j projection and explicit transaction sequence are specified in [`implementations/neo4j/JCI_NEO4J_SCHEMA.md`](implementations/neo4j/JCI_NEO4J_SCHEMA.md). Executable reference checks model decision rules and competing candidates; they are neither a production SYNC engine nor evidence of actual Neo4j transaction isolation.
 
 ## 13. Conclusion
 

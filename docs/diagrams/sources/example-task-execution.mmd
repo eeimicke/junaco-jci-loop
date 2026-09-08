@@ -5,3 +5,7 @@ flowchart TD
     Parent -->|DECOMPOSES_INTO| First
     Parent -->|DECOMPOSES_INTO| Second
     Second -->|DEPENDS_ON| First
+    Goal -->|DECOMPOSES_INTO| Prerequisite[ATOMIC Task prerequisite C]
+    Parent -->|DEPENDS_ON| Prerequisite
+    Parent -. "own prerequisite first; then current children" .-> Status[released Composite status]
+    Parent -. joint completion graph must be acyclic .-> CycleCheck[DECOMPOSES_INTO and DEPENDS_ON]

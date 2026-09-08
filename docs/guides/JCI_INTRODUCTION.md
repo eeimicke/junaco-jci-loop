@@ -42,6 +42,12 @@ Jedes `CiV` beschreibt einen einzelnen Wert durch die Dimensionen NOT, SELF und 
 
 JCI ist keine fertige Software und kein Organigramm. Es ist ein technologieunabhängiges fachliches Modell. Eine Anwendung kann es beispielsweise in Neo4j implementieren, muss dabei aber die dokumentierten Entitäten, Beziehungen, Statusregeln und Invarianten einhalten.
 
+## Kontrollierte Weiterentwicklung in Version 2.0
+
+Neue Prüf- und Ereignisbezüge verändern den geprüften Fachzustand nicht allein durch ihre Bezugnahme. Für Zielerreichung zählt der ausdrücklich bestätigte aktuelle Aufgaben- und Kriterienumfang. Eigene Voraussetzungen eines Composite haben Vorrang vor seiner Kindaggregation; Hierarchie und Abhängigkeiten werden gemeinsam auf Abschlusszyklen geprüft. Die abschließende Entscheidung und Übernahme erfolgen unter einer gemeinsamen technischen Schreibsperre. Historische Korrekturen verwenden versionierte, auf Überschneidungen geprüfte Pfade.
+
+Die [sechs Umsetzungsschritte](../changes/JCI_LOGIC_2_0.md) beschreiben Auswirkungen, Migration und Abnahmefälle. Die Referenzfunktionen sind keine fertige SYNC-Anwendung.
+
 ## Nächster Schritt
 
 Lies als Nächstes die [Übersicht der JCI-Elemente](JCI_ELEMENTS.md) oder verfolge das [durchgängige Beispiel](JCI_EXAMPLE.md).

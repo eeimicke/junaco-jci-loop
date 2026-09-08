@@ -14,6 +14,10 @@ This page leads from an accessible introduction to the formal and technical spec
 6. [SYNC specification](JCI_SYNC_SPEC.md) – processing, history, and conflicts.
 7. [Implementation guide](guides/JCI_IMPLEMENTATION_GUIDE.md) and [Neo4j schema](implementations/neo4j/JCI_NEO4J_SCHEMA.md).
 
+8. [Logic changes 2.0](changes/JCI_LOGIC_2_0.md) – six corrections, effects, migration and 23 acceptance cases.
+
+New rule, snapshot, value and exchange profiles use `2.0`. JSON-LD `1.1` and the existing vocabulary namespace remain unchanged. The [snapshot payload schema](../schemas/jci-history-snapshot.schema.json) describes historical payloads; [legacy schemas](../schemas/legacy/1.1/) preserve older profiles.
+
 ## Language policy
 
 [`docs/JCI_CONTEXT.md`](../JCI_CONTEXT.md) is the canonical specification. The English documents are controlled translations. If the versions differ, the German version temporarily prevails until the translation has been corrected and reviewed again.
@@ -22,5 +26,5 @@ Technical artifacts such as JSON Schemas, the JSON-LD context, tests, and workfl
 
 ## Diagrams
 
-The documentation uses Mermaid diagrams rendered directly by GitHub. Their sources are stored in [`../diagrams/sources`](../diagrams/sources/README.md). Entity types and relationship names remain identical in both languages; only explanatory text is translated.
+The documentation uses Mermaid diagrams rendered directly by GitHub. Their sources are stored in [`../diagrams/sources`](../diagrams/sources/README.en.md). Entity types and relationship names remain identical in both languages; only explanatory text is translated.
 

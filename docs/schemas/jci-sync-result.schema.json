@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/eeimicke/junaco-jci-loop/main/docs/schemas/jci-sync-result.schema.json",
-  "title": "JCISyncResult 1.1",
+  "title": "JCISyncResult 2.0",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -21,37 +21,91 @@
     "errors"
   ],
   "properties": {
-    "schemaVersion": {"const": "1.1"},
-    "requestId": {"type": "string", "format": "uuid"},
-    "runId": {"type": "string", "format": "uuid"},
-    "syncEventId": {"type": "string", "format": "uuid"},
-    "outcome": {"enum": ["SUCCESS", "CONFLICT", "FAILED"]},
-    "completedAt": {"type": "string", "format": "date-time"},
-    "affectedCount": {"type": "integer", "minimum": 0},
-    "changedCount": {"type": "integer", "minimum": 0},
-    "historyCount": {"type": "integer", "minimum": 0},
-    "correctionCount": {"type": "integer", "minimum": 0},
-    "conflictCount": {"type": "integer", "minimum": 0},
+    "schemaVersion": {
+      "const": "2.0"
+    },
+    "requestId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "runId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "syncEventId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "outcome": {
+      "enum": [
+        "SUCCESS",
+        "CONFLICT",
+        "FAILED"
+      ]
+    },
+    "completedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "affectedCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "changedCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "historyCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "correctionCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "conflictCount": {
+      "type": "integer",
+      "minimum": 0
+    },
     "affectedEntityIds": {
       "type": "array",
       "uniqueItems": true,
-      "items": {"type": "string", "format": "uuid"}
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      }
     },
     "conflictIds": {
       "type": "array",
       "uniqueItems": true,
-      "items": {"type": "string", "format": "uuid"}
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      }
     },
     "errors": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["code", "message"],
+        "required": [
+          "code",
+          "message"
+        ],
         "properties": {
-          "code": {"type": "string", "minLength": 1},
-          "message": {"type": "string", "minLength": 1},
-          "entityId": {"type": "string", "format": "uuid"}
+          "code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          },
+          "entityId": {
+            "type": "string",
+            "format": "uuid"
+          }
         }
       }
     }
@@ -59,13 +113,26 @@
   "allOf": [
     {
       "if": {
-        "properties": {"outcome": {"enum": ["SUCCESS", "CONFLICT"]}},
-        "required": ["outcome"]
+        "properties": {
+          "outcome": {
+            "enum": [
+              "SUCCESS",
+              "CONFLICT"
+            ]
+          }
+        },
+        "required": [
+          "outcome"
+        ]
       },
       "then": {
         "properties": {
-          "affectedCount": {"minimum": 1},
-          "affectedEntityIds": {"minItems": 1}
+          "affectedCount": {
+            "minimum": 1
+          },
+          "affectedEntityIds": {
+            "minItems": 1
+          }
         }
       }
     }

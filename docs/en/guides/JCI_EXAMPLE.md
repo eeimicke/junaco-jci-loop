@@ -108,9 +108,21 @@ flowchart TD
     Parent -->|DECOMPOSES_INTO| Send
     Draft -->|DEPENDS_ON| Analyse
     Send -->|DEPENDS_ON| Draft
+    Goal -->|DECOMPOSES_INTO| Prerequisite[ATOMIC: Prepare approval]
+    Parent -->|DEPENDS_ON| Prerequisite
+    Parent -. own prerequisite before current children .-> Status[status after release]
+    Parent -. combined completion check .-> CycleCheck[DECOMPOSES_INTO and DEPENDS_ON acyclic]
 ```
 
-Only atomic Tasks carry `EXECUTED_BY`, `USES`, and `PRODUCES`. Composite status is derived from direct subtasks.
+Only atomic Tasks carry `EXECUTED_BY`, `USES`, and `PRODUCES`. The released Composite first becomes `BLOCKED` when any of its own `DEPENDS_ON` prerequisites is unmet; otherwise its status is derived from current direct subtasks.
+
+### 4.1 Replacement, release, and the combined completion graph
+
+When `Create response` is replaced, the former Task remains connected to the `PiF1o` and receives `REPLACED`. Its explicitly connected successor counts in the current scope. `REVOKED` Tasks and withdrawn criteria are likewise excluded only after a confirmed scope change. The target requires at least one current Task and one current `REQUIRED` criterion; all current Tasks must be `COMPLETED` and all current mandatory criteria active and satisfied. Withdrawing a Composite does not remove its current descendants. An unresolved subtree produces `CONFLICT`.
+
+If the Composite additionally needs an approval Task through `DEPENDS_ON`, it remains `BLOCKED` until that prerequisite completes. This prerequisite is not automatically inherited by every child. If only `DRAFT` children remain after a confirmed scope change, an already released Composite becomes `ACTIVE`. An unreleased draft cannot become directly `COMPLETED` by reducing scope.
+
+If the Parent needs `Create response` to finish and that Task in turn needs the Parent through `DEPENDS_ON`, the calculated completion graph contains a cycle. `SYNC` rejects the request before adopting a partial change. All other Tasks are evaluated in the combined order of their completion prerequisites.
 
 ## 5. Environment
 
@@ -160,6 +172,8 @@ Verification
 ```
 
 The `Verification` is applicable only while it has not been superseded and the current revisions of both targets still match these bound revisions. If the criterion is later changed to twelve hours and thereby reaches revision 3, the earlier verification remains immutable but is stale for the new target state. A new verification binds the current target revisions and may point to the earlier `Verification` through `SUPERSEDES`.
+
+Creating `EVALUATES` and `CHECKS` does not change the checked target revisions. The new verification therefore remains applicable after commit. The same applies to new Evidence and supersession references. Current target achievement uses only Results from currently considered Tasks; reusing earlier work requires an explicit decision, a current Result, and traceable evidence. A PiF1o that has already become `ACHIEVED` is not reopened.
 
 ## 7. RaN types and structure
 
@@ -250,7 +264,7 @@ flowchart LR
 
 ## 9. Change and SYNC
 
-The response target is later tightened from 24 to 12 hours. Anna requests a change to an already existing `PiF1o`:
+The response target is later tightened from 24 to 12 hours. In this example the `PiF1o` is still `ACTIVE`. Anna requests its change; an already achieved target would require a new future entity:
 
 ```text
 PiF1o      ── CHANGED_BY ───► ChangeEvent
@@ -267,14 +281,17 @@ flowchart TD
     ChangeEvent -. pending: TRIGGERS = 0 .-> Pending[no completed event yet]
     ChangeEvent -. schedules attempt .-> Run[SyncRun: unique runId]
     Run -. uses .-> Definition[SYNC]
-    Run -. validates model, revisions, and RaN .-> Decision{outcome}
+    Run --> Gate[shared technical write lock]
+    Gate --> Validate[full candidate, verification set and decision time]
+    Validate --> Decision{outcome}
+    Gate -. until commit or rollback .-> Protected[properties, relationships, sets and absences protected]
     Decision --> Success[SUCCESS]
     Decision --> Conflict[CONFLICT]
     Decision --> Failed[FAILED]
-    Success --> Apply[commit atomically]
+    Success --> Apply[atomic bundle: delta, PiH, SyncEvent and receipt]
     Conflict --> Rollback[roll back completely]
     Failed --> Rollback
-    Apply --> Event[SyncEvent]
+    Apply -. includes / enthält .-> Event[SyncEvent]
     Rollback --> Event
     ChangeEvent -->|TRIGGERS| Event[SyncEvent: only after completion, unique runId]
     Event -->|EXECUTES| Definition
@@ -282,6 +299,8 @@ flowchart TD
 ```
 
 Dashed arrows are technical process steps, not stored relationships. Every completed or controlled-aborted attempt creates exactly one `SyncEvent` with the same `runId` as its `SyncRun`. A retry creates a new `runId`, a new `SyncEvent`, and another append-only `TRIGGERS` relationship.
+
+Before the final decision, a shared technical write lock protects the model store across all participating organizations. `SYNC` rereads rules, roles, the verification set, relationships, and absences under this lock. A server-side domain decision time determines the temporal validity being checked. Two concurrent requests must neither jointly create a completion cycle nor adopt the same stale verification set. A mere event reference does not increment the referenced SYNC definition or entity revision.
 
 ## 10. The three SYNC outcomes
 
@@ -328,7 +347,9 @@ flowchart LR
 
 Before commit, `SYNC` calculates the effective `HistoryView` from the immutable `PiH` and its active corrections. Only if its current hash equals the request's `expectedHistoryViewHash` may the new correction be created with the same value as `baseHistoryViewHash`. Processing is serialized per `PiH`; a stale hash produces `CONFLICT` and no correction.
 
-Two active `HistoricalCorrections` for the same `PiH` may coexist when their `correctedFields` are disjoint, for example `/stateData/name` and `/relationshipData/HAS_MEMBER:OUT:team-7/validUntil`. If fields overlap, the new correction must fully replace exactly one active predecessor through `SUPERSEDES` and repeat every value that remains valid. Ambiguous or multiple overlaps produce `CONFLICT`. The original `PiH` and every correction remain immutable.
+Two active `HistoricalCorrections` for the same `PiH` may coexist when their `correctedFields` are disjoint, for example `/stateData/properties/name` and `/relationshipData/INCOMING:HAS_MEMBER:00000000-0000-0000-0000-000000000007/properties/validUntil`. If fields overlap, the new correction must fully replace exactly one active predecessor through `SUPERSEDES` and repeat every value that remains valid. Ambiguous or multiple overlaps produce `CONFLICT`. The original `PiH` and every correction remain immutable.
+
+Correction profile 2.0 checks overlap on decoded JSON-Pointer segments: a whole relationship and one of its properties overlap; `name` and `nameLong` do not. Array indices and paths inside a TypedValue are prohibited. `ADDITION` requires an absent path; an existing `NULL` value is not absent. `previousValue` is checked against the effective view at that time. Later, the absolute `correctedValue` values of non-superseded corrections overlay the original. Older profiles receive their own resolvers; existing PiH and hashes remain unchanged.
 
 ## 12. Complete traceability
 

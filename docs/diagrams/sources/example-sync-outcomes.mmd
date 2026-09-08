@@ -3,18 +3,21 @@ flowchart TD
     ChangeEvent -. pending means TRIGGERS = 0 .-> Pending[no completed event yet]
     ChangeEvent -. plans one attempt .-> Run[SyncRun with unique runId]
     Run -. uses .-> Definition[SYNC]
-    Run -. validates .-> Decision{outcome}
+    Run --> Gate[shared technical write lock]
+    Gate --> Validate[fresh complete candidate, proof set and final decision time]
+    Validate --> Decision{outcome}
+    Gate -. held until commit or rollback .-> Protected[properties, relationships, sets and absences protected]
     Decision --> Success[SUCCESS]
     Decision --> Conflict[CONFLICT]
     Decision --> Failed[FAILED]
-    Success --> Apply[commit atomically]
+    Success --> Apply[atomic bundle: delta, PiH, SyncEvent and receipt]
     Conflict --> Rollback[roll back completely]
     Failed --> Rollback
-    Apply --> Event[SyncEvent]
+    Apply -. includes .-> Event[SyncEvent]
     Rollback --> Event
     ChangeEvent -->|TRIGGERS| Event[SyncEvent after completion]
     Event -->|EXECUTES| Definition
     Event -->|AFFECTS| Affected[resolved JCIEntity required for SUCCESS or CONFLICT]
     Failed -. may have no AFFECTS only before target resolution .-> Event
-    Apply -. CREATED only .-> NewEntity[new JCIEntity revision 1 and no PiH]
+    Apply -. CREATED only .-> NewEntity[new JCIEntity revision 1 and no own PiH]
     NewEntity -->|CHANGED_BY| ChangeEvent

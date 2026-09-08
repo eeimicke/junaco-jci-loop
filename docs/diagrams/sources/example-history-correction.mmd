@@ -8,5 +8,7 @@ flowchart LR
     SyncEvent -->|CREATES_CORRECTION| Correction
     ChangeEvent -->|TRIGGERS| SyncEvent[SyncEvent after completed run]
     Correction -. baseHistoryViewHash must match .-> View
-    Correction -. correctedFields disjoint or one active predecessor superseded .-> FieldCheck{field conflict check}
+    Correction -. decoded path prefixes must not overlap unless one predecessor fully superseded .-> FieldCheck{profile 2.0 path check}
+    View -. stable relationship keys address stored list .-> Address[whole typed property or relationship]
+    Correction -. "absolute correctedValue overlay; previousValue checked at acceptance" .-> View
     Correction -->|SUPERSEDES| Previous[one overlapping active HistoricalCorrection]
