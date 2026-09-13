@@ -429,7 +429,7 @@ coreElements:
     requiredProperties: [objectType, validFrom]
     optionalProperties: [validUntil, externalReference]
     requiredRelationships:
-      - relationship: USED_BY
+      - relationship: USES
         direction: incoming
         source: RoleAssignment
         cardinality: "1..n"
