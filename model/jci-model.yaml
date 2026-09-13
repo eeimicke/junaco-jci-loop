@@ -1,0 +1,718 @@
+schemaVersion: "2.0"
+model:
+  name: "JUNACO Continuous Integration Model for Organisations"
+  shortName: JCI
+  canonicalContext: "docs/JCI_CONTEXT.md"
+  ontology: "docs/JCI_ONTOLOGY.md"
+  relationshipCatalog: "docs/JCI_GRAPH_RULES.md"
+  syncSpecification: "docs/JCI_SYNC_SPEC.md"
+  description: "Machine-readable model contract for fields, relationships, validation, previews and derivation paths."
+
+conventions:
+  cardinalities:
+    - "0..1"
+    - "1"
+    - "0..n"
+    - "1..n"
+    - "2..n"
+  immutableEntities:
+    - PiH
+    - ChangeEvent
+    - SyncEvent
+    - HistoricalCorrection
+  nonNodeCoreElements:
+    - RoF
+    - ERoF
+  technicalNonEntity:
+    - SyncRun
+
+commonProperties:
+  - name: id
+    type: UUID
+    required: true
+    immutable: true
+  - name: entityType
+    type: EntityType
+    required: true
+    immutable: true
+  - name: name
+    type: string
+    required: true
+  - name: description
+    type: string
+    required: false
+  - name: createdAt
+    type: datetime
+    required: true
+  - name: updatedAt
+    type: datetime
+    required: true
+  - name: revision
+    type: integer
+    required: true
+    minimum: 1
+  - name: status
+    type: Status
+    required: true
+
+coreElements:
+  PiH:
+    category: past
+    storage: JCIElementInstance
+    immutable: true
+    canHistorize: false
+    definition: "Immutable historical state of an existing historizable JCIEntity."
+    requiredProperties:
+      - originalEntityId
+      - originalEntityType
+      - originalRevision
+      - recordedAt
+      - validFrom
+      - validUntil
+      - snapshotSchemaVersion
+      - stateData
+      - relationshipData
+      - contentHash
+    requiredRelationships:
+      - relationship: HAS_HISTORICAL_STATE
+        direction: incoming
+        source: historizable JCIEntity
+        cardinality: "1"
+      - relationship: CREATES_HISTORY
+        direction: incoming
+        source: SyncEvent
+        cardinality: "1"
+    optionalRelationships:
+      - relationship: PROVIDES_CONTEXT_TO
+        direction: outgoing
+        target: CiV
+        cardinality: "0..n"
+    forbiddenRelationships:
+      - "PiH -> PiH"
+    lifecycle:
+      status: [RECORDED]
+      creation: "Created from the previous state immediately before a committed change."
+      correction: "Use HistoricalCorrection; never overwrite or re-historize PiH."
+
+  CiV:
+    category: present
+    storage: JCIElementInstance
+    immutable: false
+    definition: "One value described by NOT, SELF and TO SERVE dimensions."
+    requiredProperties: [notCiV, selfCiV, toServeCiV]
+    requiredRelationships:
+      - relationship: HELD_BY
+        direction: outgoing
+        target: [RoFOrg, RoFTeam, human RoFTeamMember]
+        cardinality: "1"
+    optionalRelationships:
+      - relationship: INFORMED_BY
+        direction: outgoing
+        target: CiV
+        cardinality: "0..n"
+      - relationship: INSCRIBES_PURPOSE_IN
+        direction: outgoing
+        target: PiF2
+        cardinality: "0..n"
+      - relationship: PROVIDES_CONTEXT_TO
+        direction: incoming
+        source: PiH
+        cardinality: "0..n"
+    validation:
+      - "notCiV, selfCiV and toServeCiV are non-empty."
+      - "HELD_BY has exactly one valid value holder."
+      - "INFORMED_BY has no self-reference and is explicitly confirmed."
+
+  RaN:
+    category: present
+    storage: JCIElementInstance
+    immutable: false
+    definition: "Rule, norm, policy, constraint or boundary governing the model."
+    requiredProperties:
+      - ruleType
+      - effect
+      - statement
+      - decisionKey
+      - scopeType
+      - governedTypes
+      - condition
+      - priority
+      - validFrom
+    optionalProperties: [validUntil, approvalPolicy]
+    requiredRelationshipsWhenActive:
+      - relationship: PROTECTS
+        target: [CiV, PiF2]
+        cardinality: "1..n"
+      - relationship: GOVERNS
+        target: governedTypes
+        cardinality: "1..n"
+    optionalRelationships:
+      - relationship: APPLIES_IN
+        target: [RoFOrg, RoFTeam]
+        cardinality: "0..1"
+    validation:
+      - "Each GOVERNS target entityType occurs in governedTypes."
+      - "Active RaN protects at least one CiV and one PiF2."
+      - "Protection coherence is checked through INSCRIBES_PURPOSE_IN."
+
+  SYNC:
+    category: present
+    storage: JCIElementInstance
+    immutable: false
+    definition: "Stored definition of synchronization logic."
+    requiredProperties: [version, definition, validFrom]
+    optionalProperties: [validUntil]
+    lifecycle:
+      status: [DRAFT, ACTIVE, REPLACED, REVOKED]
+      activeRequires:
+        - "All entity and relationship types in the graph are supported."
+        - "Implementation reference and checksum are verified."
+
+  PiF2:
+    category: future
+    storage: JCIElementInstance
+    horizon: {minYearsExclusive: 10, maxYears: null}
+    definition: "Long-term future state."
+    requiredProperties: [targetState, horizonStart, contributionMode]
+    optionalProperties: [horizonEnd, targetDate]
+    requiredRelationships:
+      - relationship: INSCRIBES_PURPOSE_IN
+        direction: incoming
+        source: CiV
+        cardinality: "1..n"
+    optionalRelationships:
+      - relationship: CONTRIBUTES_TO
+        direction: incoming
+        source: PiF1s
+        cardinality: "0..n"
+      - relationship: ACCOUNTABLE_MEMBER
+        direction: outgoing
+        target: RoFTeamMember
+        cardinality: "0..1"
+    derivedFrom: [CiV]
+
+  PiF1s:
+    category: future
+    storage: JCIElementInstance
+    horizon: {minYearsExclusive: 5, maxYearsInclusive: 10}
+    definition: "Strategic future state."
+    requiredProperties: [targetState, horizonStart, contributionMode]
+    optionalProperties: [horizonEnd, targetDate]
+    requiredRelationships:
+      - relationship: CONTRIBUTES_TO
+        direction: outgoing
+        target: PiF2
+        cardinality: "1..n"
+    optionalRelationships:
+      - relationship: CONTRIBUTES_TO
+        direction: incoming
+        source: PiF1t
+        cardinality: "0..n"
+      - relationship: ACCOUNTABLE_MEMBER
+        direction: outgoing
+        target: RoFTeamMember
+        cardinality: "0..1"
+    derivedFrom: [PiF2]
+
+  PiF1t:
+    category: future
+    storage: JCIElementInstance
+    horizon: {minYearsInclusive: 1, maxYearsInclusive: 5}
+    definition: "Tactical future state."
+    requiredProperties: [targetState, horizonStart, contributionMode]
+    optionalProperties: [horizonEnd, targetDate]
+    requiredRelationships:
+      - relationship: CONTRIBUTES_TO
+        direction: outgoing
+        target: PiF1s
+        cardinality: "1..n"
+    optionalRelationships:
+      - relationship: CONTRIBUTES_TO
+        direction: incoming
+        source: PiF1o
+        cardinality: "0..n"
+      - relationship: ACCOUNTABLE_MEMBER
+        direction: outgoing
+        target: RoFTeamMember
+        cardinality: "0..1"
+    derivedFrom: [PiF1s]
+
+  PiF1o:
+    category: future
+    storage: JCIElementInstance
+    horizon: {maxYearsExclusive: 1}
+    definition: "Operational future state, not an activity."
+    requiredProperties: [targetState, horizonStart]
+    optionalProperties: [horizonEnd, targetDate]
+    requiredRelationships:
+      - relationship: CONTRIBUTES_TO
+        direction: outgoing
+        target: PiF1t
+        cardinality: "1..n"
+      - relationship: HAS_SUCCESS_CRITERIA
+        direction: outgoing
+        target: SuccessCriterion
+        cardinality: "1..n"
+      - relationship: ACCOUNTABLE_MEMBER
+        direction: outgoing
+        target: RoFTeamMember
+        cardinality: "1"
+      - relationship: DECOMPOSES_INTO
+        direction: outgoing
+        target: Task
+        cardinality: "1..n"
+    derivedFrom: [PiF1t]
+    validation:
+      - "Current task scope is non-empty."
+      - "At least one current REQUIRED SuccessCriterion exists."
+      - "WHY, WHO, model and RaN conditions are satisfied before ACHIEVED."
+
+  RoF:
+    category: present
+    storage: modelSpace
+    node: false
+    definition: "Conceptual organization, team, membership and role space."
+    materializedBy: [RoFOrg, RoFOrgRelationship, RoFTeam, RoFTeamMember, RoFRole, RoleAssignment]
+
+  ERoF:
+    category: present
+    storage: modelSpace
+    node: false
+    definition: "Derived environment space of acting roles and functions."
+    materializedBy: [ERoFObject, RoFOrgRelationship, RoleAssignment]
+
+  Task:
+    category: execution
+    storage: GraphObject
+    definition: "Activity that realizes a PiF1o; never a future-state element."
+    requiredProperties: [taskKind]
+    requiredRelationships:
+      - relationship: RESPONSIBLE_TEAM
+        target: RoFTeam
+        cardinality: "1"
+    optionalRelationships:
+      - relationship: DECOMPOSES_INTO
+        target: Task
+        cardinality: "0..n"
+      - relationship: DEPENDS_ON
+        target: Task
+        cardinality: "0..n"
+      - relationship: EXECUTED_BY
+        target: RoleAssignment
+        cardinality: "0..n"
+      - relationship: USES
+        target: ERoFObject
+        cardinality: "0..n"
+      - relationship: PRODUCES
+        target: Result
+        cardinality: "0..n"
+    validation:
+      - "ATOMIC tasks may execute, use environmental objects and produce Results."
+      - "COMPOSITE tasks have children and no EXECUTED_BY, USES or PRODUCES relationships."
+
+  Result:
+    category: execution
+    storage: GraphObject
+    definition: "Result produced by an atomic Task."
+    requiredProperties: [resultType, value, producedAt]
+    requiredRelationships:
+      - relationship: PRODUCES
+        direction: incoming
+        source: Task
+        cardinality: "1"
+
+  Verification:
+    category: verification
+    storage: GraphObject
+    immutable: true
+    definition: "Immutable verification of one Result against one SuccessCriterion."
+    requiredProperties: [method, outcome, verifiedAt, evaluatedResultRevision, checkedCriterionRevision]
+    requiredRelationships:
+      - relationship: EVALUATES
+        target: Result
+        cardinality: "1"
+      - relationship: CHECKS
+        target: SuccessCriterion
+        cardinality: "1"
+    optionalRelationships:
+      - relationship: USES_EVIDENCE
+        target: Evidence
+        cardinality: "0..n"
+      - relationship: SUPERSEDES
+        target: Verification
+        cardinality: "0..1"
+
+  SuccessCriterion:
+    category: verification
+    storage: GraphObject
+    requiredProperties: [criterion, measurementType, requirementLevel, evaluationMode, operator, targetValue]
+    optionalProperties: [unit]
+
+  Evidence:
+    category: verification
+    storage: GraphObject
+    requiredProperties: [evidenceType, reference, capturedAt]
+    optionalProperties: [checksum]
+
+  RoFOrg:
+    category: organization
+    storage: GraphObject
+    requiredProperties: [legalName, orgType]
+    optionalProperties: [externalReference]
+    requiredRelationships:
+      - relationship: HAS_TEAM
+        target: RoFTeam
+        cardinality: "1..n"
+
+  RoFOrgRelationship:
+    category: organization
+    storage: GraphObject
+    requiredProperties: [type, validFrom]
+    optionalProperties: [validUntil]
+    requiredRelationships:
+      - relationship: SOURCE_ORG
+        target: RoFOrg
+        cardinality: "1"
+      - relationship: TARGET_ORG
+        target: RoFOrg
+        cardinality: "1"
+      - relationship: REPRESENTED_BY
+        target: RoleAssignment
+        cardinality: "2..n"
+
+  RoFTeam:
+    category: organization
+    storage: GraphObject
+    requiredProperties: [teamType, validFrom]
+    optionalProperties: [validUntil]
+    requiredRelationships:
+      - relationship: HAS_MEMBER
+        target: RoFTeamMember
+        cardinality: "1..n"
+
+  RoFTeamMember:
+    category: organization
+    storage: GraphObject
+    requiredProperties: [memberType, displayName]
+    optionalProperties: [externalReference]
+    requiredRelationships:
+      - relationship: HAS_ROLE
+        target: RoFRole
+        cardinality: "1..n"
+    optionalRelationships:
+      - relationship: HAS_ASSIGNMENT
+        target: RoleAssignment
+        cardinality: "0..n"
+
+  RoFRole:
+    category: organization
+    storage: GraphObject
+    requiredProperties: [roleName, responsibility]
+    optionalProperties: [roleType]
+
+  RoleAssignment:
+    category: organization
+    storage: GraphObject
+    requiredProperties: [validFrom]
+    optionalProperties: [validUntil, allocation, bootstrapKey]
+    requiredRelationships:
+      - relationship: IN_TEAM
+        target: RoFTeam
+        cardinality: "1"
+      - relationship: ACTIVATES_ROLE
+        target: RoFRole
+        cardinality: "1"
+
+  ERoFObject:
+    category: environment
+    storage: GraphObject
+    requiredProperties: [objectType, validFrom]
+    optionalProperties: [validUntil, externalReference]
+    requiredRelationships:
+      - relationship: USES
+        direction: incoming
+        source: RoleAssignment
+        cardinality: "1..n"
+
+  ChangeEvent:
+    category: change
+    storage: GraphObject
+    immutable: true
+    requiredProperties: [changeType, occurredAt, reason, idempotencyKey, targetEntityId, targetEntityType, requestedRevision]
+    optionalRelationships:
+      - relationship: REQUESTED_BY
+        target: RoleAssignment
+        cardinality: "1"
+      - relationship: APPROVED_BY
+        target: RoleAssignment
+        cardinality: "0..n"
+      - relationship: TARGETS_HISTORY
+        target: PiH
+        cardinality: "0..1"
+      - relationship: USES_EVIDENCE
+        target: Evidence
+        cardinality: "0..n"
+
+  SyncEvent:
+    category: change
+    storage: GraphObject
+    immutable: true
+    requiredProperties: [runId, startedAt, completedAt, outcome, affectedCount, changedCount, historyCount, correctionCount, conflictCount]
+    requiredRelationships:
+      - relationship: EXECUTES
+        target: SYNC
+        cardinality: "1"
+    optionalRelationships:
+      - relationship: AFFECTS
+        target: JCIEntity
+        cardinality: "0..n"
+      - relationship: CREATES_HISTORY
+        target: PiH
+        cardinality: "0..n"
+      - relationship: CREATES_CORRECTION
+        target: HistoricalCorrection
+        cardinality: "0..n"
+
+  RaNConflict:
+    category: change
+    storage: GraphObject
+    requiredProperties: [conflictKey, conflictType, detectedAt, reason]
+    requiredRelationships:
+      - relationship: CONFLICTING_RULE
+        target: RaN
+        cardinality: "1..n"
+      - relationship: AFFECTS
+        target: JCIEntity
+        cardinality: "1..n"
+      - relationship: DETECTED_BY
+        target: SyncEvent
+        cardinality: "1"
+    optionalRelationships:
+      - relationship: RESOLVED_BY
+        target: RoleAssignment
+        cardinality: "0..1"
+      - relationship: RESOLVED_THROUGH
+        target: ChangeEvent
+        cardinality: "0..1"
+      - relationship: USES_EVIDENCE
+        target: Evidence
+        cardinality: "0..n"
+
+  HistoricalCorrection:
+    category: change
+    storage: GraphObject
+    immutable: true
+    requiredProperties: [correctionType, reason, correctedAt, valueSchemaVersion, baseHistoryViewHash, correctedFields, previousValue, correctedValue]
+    requiredRelationships:
+      - relationship: CORRECTS
+        target: PiH
+        cardinality: "1"
+      - relationship: CAUSED_BY
+        target: ChangeEvent
+        cardinality: "1"
+      - relationship: CORRECTED_BY
+        target: RoleAssignment
+        cardinality: "1"
+    optionalRelationships:
+      - relationship: USES_EVIDENCE
+        target: Evidence
+        cardinality: "0..n"
+      - relationship: SUPERSEDES
+        target: HistoricalCorrection
+        cardinality: "0..1"
+
+relationships:
+  - type: PROVIDES_CONTEXT_TO
+    source: PiH
+    target: CiV
+    cardinality: {sourceToTarget: "0..n", targetToSource: "0..n"}
+  - type: INSCRIBES_PURPOSE_IN
+    source: CiV
+    target: PiF2
+    cardinality: {sourceToTarget: "0..n", targetToSource: "1..n"}
+  - type: CONTRIBUTES_TO
+    source: [PiF1o, PiF1t, PiF1s]
+    target: [PiF1t, PiF1s, PiF2]
+    cardinality: {sourceToTarget: "1..n", targetToSource: "0..n"}
+  - type: DECOMPOSES_INTO
+    source: [PiF1o, Task]
+    target: Task
+    cardinality: {sourceToTarget: "0..n", targetToSource: "1"}
+  - type: HAS_HISTORICAL_STATE
+    source: historizable JCIEntity
+    target: PiH
+    cardinality: {sourceToTarget: "0..n", targetToSource: "1"}
+  - type: CREATES_HISTORY
+    source: SyncEvent
+    target: PiH
+    cardinality: {sourceToTarget: "0..n", targetToSource: "1"}
+  - type: CHANGED_BY
+    source: historizable JCIEntity
+    target: ChangeEvent
+    cardinality: {sourceToTarget: "0..n", targetToSource: "0..1"}
+  - type: TRIGGERS
+    source: ChangeEvent
+    target: SyncEvent
+    cardinality: {sourceToTarget: "0..n", targetToSource: "1"}
+
+validation:
+  order:
+    - bootstrapOrProvenance
+    - commonProperties
+    - typeSpecificProperties
+    - relationshipTypesAndCardinalities
+    - statusTransition
+    - valueAndScopeRules
+    - whyWhoWherePaths
+    - verificationRevisions
+    - currentTaskAndCriterionScope
+    - ranProtectionAndConflicts
+    - snapshotAndCorrectionRules
+    - finalCandidateAndDecisionTime
+  global:
+    - idIsUnique
+    - entityTypeMatchesConcreteType
+    - noEmptyRequiredFields
+    - noUnknownRelationshipTypes
+    - noSelfRelationshipsUnlessExplicitlyAllowed
+    - noCyclesWhereForbidden
+  status:
+    PiH: [RECORDED]
+    ChangeEvent: [RECORDED]
+    SyncEvent: [RECORDED]
+    HistoricalCorrection: [RECORDED]
+    CiV: [DRAFT, ACTIVE, REPLACED, REVOKED]
+    RaN: [DRAFT, ACTIVE, REPLACED, REVOKED]
+    SYNC: [DRAFT, ACTIVE, REPLACED, REVOKED]
+    PiF2: [DRAFT, ACTIVE, ACHIEVED, REPLACED, REVOKED]
+    PiF1s: [DRAFT, ACTIVE, ACHIEVED, REPLACED, REVOKED]
+    PiF1t: [DRAFT, ACTIVE, ACHIEVED, REPLACED, REVOKED]
+    PiF1o: [DRAFT, ACTIVE, ACHIEVED, REPLACED, REVOKED]
+    Task: [DRAFT, ACTIVE, BLOCKED, COMPLETED, REPLACED, REVOKED]
+    Verification: [COMPLETED]
+
+preview:
+  defaultFields: [entityType, name, status, revision, updatedAt]
+  sections:
+    - identity
+    - definition
+    - requiredFields
+    - relationships
+    - lifecycle
+    - validationHints
+    - history
+  elementFields:
+    PiH: [originalEntityType, originalEntityId, originalRevision, recordedAt, validFrom, validUntil, contentHash]
+    CiV: [name, notCiV, selfCiV, toServeCiV, heldBy, status]
+    PiF2: [name, targetState, horizonStart, horizonEnd, contributionMode, status]
+    PiF1s: [name, targetState, horizonStart, horizonEnd, contributionMode, status]
+    PiF1t: [name, targetState, horizonStart, horizonEnd, contributionMode, status]
+    PiF1o: [name, targetState, horizonStart, horizonEnd, status, accountableMember]
+    RaN: [name, statement, effect, decisionKey, scopeType, priority, status]
+    SYNC: [name, version, validFrom, validUntil, status]
+    RoF: [organization, team, member, role, roleAssignment]
+    ERoF: [environmentObjects, organizationalRelationships]
+
+hints:
+  required:
+    PiF1o:
+      - field: targetState
+        message: "PiF1o benötigt einen konkret beschriebenen Zielzustand."
+      - relationship: HAS_SUCCESS_CRITERIA
+        message: "PiF1o benötigt mindestens ein Erfolgskriterium."
+      - relationship: ACCOUNTABLE_MEMBER
+        message: "PiF1o benötigt genau ein verantwortliches Teammitglied."
+      - relationship: DECOMPOSES_INTO
+        message: "PiF1o benötigt mindestens einen Task."
+    PiH:
+      - field: stateData
+        message: "PiH benötigt den unveränderlichen früheren Zustand."
+      - field: relationshipData
+        message: "PiH benötigt die damals gültigen eigenen Beziehungen."
+      - relationship: HAS_HISTORICAL_STATE
+        message: "PiH muss genau einer ursprünglichen JCIEntity zugeordnet sein."
+  warning:
+    - when: changeWithoutPreviousState
+      message: "Eine Änderung an einer bestehenden JCIEntity benötigt vor dem Commit ein PiH."
+    - when: newEntity
+      message: "Eine neue Entity besitzt noch keinen Vorgängerzustand und erzeugt kein PiH."
+    - when: historicalCorrection
+      message: "PiH bleibt unverändert; verwende HistoricalCorrection."
+    - when: missingWhyPath
+      message: "Der WHY-Pfad von Task zu CiV ist nicht vollständig."
+    - when: missingWhoPath
+      message: "Der WHO-Pfad über RoleAssignment, Team und Organisation ist nicht vollständig."
+
+previewRules:
+  - id: futureChain
+    show: [CiV, PiF2, PiF1s, PiF1t, PiF1o]
+    direction: downward
+  - id: whyPath
+    from: Task
+    to: CiV
+    path: [DECOMPOSES_INTO, CONTRIBUTES_TO, INSCRIBES_PURPOSE_IN]
+    direction: reverse
+  - id: whoPath
+    from: Task
+    path: [EXECUTED_BY, HAS_ASSIGNMENT, IN_TEAM, HAS_TEAM]
+    direction: forward
+  - id: environmentPath
+    from: Task
+    path: [EXECUTED_BY, USES]
+    target: ERoFObject
+  - id: historyPath
+    from: JCIEntity
+    path: [HAS_HISTORICAL_STATE, CREATES_HISTORY]
+    target: PiH
+
+validationRules:
+  - id: whyPathComplete
+    appliesTo: [Task]
+    requiresPath: [PiF1o, PiF1t, PiF1s, PiF2, CiV]
+  - id: pif1oReadyForAchievement
+    appliesTo: [PiF1o]
+    requires:
+      - currentTaskScopeNonEmpty
+      - allCurrentTasksCompleted
+      - currentRequiredCriterion
+      - currentRequiredCriteriaVerified
+      - whyPathComplete
+      - whoPathComplete
+      - applicableRaNPass
+  - id: pihBeforeChange
+    appliesTo: [allExistingMutableJCIEntities]
+    before: [propertyChange, statusChange, relationshipChange]
+    requires: [createPiH, incrementRevision]
+  - id: noPiHRecursion
+    appliesTo: [PiH]
+    forbids: [HISTORIZED_AS, HAS_HISTORICAL_STATE, CREATES_HISTORY]
+  - id: activeEnvironmentUsage
+    appliesTo: [ERoFObject]
+    requiresRelationship:
+      type: USES
+      source: RoleAssignment
+      cardinality: "1..n"
+
+lifecycle:
+  beforeChange:
+    - identifyAffectedEntities
+    - validateCandidate
+    - createPiHForExistingOwners
+    - incrementOwnerRevision
+    - commitAtomically
+  create:
+    - "New entities start at revision 1."
+    - "New entities have no predecessor PiH."
+  historicalCorrection:
+    - "Do not modify PiH."
+    - "Create HistoricalCorrection with CORRECTS to the target PiH."
+
+references:
+  canonicalSpecification: "docs/JCI_CONTEXT.md"
+  ontology: "docs/JCI_ONTOLOGY.md"
+  graphRules: "docs/JCI_GRAPH_RULES.md"
+  syncSpecification: "docs/JCI_SYNC_SPEC.md"
+  schemas:
+    - "schemas/jci-change-request.schema.json"
+    - "schemas/jci-sync-result.schema.json"
+    - "schemas/jci-history-snapshot.schema.json"

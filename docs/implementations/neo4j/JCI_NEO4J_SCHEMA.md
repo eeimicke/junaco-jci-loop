@@ -6,9 +6,9 @@ Dieses Dokument konkretisiert die technische Abbildung des JCI-Modells in Neo4j.
 
 ## Regel- und Snapshotprofil 2.0
 
-Neue SYNC-Vorgänge verwenden Regelpaket, Ontologie, Graphregeln, SYNC-Spezifikation, snapshotSchemaVersion, valueSchemaVersion und AustauschschemaVersion 2.0. JSON-LD bleibt 1.1; die bestehenden Namespace-IRIs /1.0# sind Identitäten und keine Regelversion. Alte Profile werden ausdrücklich über ihre Resolver gelesen. Bestehende PiH, HistoricalCorrections, SyncEvents und Hashes werden nicht nachträglich umgeschrieben oder neu berechnet.
+Neue SYNC-Vorgänge verwenden Regelpaket, Ontologie, Graphregeln, SYNC-Spezifikation, snapshotSchemaVersion, valueSchemaVersion und AustauschschemaVersion 2.0. Freigabepflichtige Vorgänge benötigen zusätzlich die ausdrückliche Handler-Fähigkeit `approvalProfileVersion = "1.0"`; ein Handler ohne diese Fähigkeit weist sie ab. JSON-LD bleibt 1.1; die bestehenden Namespace-IRIs /1.0# sind Identitäten und keine Regelversion. Alte Profile werden ausdrücklich über ihre Resolver gelesen. Bestehende PiH, HistoricalCorrections, SyncEvents, Freigaben und Hashes werden nicht nachträglich umgeschrieben oder neu berechnet.
 
-Die Revision gehört zum fachlichen Zustand nach der Endpunkt-Eigentumsmatrix in Abschnitt 2.2.8 von [`JCI_CONTEXT.md`](../../JCI_CONTEXT.md). Neue Prüf-, Ereignis- und Korrekturbezüge revisionieren nicht ihre Referenzziele. TRIGGERS, CHANGED_BY, HAS_HISTORICAL_STATE und neue CREATED_BY-Bezüge erzeugen keine Historisierungsschleifen. Ein zulässiges Nachtragen von CREATED_BY am Importentwurf ändert dessen Zustand; RaNConflict-Auflösung nur den Konflikt. PROVIDES_CONTEXT_TO gehört dem CiV-Kontext. Übrige katalogisierte Strukturbeziehungen ändern beide veränderlichen Eigentümer. Neue PiH projizieren nur den ihnen zugeordneten revisionierten Beziehungszustand. Revisionsneutrale Bezüge unterliegen dennoch vollständig Gate/graphEpoch und ihren eigenen unveränderlichen Provenienzregeln.
+Die Revision gehört zum fachlichen Zustand nach der Endpunkt-Eigentumsmatrix in Abschnitt 2.2.8 von [`JCI_CONTEXT.md`](../../JCI_CONTEXT.md). Neue Prüf-, Ereignis- und Korrekturbezüge revisionieren nicht ihre Referenzziele. `TRIGGERS`, `CHANGED_BY`, `HAS_HISTORICAL_STATE`, `APPROVED_BY` und neue `CREATED_BY`-Bezüge erzeugen keine Historisierungsschleifen. `APPROVED_BY` gehört ausschließlich dem bei Annahme erzeugten unveränderlichen `ChangeEvent`; das referenzierte `RoleAssignment` wird dadurch nicht revisioniert. Ein zulässiges Nachtragen von `CREATED_BY` am Importentwurf ändert dessen Zustand; RaNConflict-Auflösung nur den Konflikt. `PROVIDES_CONTEXT_TO` gehört dem CiV-Kontext. Übrige katalogisierte Strukturbeziehungen ändern beide veränderlichen Eigentümer. Neue PiH projizieren nur den ihnen zugeordneten revisionierten Beziehungszustand. Revisionsneutrale Bezüge unterliegen dennoch vollständig Gate/graphEpoch und ihren eigenen unveränderlichen Provenienzregeln.
 
 ## Gemeinsame Label- und Eigenschaftsstrategie
 
@@ -58,6 +58,7 @@ Neo4j-Properties speichern keine verschachtelten JSON-Objekte. Die kanonischen S
 | Fachliches Feld                       | Neo4j-Property         |
 | ------------------------------------- | ---------------------- |
 | `RaN.condition`                       | `conditionJson`        |
+| `RaN.approvalPolicy`                  | `approvalPolicyJson`   |
 | `SYNC.definition`                     | `definitionJson`       |
 | `Result.value`                        | `valueJson`            |
 | `PiH.stateData`                       | `stateDataJson`        |
@@ -92,6 +93,16 @@ Ein historischer Korrekturauftrag verwendet zusätzlich die kanonische Beziehung
 ```
 
 Sie benennt das unveränderliche `PiH`, auf das sich der Auftrag bezieht. Sie ersetzt weder `CHANGED_BY` noch `CORRECTS`: Ein `PiH` erhält niemals `CHANGED_BY`; die erst nach erfolgreicher Prüfung erzeugte `HistoricalCorrection` verweist weiterhin über `CORRECTS` auf dasselbe `PiH`.
+
+Eine angenommene, freigabepflichtige Änderung verwendet außerdem:
+
+```text
+(:ChangeEvent)-[:APPROVED_BY {
+  receiptId, decidedAt, requestHash, approvalHash
+}]->(:RoleAssignment)
+```
+
+`APPROVED_BY` wird nicht durch eine generische `CONNECT`-Operation angelegt. Das Gate leitet die Kanten ausschließlich aus vollständig verifizierten `JCIApprovalEnvelope`-Belegen ab und erzeugt sie gemeinsam mit dem neuen `ChangeEvent`. Je `ChangeEvent` und `RoleAssignment` ist genau eine Kante zulässig. Ein normaler nicht freigabepflichtiger Auftrag besitzt `0..n`, ein angenommener freigabepflichtiger Auftrag `1..n` solcher Kanten. Sie dürfen nach Annahme weder ergänzt noch verändert oder entfernt werden.
 
 ## Labels und Eigenschaften für Tasks
 
@@ -166,6 +177,33 @@ FOR (e:ChangeEvent) REQUIRE e.requestedRevision IS :: INTEGER;
 CREATE INDEX change_event_target_index IF NOT EXISTS
 FOR (e:ChangeEvent) ON (e.targetEntityId, e.targetEntityType);
 
+CREATE CONSTRAINT approved_by_receipt_id_exists IF NOT EXISTS
+FOR ()-[approval:APPROVED_BY]-() REQUIRE approval.receiptId IS NOT NULL;
+
+CREATE CONSTRAINT approved_by_receipt_id_unique IF NOT EXISTS
+FOR ()-[approval:APPROVED_BY]-() REQUIRE approval.receiptId IS UNIQUE;
+
+CREATE CONSTRAINT approved_by_receipt_id_type IF NOT EXISTS
+FOR ()-[approval:APPROVED_BY]-() REQUIRE approval.receiptId IS :: STRING;
+
+CREATE CONSTRAINT approved_by_decided_at_exists IF NOT EXISTS
+FOR ()-[approval:APPROVED_BY]-() REQUIRE approval.decidedAt IS NOT NULL;
+
+CREATE CONSTRAINT approved_by_decided_at_type IF NOT EXISTS
+FOR ()-[approval:APPROVED_BY]-() REQUIRE approval.decidedAt IS :: ZONED DATETIME;
+
+CREATE CONSTRAINT approved_by_request_hash_exists IF NOT EXISTS
+FOR ()-[approval:APPROVED_BY]-() REQUIRE approval.requestHash IS NOT NULL;
+
+CREATE CONSTRAINT approved_by_request_hash_type IF NOT EXISTS
+FOR ()-[approval:APPROVED_BY]-() REQUIRE approval.requestHash IS :: STRING;
+
+CREATE CONSTRAINT approved_by_approval_hash_exists IF NOT EXISTS
+FOR ()-[approval:APPROVED_BY]-() REQUIRE approval.approvalHash IS NOT NULL;
+
+CREATE CONSTRAINT approved_by_approval_hash_type IF NOT EXISTS
+FOR ()-[approval:APPROVED_BY]-() REQUIRE approval.approvalHash IS :: STRING;
+
 CREATE CONSTRAINT sync_event_run_id_exists IF NOT EXISTS
 FOR (e:SyncEvent) REQUIRE e.runId IS NOT NULL;
 
@@ -235,13 +273,17 @@ FOR (e:SyncEvent) REQUIRE e.conflictCount IS NOT NULL;
 
 ## Technische Schreibsperre
 
-Die folgenden technischen Labels sind keine JCIEntity, GraphObject oder zusätzliche fachliche Typen und werden nicht als JCI-Ontologie exportiert. Genau ein Gate schützt den gesamten gemeinsamen JCI-Datenbankbestand, einschließlich aller RoFOrg und fachlich revisionsneutraler Auditappend-Transaktionen. Technische Request-/Runbelege enthalten den vollständigen unveränderlichen Request, Run-Besitz/Fencing, verwendete SYNC-Revision/Prüfsumme und Entscheidungsausgang. Erfolgsbelege existieren höchstens einmal je Auftrag; Outboxeinträge verweisen auf genau ein Abschlussereignis.
+Die folgenden technischen Labels sind keine JCIEntity, GraphObject oder zusätzliche fachliche Typen und werden nicht als JCI-Ontologie exportiert. Genau ein Gate schützt den gesamten gemeinsamen JCI-Datenbankbestand, einschließlich aller RoFOrg und fachlich revisionsneutraler Auditappend-Transaktionen. Technische Request-/Runbelege enthalten den vollständigen unveränderlichen Request, Run-Besitz/Fencing, verwendete SYNC-Revision/Prüfsumme und Entscheidungsausgang. `JCITechnicalRequest.proposalJson` bewahrt den exakten Basisauftrag 2.0. Bei einer Freigabe bewahrt `approvalEnvelopeJson` das geschlossene Envelope 1.0 mit allen Belegen einschließlich Ablehnungen; beide Zeichenketten sind kanonisches UTF-8-JSON und werden nie als `JCIEntity` behandelt. Erfolgsbelege existieren höchstens einmal je Auftrag; Outboxeinträge verweisen auf genau ein Abschlussereignis.
 
 ```cypher
 CREATE CONSTRAINT jci_technical_gate_key_unique IF NOT EXISTS
 FOR (gate:JCITechnicalGate) REQUIRE gate.key IS UNIQUE;
 CREATE CONSTRAINT jci_technical_request_key_unique IF NOT EXISTS
 FOR (request:JCITechnicalRequest) REQUIRE request.idempotencyKey IS UNIQUE;
+CREATE CONSTRAINT jci_technical_request_proposal_exists IF NOT EXISTS
+FOR (request:JCITechnicalRequest) REQUIRE request.proposalJson IS NOT NULL;
+CREATE CONSTRAINT jci_technical_request_proposal_type IF NOT EXISTS
+FOR (request:JCITechnicalRequest) REQUIRE request.proposalJson IS :: STRING;
 CREATE CONSTRAINT jci_technical_run_id_unique IF NOT EXISTS
 FOR (run:JCITechnicalRun) REQUIRE run.runId IS UNIQUE;
 CREATE CONSTRAINT jci_technical_commit_request_unique IF NOT EXISTS
@@ -251,6 +293,8 @@ FOR (commit:JCITechnicalCommit) REQUIRE commit.runId IS UNIQUE;
 CREATE CONSTRAINT jci_technical_outbox_event_unique IF NOT EXISTS
 FOR (entry:JCITechnicalOutbox) REQUIRE entry.eventId IS UNIQUE;
 ```
+
+Ein noch unvollständiger, abgelehnter oder abgebrochener Freigabevorschlag bleibt ausschließlich in diesem technischen Ledger. Er erzeugt weder ein wartendes `ChangeEvent` noch einen wartenden Task-Status. Erst wenn alle aktuell abgeleiteten Anforderungen durch gültige `APPROVED`-Belege gedeckt sind, werden `ChangeEvent`, `REQUESTED_BY`, sämtliche `APPROVED_BY`-Kanten und die Einplanung des ersten Laufs atomar angenommen. `REJECTED`, `DENY`, `UNEVALUABLE`, ein abgelaufener Beleg oder eine unvollständige Route darf weder eskaliert noch als fehlende Freigabe umgedeutet werden.
 
 ```cypher
 MERGE (gate:JCITechnicalGate {key: 'MODEL_WRITE'})
@@ -734,12 +778,73 @@ RETURN elementId(relationship) AS relationshipId,
        labels(source) AS sourceLabels, labels(target) AS targetLabels;
 ```
 
+```cypher
+MATCH (source)-[approval:APPROVED_BY]->(target)
+WHERE NOT ('JCIEntity' IN labels(source)) OR NOT ('GraphObject' IN labels(source))
+   OR NOT ('ChangeEvent' IN labels(source))
+   OR NOT ('JCIEntity' IN labels(target)) OR NOT ('GraphObject' IN labels(target))
+   OR NOT ('RoleAssignment' IN labels(target))
+   OR size(keys(approval)) <> 4
+   OR any(key IN keys(approval)
+          WHERE NOT key IN ['receiptId','decidedAt','requestHash','approvalHash'])
+   OR valueType(approval.receiptId) <> 'STRING NOT NULL'
+   OR approval.receiptId <> toLower(approval.receiptId)
+   OR NOT (approval.receiptId =~
+      '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+   OR valueType(approval.decidedAt) <> 'ZONED DATETIME NOT NULL'
+   OR valueType(approval.requestHash) <> 'STRING NOT NULL'
+   OR NOT (approval.requestHash =~ '^[0-9a-f]{64}$')
+   OR valueType(approval.approvalHash) <> 'STRING NOT NULL'
+   OR NOT (approval.approvalHash =~ '^[0-9a-f]{64}$')
+RETURN elementId(approval) AS relationshipId,
+       labels(source) AS sourceLabels, labels(target) AS targetLabels,
+       properties(approval) AS invalidProperties;
+```
+
+Die folgende Prüfung läuft innerhalb derselben Annahmetransaktion nach dem Erzeugen der Kanten und vor Commit. `$verifiedApprovalProofs` wird ausschließlich vom vertrauenswürdigen Prüfadapter aus dem dauerhaften Envelope geliefert; jeder Eintrag enthält zusätzlich den vom Adapter berechneten `approvalHash`. Die Abfrage verlangt für jede Kante genau einen passenden Beleg und umgekehrt. Sie zählt rohe Kanten, nicht unterschiedliche Zielknoten:
+
+```cypher
+MATCH (change:JCIEntity:GraphObject:ChangeEvent {id: $changeEventId})
+CALL {
+  WITH change
+  OPTIONAL MATCH (change)-[edge:APPROVED_BY]
+        ->(assignment:JCIEntity:GraphObject:RoleAssignment)
+  RETURN collect(CASE WHEN edge IS NULL THEN null ELSE {
+    receiptId: edge.receiptId,
+    decidedAt: edge.decidedAt,
+    requestHash: edge.requestHash,
+    approvalHash: edge.approvalHash,
+    roleAssignmentId: assignment.id
+  } END) AS storedApprovals
+}
+WITH change, storedApprovals, $verifiedApprovalProofs AS proofs
+WHERE size(storedApprovals) <> size(proofs)
+   OR any(proof IN proofs WHERE
+        size([stored IN storedApprovals
+              WHERE stored.receiptId = proof.receiptId
+                AND stored.decidedAt = datetime(proof.decidedAt)
+                AND stored.requestHash = proof.requestHash
+                AND stored.approvalHash = proof.approvalHash
+                AND stored.roleAssignmentId = proof.roleAssignmentId]) <> 1)
+   OR any(stored IN storedApprovals WHERE
+        size([proof IN proofs
+              WHERE stored.receiptId = proof.receiptId
+                AND stored.decidedAt = datetime(proof.decidedAt)
+                AND stored.requestHash = proof.requestHash
+                AND stored.approvalHash = proof.approvalHash
+                AND stored.roleAssignmentId = proof.roleAssignmentId]) <> 1)
+RETURN change.id AS changeEventId, size(storedApprovals) AS storedCount,
+       size(proofs) AS verifiedCount;
+```
+
+Vor dieser Kantenprüfung weist der Adapter jedes Envelope zurück, wenn ein Beleg nicht denselben `requestHash` und `contextHash` wie das Envelope trägt, eine `RoleAssignment` doppelt vorkommt, ein Outcome nicht `APPROVED` ist oder `decidedAt <= decisionAt < validUntil` nicht gilt. Für jeden Beleg muss genau ein `RoFTeamMember {memberType: 'HUMAN'}` über `HAS_ASSIGNMENT` auf die genannte `RoleAssignment` auflösbar sein und dessen ID `memberId` entsprechen. Rollen-, Mitglieds-, Team- und Organisationsgültigkeit werden sowohl bei Bestätigung als auch am serverseitigen `decisionAt` geprüft. Eine beliebige Zeichenkette beweist keine Attestation: Signatur-, Sitzungsschlüssel- und Identitätsprüfung liegen im vertrauenswürdigen Adapter und sind durch Cypher allein nicht verifizierbar.
+
 Parallele Duplikatkanten dürfen keine Kardinalitätsprüfung durch ein `DISTINCT` auf den Zielknoten umgehen:
 
 ```cypher
 MATCH (source:JCIEntity)-[relationship]->(target:JCIEntity)
 WHERE type(relationship) IN [
-  'CREATED_BY','REQUESTED_BY','CORRECTED_BY','CHANGED_BY',
+  'CREATED_BY','REQUESTED_BY','APPROVED_BY','CORRECTED_BY','CHANGED_BY',
   'TARGETS_HISTORY','TRIGGERS','EXECUTES','AFFECTS',
   'HAS_HISTORICAL_STATE','CREATES_HISTORY','CREATES_CORRECTION',
   'CORRECTS','CAUSED_BY','SUPERSEDES'
@@ -920,6 +1025,30 @@ WHERE p.entityType IN ['PiF2','PiF1s','PiF1t']
   AND (p.contributionMode IS NULL OR NOT p.contributionMode IN ['ALL','ANY'])
 RETURN p.id AS futureId, p.entityType, p.contributionMode;
 ```
+
+`PiF1o` besitzt weiterhin genau eine Accountability; die höheren Zukunftsebenen besitzen jeweils `0..1`. Die Kardinalität zählt rohe Kanten und kann daher nicht durch parallele Kanten zum selben Mitglied umgangen werden:
+
+```cypher
+MATCH (source)-[accountability:ACCOUNTABLE_MEMBER]->(target)
+WHERE NOT (source:JCIEntity AND source.entityType IN ['PiF1o','PiF1t','PiF1s','PiF2'])
+   OR NOT (target:JCIEntity AND target:GraphObject AND target:RoFTeamMember)
+RETURN elementId(accountability) AS relationshipId,
+       labels(source) AS sourceLabels, labels(target) AS targetLabels;
+```
+
+```cypher
+MATCH (future:JCIEntity)
+WHERE future.entityType IN ['PiF1o','PiF1t','PiF1s','PiF2']
+OPTIONAL MATCH (future)-[accountability:ACCOUNTABLE_MEMBER]->(member)
+WITH future, count(accountability) AS rawAccountabilityCount,
+     collect(member) AS accountableMembers
+WHERE (future.entityType = 'PiF1o' AND rawAccountabilityCount <> 1)
+   OR (future.entityType IN ['PiF1t','PiF1s','PiF2'] AND rawAccountabilityCount > 1)
+RETURN future.id AS futureId, future.entityType, rawAccountabilityCount,
+       [member IN accountableMembers | member.id] AS accountableMemberIds;
+```
+
+Eine bei `Task.action.RELEASE` benötigte höhere Ebene muss im aktuellen Gate-Zustand tatsächlich eindeutig besetzt sein. Erst die Freigabeprüfung verlangt für den tatsächlich verwendeten Anker ein eindeutig zugeordnetes menschliches Mitglied und eine passende menschliche Rollenaktivierung; eine technische Accountability bleibt außerhalb dieser Route fachlich zulässig. Eine fehlende Accountability ist auf einer benötigten Route ein Modellfehler und keine implizite Befugnis.
 
 ```cypher
 MATCH (parent:JCIEntity {status: 'ACHIEVED'})
@@ -1258,6 +1387,22 @@ WHERE NOT r.effect IN ['REQUIRE','PROHIBIT','PERMIT']
 RETURN r.id AS ruleId, r.effect, r.scopeType, [scope IN scopes | scope.id] AS scopeIds;
 ```
 
+`approvalPolicyJson` ist optional. Wenn es vorhanden ist, validiert der profilgebundene Adapter vor jeder Kandidatenauswertung die geschlossene Struktur aus [`jci-history-snapshot.schema.json`](../../schemas/jci-history-snapshot.schema.json): `profileVersion = "1.0"`, `mode = ACCOUNTABLE_CHAIN | VALUE_SCOPE`, nicht leere eindeutige `roleIds` und nur für `ACCOUNTABLE_CHAIN` nicht leere eindeutige `levels`. Es gibt keine Default-Rolle, Default-Ebene oder stillschweigende Konvertierung. Cypher kann ohne JSON-Parser lediglich die Speicherform prüfen:
+
+```cypher
+MATCH (rule:JCIEntity:RaN)
+WHERE rule.approvalPolicyJson IS NOT NULL
+  AND (valueType(rule.approvalPolicyJson) <> 'STRING NOT NULL'
+       OR trim(rule.approvalPolicyJson) = '')
+RETURN rule.id AS ruleId, rule.approvalPolicyJson;
+```
+
+Jede erstmalige Task-Freigabe benötigt eine ausdrückliche `ACCOUNTABLE_CHAIN`-Policy in einer aktiven, passenden `PERMIT`-RaN für `Task.action.RELEASE`; fehlende Policy bedeutet keine Freigabe. Das Gate beginnt am eindeutigen direkten `PiF1o` und verfolgt **alle** aktuellen `CONTRIBUTES_TO`-Zweige, bis jeder Zweig an seiner ersten ausdrücklich befugten Accountability endet. `ANY` verkleinert diese Menge nicht. Nur das Fehlen einer Befugnis erlaubt den nächsten Schritt desselben Zweigs; `REJECTED`, `DENY`, `UNEVALUABLE`, Konflikt, fehlende oder mehrdeutige Zuordnung beendet die gesamte Freigabe ohne Ausweichrolle oder höhere Eskalation. Ein im Kandidaten neu eingeführtes RaN oder eine neue Accountability darf den eigenen Kandidaten nicht autorisieren; die Befugnis stammt aus dem vor der Änderung gültigen Zustand.
+
+Bei `Model.action.CONFIRM` regelt eine `VALUE_SCOPE`-RaN die genehmigende `RoleAssignment` im Scope der betroffenen alten und neuen Werteträger. `CiV`, `HELD_BY`, `INFORMED_BY`, `INSCRIBES_PURPOSE_IN` und `PROTECTS` bleiben die geschützten Modellentscheidungen; dafür wird weder `GOVERNS` zu `CiV`/`PiF2` hinzugefügt noch eine Task-Zukunftskette als Ersatz verwendet.
+
+Eine technische Anfangsbefugnis ist an ein ausdrücklich authentifiziertes menschliches Mitglied, dessen konkrete `RoleAssignment` und genau einen Werteträger gebunden. Sie gilt nur für `Model.action.CONFIRM`. Vor dem Commit der ersten aktiven `VALUE_SCOPE`-Policy ermittelt das Gate aus deren `PROTECTS`-bezogenen CiV/PiF2 genau die betroffenen Werteträger und setzt deren technischen Enrollment-Sperrmerker atomar mit dem Fachkandidaten. Dieser Merker ist monoton: Entfernung oder Widerruf der Policy darf ihn niemals löschen oder die Anfangsbefugnis reaktivieren. Ein globaler RaN-Scope erteilt kein Mandat für einen fremden Werteträger.
+
 Ein aktives RaN schützt mindestens ein CiV und ein PiF2 und regelt mindestens ein konkretes Umsetzungselement. Die folgenden Abfragen prüfen Zieltypen, Mindestkardinalitäten und die CiV-PiF2-Kohärenz. Die organisatorische Scope-Kompatibilität über zeitabhängige Mitgliedschaften und WHY-Pfade prüft das versionierte SYNC-Regelpaket.
 
 ```cypher
@@ -1521,9 +1666,11 @@ RETURN event.id AS syncEventId, triggerCount, definitionCount,
 
 Der gesamte Kandidat wird unter dem Gate mit aktuellen Mengen geprüft: Task-/Kriterienbeiträge schließen REPLACED und REVOKED aus, Pflichtmengen bleiben nicht leer, Ergebnisse müssen aus aktuellen Tasks stammen. Gemischte Abschlusszyklen werden über DECOMPOSES_INTO und DEPENDS_ON gemeinsam geprüft. Danach erfolgt Auswertung mit Voraussetzungen zuerst, Composite-eigene Voraussetzungen vor der Kindaggregation und kein Rücksprung freigegebener Composites zu DRAFT. Reine Umfangsverkleinerung gibt einen Entwurf nicht frei; DRAFT → COMPLETED bleibt ausgeschlossen. Diese Übergangsvorbedingungen benötigt der Ausgangszustand: Eine reine nachgelagerte Bestandsabfrage ersetzt sie nicht.
 
+Die Annahme eines Freigabe-Envelopes ist bereits eine eigene Gate-Transaktion. Der Handler klassifiziert aus dem unveränderten Basisauftrag und altem/neuem Zustand, ob `Task.action.RELEASE` oder `Model.action.CONFIRM` erforderlich ist; ein vom Client gewählter `decisionKey` kann diese Ableitung nur bestätigen, nicht ersetzen. Er verlangt eine aktive SYNC-Definition mit `approvalProfileVersion = "1.0"` und einer Paketprüfsumme, die genau diesen Validator bindet. Noch vor einem `ChangeEvent` speichert er Vorschlag und alle Antworten im technischen Ledger. Nur bei vollständiger Freigabe entstehen `ChangeEvent`, `REQUESTED_BY`, die unveränderlichen `APPROVED_BY`-Kanten und die Laufplanung gemeinsam. Bei Ablehnung oder unvollständiger Freigabe bleibt nur der technische Beleg; der Task bleibt unverändert.
+
 Gelesen werden auch negative Mengen und Abhängigkeiten, etwa noch nicht vorhandene RaN, Rollen-/Scopezuordnung und die aktuelle nicht abgelöste Prüfungsmenge. Ein Vergleich allein der Fachrevisionen genügt nicht. Alle Validierungen beziehen sich auf den vollständigen Kandidaten einschließlich aller neuen Kanten und tatsächlichen Folgeänderungen.
 
-Das folgende Driver-Beispiel zeigt die verbindliche Transaktionsgrenze. rules bezeichnet die expliziten Adapter des versionierten geprüften Regelpakets, keine verfügbaren Neo4j-Builtins: read_complete_state muss die vollständige relevante Lesesicht liefern, evaluate_complete_candidate alle Modell-, Zeit-, Pfad- und RaN-Regeln prüfen; apply_owned_domain_delta darf ausschließlich das deduplizierte zugeordnete Fachdelta schreiben. append_success_bundle schreibt in derselben Transaktion PiH, Provenienz, SyncEvent, unveränderlichen Erfolgsbeleg und Outbox. validate_persisted_bundle prüft alle Zähler und Abfragen gegen diesen vollständigen Zustand. Keine Funktion darf eine eigene Transaktion öffnen oder externe Nebenwirkungen auslösen.
+Das folgende Driver-Beispiel zeigt die verbindliche Transaktionsgrenze für den nach Annahme ausgeführten Lauf. `rules` bezeichnet die expliziten Adapter des versionierten geprüften Regelpakets, keine verfügbaren Neo4j-Builtins: `read_complete_state` muss die vollständige relevante Lesesicht liefern. `revalidate_approval` berechnet unter der Sperre den SHA-256 des exakten kanonischen Basisauftrags und einen neuen `contextHash` aus Freigabeprofil, `decisionKey`, Request-Hash, vollständiger relevanter Fachgraphsicht, abgeleiteten Anforderungen sowie Anfangsbefugnissen und ihren dauerhaften Sperrmerkern. Diese Funktion prüft alle aktuellen Zukunftszweige, RaN, Accountabilities, Rollen-/Scopegrundlagen, Belegzeiten und menschlichen Attestationen erneut. `evaluate_complete_candidate` prüft alle übrigen Modell-, Zeit-, Pfad- und RaN-Regeln; `apply_owned_domain_delta` darf ausschließlich das deduplizierte zugeordnete Fachdelta schreiben. `persist_enrollment_latches` setzt die aus der ersten aktiven `VALUE_SCOPE`-Policy abgeleiteten technischen Sperrmerker monoton in derselben Transaktion; diese Merker gehören nicht zum Fachdelta und dürfen nie gelöscht werden. `append_success_bundle` schreibt PiH, Provenienz, SyncEvent, unveränderlichen Erfolgsbeleg und Outbox. `validate_persisted_bundle` prüft alle Zähler, Freigabekanten und Abfragen gegen diesen vollständigen Zustand. Keine Funktion darf eine eigene Transaktion öffnen oder externe Nebenwirkungen auslösen.
 
 ```python
 def commit_reference(session, request_id, run_id, fencing_token, rules):
@@ -1534,6 +1681,7 @@ def commit_reference(session, request_id, run_id, fencing_token, rules):
             "RETURN g.graphEpoch AS graphEpoch"
         ).single(strict=True)
         request = rules.load_immutable_request(tx, request_id)
+        approval = rules.load_immutable_approval_if_required(tx, request_id)
         rules.assert_run_owner(tx, run_id, fencing_token)
         previous = rules.find_success(tx, request.idempotency_key)
         if previous is not None:
@@ -1543,16 +1691,23 @@ def commit_reference(session, request_id, run_id, fencing_token, rules):
         decision_at = tx.run(
             "RETURN datetime.realtime() AS decisionAt"
         ).single(strict=True)["decisionAt"]
+        approval_proofs = rules.revalidate_approval(
+            tx, state, request, approval, decision_at=decision_at
+        )
         proposal = rules.evaluate_complete_candidate(
-            state, request, decision_at=decision_at
+            state, request, decision_at=decision_at,
+            approval_proofs=approval_proofs,
         )
         rules.assert_valid(proposal)
         rules.apply_owned_domain_delta(tx, proposal)
+        rules.persist_enrollment_latches(tx, state, proposal)
         result = rules.append_success_bundle(
             tx, proposal, request, run_id, decision_at,
             graph_epoch=gate["graphEpoch"] + 1,
         )
-        rules.validate_persisted_bundle(tx, proposal, result)
+        rules.validate_persisted_bundle(
+            tx, proposal, result, approval_proofs=approval_proofs
+        )
         tx.run(
             "MATCH (g:JCITechnicalGate {key: 'MODEL_WRITE'}) "
             "SET g.graphEpoch = g.graphEpoch + 1"
@@ -1571,12 +1726,13 @@ Outboxzustellung erfolgt erst nach Commit. Nach Dispatcher-Absturz darf erneut z
 
 ## Grenzen der deklarativen Durchsetzung
 
-Neo4j-Constraints und nachgelagerte Cypher-Abfragen decken den gespeicherten Graphzustand ab, können aber vier Laufzeiteigenschaften nicht allein garantieren:
+Neo4j-Constraints und nachgelagerte Cypher-Abfragen decken den gespeicherten Graphzustand ab, können aber fünf Laufzeiteigenschaften nicht allein garantieren:
 
 1. Ein außerhalb des Graphen beendeter `SyncRun` ist erst nach Abgleich mit dem technischen Run-/Outbox-Protokoll als fehlendes `SyncEvent` erkennbar.
 2. Das Verbot späterer Änderungen oder Löschungen unveränderlicher Knoten und der ihnen zugeordneten eigenen Beziehungen benötigt eingeschränkte Schreibrollen beziehungsweise ausschließlich freigegebene SYNC-Schreibtransaktionen; ein Property Constraint ist kein Append-only-Mechanismus.
 3. Die kanonische Überlagerung von `stateDataJson`, `relationshipDataJson` und Korrekturwerten sowie die SHA-256-Bildung erfolgen im versionierten SYNC-Regelpaket. Cypher validiert Struktur, Eindeutigkeit und gespeicherte Hashform, nicht die JSON-Semantik selbst.
 4. Die Revision `1` eines neu erzeugten Ziels und die unmittelbar vor dem Commit erneut geprüften Verification- und History-Revisionen sind Transaktionsvorbedingungen. Ein späterer Snapshot des inzwischen weiterentwickelten Graphen kann diese zeitliche Tatsache nur anhand der vollständig gespeicherten Historie nachvollziehen.
+5. Kanonische Request-/Context-/Approval-Hashes sowie die kryptografische oder sitzungsgebundene Echtheit einer menschlichen Attestation benötigen das paketgebundene Hashprofil und einen vertrauenswürdigen Authentifizierungsadapter. Cypher kann gespeicherte Form, Endpunkte und die exakte Kanten-Proof-Zuordnung prüfen, aber keine beliebige Attestationszeichenkette zu einem echten Menschen machen. Ein später abgelaufenes oder widerrufenes `RoleAssignment` entwertet einen zum damaligen `decidedAt` gültigen unveränderlichen historischen Beleg nicht; aktuelle Gültigkeit wird nur bei Annahme und Fachcommit verlangt.
 
 ## Migration und Versionsführung
 
@@ -1590,6 +1746,7 @@ Neo4j-Constraints und nachgelagerte Cypher-Abfragen decken den gespeicherten Gra
 6. Historische Korrekturen über den expliziten Resolver ihres Profils lesen. Unklare Adressen, kollidierende Beziehungsschlüssel oder überlappende aktive Altkorrekturen stoppen den Übergang für den betroffenen Bestand. Ein neuer 2.0-Vorgang verwendet stabile Adressen und den eindeutig aufgelösten wirksamen View-Hash.
 7. Alte GOVERNS-Kanten zu PiF2 nicht blind in PROTECTS umbenennen. Ein berechtigter Mensch bestätigt geschütztes PiF2, kohärentes CiV und tatsächliche Umsetzungselemente. Erst ein regulärer validierter Auftrag übernimmt die neuen Schutz-/Governancebezüge.
 8. Constraints nur nach bestandener Prüfung ihrer Voraussetzungen anwenden. Alle einschlägigen Bestandsabfragen müssen null Fehler liefern; Transaktions-, Revisions-, Resolver- und Parallelitätstests müssen zusätzlich bestehen. Eine unverträgliche Mischung wird nicht aktiviert.
+9. Freigabeprofil 1.0 erst aktivieren, wenn Envelope-Schema, kanonische Hashbildung, vollständige Routenableitung, vertrauenswürdige Attestationsprüfung und dauerhafte technische Belegspeicherung gemeinsam bereitstehen. Bestehende `ChangeEvent` oder terminale Fachzustände erhalten keine erfundenen `APPROVED_BY`-Kanten. `approvalProfileVersion = "1.0"` wird nur durch eine neue geprüfte SYNC-Definition mit gebundener Paketprüfsumme angeboten.
 
 Bei leerem fachlichem Bestand werden technische Constraints/Gate zuerst installiert und anschließend genau einmal der atomare fachliche Bootstrap unter dem Gate ausgeführt. Vorhandene technische Belege sind kein zweiter fachlicher Bootstrap.
 
@@ -1601,6 +1758,6 @@ Bei leerem fachlichem Bestand werden technische Constraints/Gate zuerst installi
 
 ## Automatisierte Prüfung
 
-Die technologieunabhängigen Invarianten werden durch [`tests/test_model_rules.py`](../../../tests/test_model_rules.py) geprüft. [`reference/jci_rules.py`](../../../reference/jci_rules.py) und [`tests/test_reference_rules.py`](../../../tests/test_reference_rules.py) bilden Eigentümerrevisionen, aktuelle Abschlussmengen, gemeinsame Zyklen, Profil-2.0-Korrekturen und konkurrierende Kandidaten ausführbar ab. [`tests/test_spec_consistency.py`](../../../tests/test_spec_consistency.py) prüft die Konsistenz von Katalogen, Schemas und Dokumenten. GitHub Actions führt die Tests bei jedem Push auf `main` und bei Pull Requests aus. Referenztests ersetzen weder eine produktive SYNC-Engine noch einen realen Neo4j-Isolationstest.
+Die technologieunabhängigen Invarianten werden durch [`tests/test_model_rules.py`](../../../tests/test_model_rules.py) geprüft. [`reference/jci_rules.py`](../../../reference/jci_rules.py) und [`tests/test_reference_rules.py`](../../../tests/test_reference_rules.py) bilden Eigentümerrevisionen, aktuelle Abschlussmengen, gemeinsame Zyklen, Profil-2.0-Korrekturen und konkurrierende Kandidaten ausführbar ab. [`tests/test_approval_schema.py`](../../../tests/test_approval_schema.py) prüft das geschlossene Envelope, verpflichtende Receipt-Felder, RaN-Policy-Formen und fehlende Defaults. [`tests/test_spec_consistency.py`](../../../tests/test_spec_consistency.py) prüft die Konsistenz von Katalogen, Schemas und Dokumenten. GitHub Actions führt die Tests bei jedem Push auf `main` und bei Pull Requests aus. Referenztests ersetzen weder eine produktive SYNC-Engine noch einen realen Neo4j-Isolationstest.
 
 Die Cypher-Abfragen dieses Dokuments bleiben für eine reale Neo4j-Instanz zusätzlich verpflichtend. Jede Validierungsabfrage muss nach Migration und fachlicher Transaktion null Zeilen liefern.

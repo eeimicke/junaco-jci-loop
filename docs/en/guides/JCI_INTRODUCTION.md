@@ -48,6 +48,10 @@ New verification and event references do not change the referenced domain state 
 
 The [six implementation steps](../changes/JCI_LOGIC_2_0.md) describe impacts, migration, and acceptance cases. The reference functions are not a complete SYNC application.
 
+## Human decisions remain human
+
+Task release starts with the person accountable for its operational future state. `RaN` determines whether that person's active role may approve or a higher future level is responsible. Human approval is recorded separately from the requester as `APPROVED_BY` and initiates `SYNC` validation. Only its success makes the change effective. CiV and protection decisions must not be automatically confirmed by a technical role either. The [approval profile 1.0](../JCI_CONTEXT.md#129-verifiable-human-approval--profile-10) adds verifiable receipts and unambiguous escalation rules.
+
 ## Next step
 
 Next, read the [JCI Element Overview](JCI_ELEMENTS.md) or follow the [Walkthrough Example](JCI_EXAMPLE.md).

@@ -35,6 +35,11 @@
       "status": "synchronized"
     },
     {
+      "source": "docs/implementations/neo4j/JCI_NEO4J_RUNTIME.md",
+      "target": "docs/en/implementations/neo4j/JCI_NEO4J_RUNTIME.md",
+      "status": "synchronized"
+    },
+    {
       "source": "docs/guides/JCI_INTRODUCTION.md",
       "target": "docs/en/guides/JCI_INTRODUCTION.md",
       "status": "synchronized"
@@ -94,6 +99,11 @@
     {
       "source": "docs/changes/JCI_LOGIC_2_0.md",
       "target": "docs/en/changes/JCI_LOGIC_2_0.md",
+      "status": "synchronized"
+    },
+    {
+      "source": "docs/changes/JCI_APPROVAL_1_0.md",
+      "target": "docs/en/changes/JCI_APPROVAL_1_0.md",
       "status": "synchronized"
     }
   ]

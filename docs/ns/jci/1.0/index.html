@@ -59,11 +59,14 @@
     <code>APPLIES_IN</code>, <code>CONFLICTING_RULE</code>, <code>AFFECTS</code>,
     <code>DETECTED_BY</code>, <code>RESOLVED_BY</code>,
     <code>RESOLVED_THROUGH</code>, <code>CREATED_BY</code>,
-    <code>REQUESTED_BY</code>, <code>CORRECTED_BY</code>, <code>CHANGED_BY</code>,
+    <code>REQUESTED_BY</code>, <code>APPROVED_BY</code>, <code>CORRECTED_BY</code>, <code>CHANGED_BY</code>,
     <code>TARGETS_HISTORY</code>, <code>TRIGGERS</code>, <code>EXECUTES</code>, <code>REPLACED_BY</code>,
     <code>HAS_HISTORICAL_STATE</code>, <code>CREATES_HISTORY</code>,
     <code>CORRECTS</code>, <code>CAUSED_BY</code> und / and <code>CREATES_CORRECTION</code>.
   </p>
+
+  <p><code>APPROVED_BY</code> verbindet ein bei Annahme unveränderlich erzeugtes <code>ChangeEvent</code> mit der menschlich verifizierten <code>RoleAssignment</code>. Das <code>JCIApprovalEnvelope</code> und die <code>ApprovalPolicy</code> sind versionierte strukturierte Daten, keine zusätzlichen Entitätstypen.</p>
+  <p lang="en"><code>APPROVED_BY</code> connects a <code>ChangeEvent</code> created immutably at acceptance to the human-verified <code>RoleAssignment</code>. The <code>JCIApprovalEnvelope</code> and <code>ApprovalPolicy</code> are versioned structured data, not additional entity types.</p>
 
   <h2>Präzisierende Eigenschaften / Clarifying properties</h2>
   <div class="table-wrap" role="region" aria-label="Präzisierende Eigenschaften / Clarifying properties" tabindex="0">
@@ -74,6 +77,13 @@
       <tr><td><code>targetEntityId</code></td><td>Identität des angeforderten Ziels. / <span lang="en">Identity of the requested target.</span></td></tr>
       <tr><td><code>targetEntityType</code></td><td>Konkreter Entitätstyp des angeforderten Ziels. / <span lang="en">Concrete entity type of the requested target.</span></td></tr>
       <tr><td><code>requestedRevision</code></td><td>Erwartete Ausgangsrevision; bei <code>CREATED</code> nicht gesetzt. / <span lang="en">Expected base revision; absent for <code>CREATED</code>.</span></td></tr>
+      <tr><td><code>approvalProfileVersion</code></td><td>Ausdrücklich unterstütztes Freigabeprofil; für neue geschützte Vorgänge <code>1.0</code>. / <span lang="en">Explicitly supported approval profile; <code>1.0</code> for new protected operations.</span></td></tr>
+      <tr><td><code>approvalPolicy</code></td><td>Geschlossene RaN-Policy mit Modus, ausdrücklichen Rollen-IDs und gegebenenfalls Zukunftsebenen. / <span lang="en">Closed RaN policy with mode, explicit role IDs, and future levels where applicable.</span></td></tr>
+      <tr><td><code>receiptId</code></td><td>Eindeutige UUID eines menschlichen Entscheidungsbelegs. / <span lang="en">Unique UUID of a human decision receipt.</span></td></tr>
+      <tr><td><code>decidedAt</code></td><td>Zeitpunkt, zu dem der Mensch den gebundenen Beleg bestätigt oder abgelehnt hat. / <span lang="en">Time at which the human approved or rejected the bound receipt.</span></td></tr>
+      <tr><td><code>requestHash</code></td><td>SHA-256 des vollständigen kanonischen Basisauftrags 2.0. / <span lang="en">SHA-256 of the complete canonical 2.0 base request.</span></td></tr>
+      <tr><td><code>contextHash</code></td><td>SHA-256 der vollständigen gate-abgeleiteten Freigabegrundlage. / <span lang="en">SHA-256 of the complete gate-derived approval context.</span></td></tr>
+      <tr><td><code>approvalHash</code></td><td>SHA-256 des vollständigen kanonischen Entscheidungsbelegs. / <span lang="en">SHA-256 of the complete canonical decision receipt.</span></td></tr>
       <tr><td><code>runId</code></td><td>Eindeutige Kennung eines abgeschlossenen technischen Synchronisationslaufs. / <span lang="en">Unique identifier of a completed technical synchronization run.</span></td></tr>
       <tr><td><code>bootstrapKey</code></td><td>Kennung des einmaligen Root-RoleAssignment. / <span lang="en">Marker of the one-time root role assignment.</span></td></tr>
       <tr><td><code>notCiV</code></td><td>Was dem einzelnen Wert widerspricht und ausgeschlossen ist. / <span lang="en">What contradicts the individual value and is excluded.</span></td></tr>

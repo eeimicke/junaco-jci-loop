@@ -84,3 +84,36 @@ jobs:
             exit 1
           }
 
+  neo4j-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      neo4j:
+        image: neo4j:2026.08.1
+        env:
+          NEO4J_AUTH: none
+          NEO4J_server_http_enabled: "false"
+          NEO4J_server_https_enabled: "false"
+          NEO4J_server_memory_heap_initial__size: 256m
+          NEO4J_server_memory_heap_max__size: 512m
+          NEO4J_server_memory_pagecache_size: 128m
+        ports:
+          - "127.0.0.1:7687:7687"
+        options: >-
+          --health-cmd "cypher-shell -a bolt://localhost:7687 'RETURN 1'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-start-period 30s
+          --health-retries 24
+    steps:
+      - name: Repository auschecken / Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Laufzeitabhängigkeiten installieren / Install runtime dependencies
+        run: python3 -m pip install --disable-pip-version-check -r requirements-runtime.txt
+      - name: Echte Neo4j-Transaktionen prüfen / Test real Neo4j transactions
+        env:
+          JCI_NEO4J_TEST_URI: bolt://127.0.0.1:7687
+          JCI_NEO4J_TEST_DATABASE: neo4j
+          JCI_NEO4J_TEST_CONFIRM: isolated
+        run: python3 -B -m unittest discover -s tests/integration -v
+

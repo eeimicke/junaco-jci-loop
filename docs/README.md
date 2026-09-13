@@ -15,6 +15,8 @@ Diese Seite führt vom verständlichen Einstieg zur formalen und technischen Spe
 7. [Implementierungsleitfaden](guides/JCI_IMPLEMENTATION_GUIDE.md) und [Neo4j-Schema](implementations/neo4j/JCI_NEO4J_SCHEMA.md).
 
 8. [Logikänderungen 2.0](changes/JCI_LOGIC_2_0.md) – sechs Korrekturen, Auswirkungen, Migration und 23 Abnahmefälle.
+9. [Freigabeprofil 1.0](changes/JCI_APPROVAL_1_0.md) – menschliche Genehmigung, Accountability, Eskalation und geschützte SYNC-Übernahme.
+10. [Neo4j-Laufzeit](implementations/neo4j/JCI_NEO4J_RUNTIME.md) – ausführbarer Transaktionsadapter, Wiederaufnahme und echte Datenbanktests.
 
 Neue Regel-, Snapshot-, Werte- und Austauschprofile verwenden `2.0`. JSON-LD `1.1` und der bestehende Vokabularnamensraum bleiben unverändert. Das [Snapshot-Payloadschema](schemas/jci-history-snapshot.schema.json) beschreibt historische Nutzdaten; [Legacy-Schemas](schemas/legacy/1.1/) erhalten ältere Profile.
 

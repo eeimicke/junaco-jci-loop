@@ -8,6 +8,8 @@ Kardinalitäten und Invarianten stehen in [`JCI_GRAPH_RULES.md`](JCI_GRAPH_RULES
 
 **Regelpaket 2.0:** Ontologie, Graphregeln, SYNC, neue Snapshots, Korrekturwerte und das Austauschformat verwenden Version `2.0`. JSON-LD bleibt `1.1`; bestehende Namespace-IRIs mit `/1.0#` bleiben stabile Vokabularidentitäten und bezeichnen nicht die Regelversion. Frühere Datensätze werden ausschließlich nach ihren ausdrücklich angegebenen Versionsprofilen gelesen.
 
+Freigabepflichtige Vorgänge ergänzen dieses Regelpaket um `approvalProfileVersion = "1.0"`. Das zugrunde liegende Austauschformat bleibt `2.0`; Freigabeumschläge und vollständige Freigabebelege sind technische Datensätze außerhalb von `JCIEntity`.
+
 ## 2. Abstrakte Typen
 
 `JCIEntity` ist der abstrakte Oberbegriff aller als Knoten gespeicherten Instanzen. Die abstrakten Untertypen werden nicht als zusätzliche fachliche Knoten gespeichert:
@@ -89,6 +91,21 @@ Für die hier präzisierten Entitätstypen gelten insbesondere folgende typspezi
 
 Typspezifische Pflichtfelder und Aufzählungswerte sind in Abschnitt 2.2.5 von [`JCI_CONTEXT.md`](JCI_CONTEXT.md) kanonisch beschrieben. Die verbindlichen Statusübergänge stehen in Abschnitt 2.2.4. Eine Datenbankimplementierung darf sie technisch konkretisieren, aber nicht abschwächen oder semantisch umdeuten.
 
+Eine für freigabepflichtige Vorgänge ausführbare `SyncDefinition` besitzt zwingend `approvalProfileVersion = "1.0"`. Ein `RaN` kann zusätzlich eine typisierte `approvalPolicy` besitzen:
+
+```text
+ApprovalPolicy = {
+  profileVersion = "1.0",
+  mode = ACCOUNTABLE_CHAIN | VALUE_SCOPE,
+  roleIds = nicht leere, eindeutige RoFRole-UUID[],
+  levels = FutureType[]
+}
+
+FutureType = PiF1o | PiF1t | PiF1s | PiF2
+```
+
+Bei `ACCOUNTABLE_CHAIN` ist `levels` nicht leer und eindeutig. Bei `VALUE_SCOPE` fehlt `levels` oder ist leer. Die Richtlinie erteilt allein noch keine Genehmigung; sie begrenzt, welche menschlichen Rollenaktivierungen unter einer aktiven, zeitlich und im Scope passenden `PERMIT`-Regel mit erfüllter Bedingung genehmigen dürfen. Freigabeprofil 1.0 wertet ausschließlich die in `JCI_CONTEXT` definierten zweigliedrigen Pfade `target.<Eigenschaft>`, `actor.<Eigenschaft>` und `request.<Eigenschaft>` aus. Andere Pfade und ungeklärte Typen sind `UNEVALUABLE`.
+
 Komplexe Werte verwenden ausschließlich die in Abschnitt 2.2.7 definierten Typen `TypedValue`, `StateSnapshot`, `RelationshipSnapshot`, `TypedValueMap`, `RuleExpression` und `SyncDefinition`. Unstrukturierte, implementierungsabhängige Objektinhalte sind nicht zulässig.
 
 ## 5. Beziehungskatalog
@@ -110,6 +127,9 @@ Jedes `CiV` beschreibt genau einen Wert durch die drei nicht leeren Dimensionen 
 ### 5.2 Operative Umsetzung und Prüfung
 
 ```text
+PiF2 ACCOUNTABLE_MEMBER RoFTeamMember
+PiF1s ACCOUNTABLE_MEMBER RoFTeamMember
+PiF1t ACCOUNTABLE_MEMBER RoFTeamMember
 PiF1o HAS_SUCCESS_CRITERIA SuccessCriterion
 PiF1o ACCOUNTABLE_MEMBER RoFTeamMember
 PiF1o DECOMPOSES_INTO Task
@@ -126,6 +146,8 @@ Verification CHECKS SuccessCriterion
 Verification USES_EVIDENCE Evidence
 Verification SUPERSEDES Verification
 ```
+
+`ACCOUNTABLE_MEMBER` ist für `PiF2`, `PiF1s` und `PiF1t` optional und besitzt je Zukunftselement höchstens ein Ziel. Dadurch können Bestandsdaten schrittweise ergänzt werden. Sobald eine dieser Ebenen für eine Freigaberoute benötigt wird, muss ihr accountable Mitglied jedoch eindeutig vorhanden sein; Accountability wird nicht zwischen Ebenen vererbt. Für `PiF1o` bleibt genau ein accountable Mitglied verpflichtend.
 
 Eine `Verification` bindet mit `evaluatedResultRevision` und `checkedCriterionRevision` genau die Revisionen, die geprüft wurden. Ihr `Result` ist `COMPLETED`, ihr `SuccessCriterion` ist `ACTIVE`, und beide gehören zum selben `PiF1o`. Anwendbar ist nur eine nicht abgelöste Verification, deren gebundene Revisionen weiterhin den aktuellen Revisionen ihrer beiden Ziele entsprechen.
 
@@ -168,12 +190,17 @@ Ein `RaN` besitzt `effect`, `decisionKey`, `scopeType`, `governedTypes` und eine
 ```text
 JCIEntity CREATED_BY RoleAssignment
 ChangeEvent REQUESTED_BY RoleAssignment
+ChangeEvent APPROVED_BY RoleAssignment
 HistoricalCorrection CORRECTED_BY RoleAssignment
 RaNConflict RESOLVED_BY RoleAssignment
 RaNConflict USES_EVIDENCE Evidence
 ChangeEvent USES_EVIDENCE Evidence
 HistoricalCorrection USES_EVIDENCE Evidence
 ```
+
+`REQUESTED_BY` bewahrt den ursprünglichen Antragsteller. `APPROVED_BY` dokumentiert ausschließlich Genehmigungen eines angenommenen freigabepflichtigen Auftrags. Jede solche Kante besitzt genau ein `receiptId`, `decidedAt`, `requestHash` und `approvalHash`; je `ChangeEvent` und `RoleAssignment` ist höchstens eine Kante zulässig. Die Kanten entstehen unveränderlich zusammen mit dem angenommenen `ChangeEvent` und werden später weder ergänzt noch verändert. Derselbe Mensch darf beantragen und genehmigen, sofern kein anwendbares `RaN` ausdrücklich eine Trennung verlangt.
+
+Ein ausstehender Vorschlag sowie abgelehnte oder abgebrochene Freigaben bleiben mit ihren vollständigen technischen Zuständen beziehungsweise Entscheidungsbelegen außerhalb des JCI-Graphen. Sie erzeugen weder `ChangeEvent` noch `APPROVED_BY`, `SyncRun`, `SyncEvent` oder fachliche Änderung. Belege tragen ausschließlich `outcome = APPROVED | REJECTED`; „ausstehend“ ist der technische Zustand des Vorschlags und kein erfundenes drittes Belegergebnis.
 
 Der initiale Bootstrap bildet ausschließlich die einmalige Vertrauenswurzel eines vollständig leeren Graphen. Dabei wird genau ein Root-`RoleAssignment` mit `bootstrapKey = "ROOT"` erzeugt. Nur dieses RoleAssignment darf dauerhaft ohne `CREATED_BY` bestehen. Der atomare Minimalgraph enthält eine `RoFOrg`, ein `RoFTeam`, ein technisches `RoFTeamMember`, eine `RoFRole`, das Root-`RoleAssignment` und eine `SYNC`-Definition. Alle sechs Entitäten entstehen unmittelbar mit `status = ACTIVE`, `revision = 1` sowie demselben `createdAt` und `updatedAt`; vorhandene `validFrom`-Werte der Typen und Beziehungen entsprechen demselben Bootstrapzeitpunkt. Dies ist die einzige Ausnahme vom regulären `DRAFT`-Start. Alle Entitäten außer dem Root-`RoleAssignment` verweisen über `CREATED_BY` auf diese Vertrauenswurzel. Der Bootstrap erzeugt weder `ChangeEvent`, `SyncRun`, `SyncEvent` noch `PiH`, ist nicht wiederholbar und ist kein Datenimport.
 
@@ -260,6 +287,10 @@ Der Abschlussgraph ist eine virtuelle Vereinigung aus aktueller Hierarchie und a
 Vollständige Graph- und Ontologieexporte verwenden JSON-LD 1.1 mit dem Kontext [`schemas/jci-context.jsonld`](schemas/jci-context.jsonld). Entitäten werden als `urn:jci:<UUID>` identifiziert; konkrete Typen und Beziehungen verwenden den öffentlichen, versionierten Namensraum `https://eeimicke.github.io/junaco-jci-loop/ns/jci/1.0#`.
 
 `JCIChangeRequest` und `JCISyncResult` verwenden `schemaVersion = "2.0"`. Für `HISTORICAL_CORRECTION` ersetzt ein strukturiertes `historicalCorrection`-Objekt die allgemeinen `operations`; es enthält insbesondere `expectedHistoryViewHash`, eindeutige lexikografisch sortierte `correctedFields`, `previousValue` und `correctedValue`.
+
+Ein freigabepflichtiger Vorschlag bettet genau diesen unveränderten `JCIChangeRequest` in einen Freigabeumschlag mit `approvalProfileVersion`, `decisionKey`, `requestHash`, `contextHash` und vollständigen technischen Entscheidungsbelegen ein. Nur ein vollständig genehmigter, gegen beide Hashes erneut geprüfter Umschlag darf als Auftrag angenommen werden. Aus seinen gültigen `APPROVED`-Belegen entstehen beim Anlegen des `ChangeEvent` die unveränderlichen `APPROVED_BY`-Kanten; der Umschlag, wartende Zustände und abgelehnte Belege werden nicht zu Graphknoten.
+
+Für die erste `Model.action.CONFIRM`-Wertentscheidung darf eine Installation eine ausdrücklich durch einen authentifizierten Menschen konfigurierte Anfangsbefugnis für genaues Mitglied, Rollenaktivierung und Werteträger führen. Sie gilt nie für Task-Freigaben und verleiht dem technischen Root-`RoleAssignment` keine menschliche Befugnis. Sobald für diesen Werteträger erstmals eine aktive `VALUE_SCOPE`-Policy übernommen wurde, wird die Anfangsbefugnis durch einen dauerhaften technischen Sperrmerker deaktiviert; ein späterer Policy-Widerruf aktiviert sie nicht erneut.
 
 Komplexe Eigenschaften verwenden die strukturierten Typen aus [`JCI_CONTEXT.md`](JCI_CONTEXT.md) und werden als JSON-LD-kompatible JSON-Werte übertragen. Die Neo4j-Projektion als kanonische JSON-Zeichenkette verändert das Austauschformat nicht.
 
