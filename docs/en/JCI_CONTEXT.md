@@ -3,6 +3,8 @@
 
 **Rule package 2.0:** Ontology, graph rules, SYNC, new snapshots, correction values, and the exchange format use version `2.0`. JSON-LD remains `1.1`; existing namespace IRIs ending in `/1.0#` remain stable vocabulary identities and are not the rule version. Earlier records are interpreted only through their explicit version profiles.
 
+**Mandatory approval extension:** New approval-gated changes additionally use `approvalProfileVersion = "1.0"` under section 12.9. The base format and canonical hash profile remain `2.0`; an older handler without explicit approval-profile support must not execute these changes. Existing events and hashes are not reinterpreted retroactively.
+
 ### 1.1 Origin and purpose
 
 This document describes the **JUNACO Continuous Integration Model for Organizations** and the resulting **JCI Loop**. The model is based on the Viable System Model (VSM) by Stafford Beer and the Intrinsic Value Based System Model developed by Ernst Rother, now Ernst Eimicke, in his master's thesis. In the practice of Junaco Organizationsentwicklung GmbH it was further developed into today's JCI model by Jana Eimicke and Julian Ulbricht.
@@ -266,7 +268,9 @@ The bootstrap row is a one-time technical trust root and not a `ChangeEvent`. Ap
 
 Process artifacts do not create a recursive event chain: `ChangeEvent`, `SyncEvent`, `PiH`, `HistoricalCorrection` and an open `RaNConflict` recognized by SYNC are generated within the change process that is already in progress and do not trigger another `ChangeEvent` for their own creation. However, a later permitted change of a `RaNConflict` from `OPEN` to `RESOLVED` is a new technical change process.
 
-**Short example:** A Task is created as `DRAFT`. If the team, executive role activation and requirements are valid, he switches to `ACTIVE`. If a requirement is omitted, `SYNC` sets it to `BLOCKED`. As soon as the requirement is met again, it can become `ACTIVE` again. After confirmed execution it becomes `COMPLETED`; this state will not be reopened.
+The status transitions do not replace approval validation: in particular, the first Task release from `DRAFT` additionally requires complete human approval under section 12.9. Resuming an already released `BLOCKED` Task when dependencies are met is not another initial release; all current model and RaN conditions still apply.
+
+**Short example:** A Task is created as `DRAFT`. After evidenced human approval, `SYNC` checks the team, executing role assignment, and every other condition. If prerequisites are also satisfied, the Task becomes `ACTIVE`; with outstanding dependencies, approval remains effective but the Task becomes `BLOCKED`. If a prerequisite later becomes unfulfilled, `SYNC` likewise sets it to `BLOCKED`. Once it is satisfied again, the Task may return to `ACTIVE`. After confirmed execution it becomes `COMPLETED`; this state is not reopened.
 
 #### 2.2.5 Type-specific mandatory fields
 
@@ -276,7 +280,7 @@ In addition to the common properties, the following type-specific fields apply. 
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | `PiH`                    | `originalEntityId: UUID`, `originalEntityType: Enum`,<br>`originalRevision: Integer`, `recordedAt: DateTime`,<br>`validFrom: DateTime`, `validUntil: DateTime`,<br>`snapshotSchemaVersion: String`, `stateData: StateSnapshot`,<br>`relationshipData: RelationshipSnapshot[]`, `contentHash: String` | –                                                                                                                          |
 | `CiV`                    | `notCiV: String`, `selfCiV: String`, `toServeCiV: String`                                                                                                                                                                                                                                            | –                                                                                                                          |
-| `RaN`                    | `ruleType: Enum`, `effect: Enum`, `statement: String`,<br>`decisionKey: String`, `scopeType: Enum`,<br>`governedTypes: Enum[]`, `condition: RuleExpression`,<br>`priority: Integer`, `validFrom: DateTime`                                                                                           | `validUntil: DateTime`                                                                                                     |
+| `RaN`                    | `ruleType: Enum`, `effect: Enum`, `statement: String`,<br>`decisionKey: String`, `scopeType: Enum`,<br>`governedTypes: Enum[]`, `condition: RuleExpression`,<br>`priority: Integer`, `validFrom: DateTime`                                                                                           | `validUntil: DateTime`, `approvalPolicy: ApprovalPolicy`                                                                   |
 | `RaNConflict`            | `conflictKey: String`, `conflictType: Enum`,<br>`detectedAt: DateTime`, `reason: String`                                                                                                                                                                                                             | `resolvedAt: DateTime`, `resolution: String`                                                                               |
 | `SYNC`                   | `version: String`, `definition: SyncDefinition`, `validFrom: DateTime`                                                                                                                                                                                                                               | `validUntil: DateTime`                                                                                                     |
 | `PiF2`, `PiF1s`, `PiF1t` | `targetState: String`, `horizonStart: Date`,<br>`contributionMode: Enum`                                                                                                                                                                                                                             | `horizonEnd: Date`, `targetDate: Date`                                                                                     |
@@ -359,10 +363,13 @@ Actors are assigned exclusively via active roles in the specific team context:
 | ---------------------- | -------------- | ---------------- | -----------------: | ----------------------: |
 | `JCIEntity`            | `CREATED_BY`   | `RoleAssignment` | `0..1`             | `0..n`                  |
 | `ChangeEvent`          | `REQUESTED_BY` | `RoleAssignment` | `1`                | `0..n`                  |
+| `ChangeEvent`          | `APPROVED_BY`  | `RoleAssignment` | `0..n`             | `0..n`                  |
 | `HistoricalCorrection` | `CORRECTED_BY` | `RoleAssignment` | `1`                | `0..n`                  |
 | `RaNConflict`          | `RESOLVED_BY`  | `RoleAssignment` | `0..1`             | `0..n`                  |
 
 `CREATED_BY = 0..1` allows import states and the unique root `RoleAssignment`. For domain-active or completed entities, exactly one creator is required by an additional invariant, except for that root. `REQUESTED_BY` denotes the role activation that requested a change. `CORRECTED_BY` denotes the role activation responsible for a historical correction.
+
+`APPROVED_BY` instead identifies a verifiably human approval authorized for the specific request under section 12.9. An accepted approval-gated request requires at least one such relationship. Requester and approver are recorded separately; `REQUESTED_BY` is not redirected to the approver. Every `APPROVED_BY` edge has `receiptId: UUID`, `decidedAt: DateTime`, `requestHash: String`, and `approvalHash: String`. There is at most one edge per event and role activation. It belongs exclusively to the `ChangeEvent` created on acceptance and must not subsequently be added, modified, or removed.
 
 Evidence is stored exclusively as standalone `Evidence` nodes:
 
@@ -425,7 +432,7 @@ The effective `HistoryView` is reconstructed from the immutable `PiH` and absolu
 | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
 | `Verification`: `EVALUATES`, `CHECKS`, `USES_EVIDENCE`, `SUPERSEDES`                                                                             | the new `Verification`; no revision of the referenced targets                                                                  |
 | `HistoricalCorrection`: `CORRECTS`, `CAUSED_BY`, `CORRECTED_BY`, `USES_EVIDENCE`, `SUPERSEDES`                                                   | the new `HistoricalCorrection`; no revision of the referenced targets                                                          |
-| `ChangeEvent`: `REQUESTED_BY`, `TARGETS_HISTORY`, `USES_EVIDENCE`                                                                                | the `ChangeEvent` created on acceptance; no revision of the referenced targets                                                 |
+| `ChangeEvent`: `REQUESTED_BY`, `APPROVED_BY`, `TARGETS_HISTORY`, `USES_EVIDENCE`                                                                 | the `ChangeEvent` created on acceptance; no revision of the referenced targets                                                 |
 | `SyncEvent`: `EXECUTES`, `AFFECTS`, `CREATES_HISTORY`, `CREATES_CORRECTION`                                                                      | the new `SyncEvent`; no revision of the referenced targets                                                                     |
 | `TRIGGERS`, `CHANGED_BY`, `HAS_HISTORICAL_STATE`                                                                                                 | the respective new target object `SyncEvent`, `ChangeEvent`, or `PiH`; no further revision solely for documentation            |
 | `CREATED_BY`                                                                                                                                     | the created entity, or its existing imported draft when provenance is validly completed; never the referenced `RoleAssignment` |
@@ -525,18 +532,19 @@ Reading example for `PiF1s ── CONTRIBUTES_TO ──► PiF2`: **Targets per 
 
 Reading example for `RoleAssignment ── USES ──► ERoFObject`: **Targets per source `0..n`** means that a `RoleAssignment` can temporarily not use one, one or more `ERoFObjects`. **Sources per destination `1..n`** means that each active `ERoFObject` must be used by at least one or more `RoleAssignments` and therefore personal.
 
-| Source           | relationship           | Target             | Goals depending on<br>Source | Sources per<br>Target |
-| ---------------- | ---------------------- | ------------------ | ---------------------------: | --------------------: |
-| `PiF1o`          | `HAS_SUCCESS_CRITERIA` | `SuccessCriterion` | `1..n`                       | `1`                   |
-| `PiF1o`          | `ACCOUNTABLE_MEMBER`   | `RoFTeamMember`    | `1`                          | `0..n`                |
-| `PiF1o`          | `DECOMPOSES_INTO`      | `Task`             | `1..n`                       | `1`                   |
-| `Task`           | `DECOMPOSES_INTO`      | `Task`             | `0..n`                       | `0..1`                |
-| `Task`           | `DEPENDS_ON`           | `Task`             | `0..n`                       | `0..n`                |
-| `Task`           | `EXECUTED_BY`          | `RoleAssignment`   | `0..n`                       | `0..n`                |
-| `Task`           | `RESPONSIBLE_TEAM`     | `RoFTeam`          | `1`                          | `0..n`                |
-| `Task`           | `USES`                 | `ERoFObject`       | `0..n`                       | `0..n`                |
-| `RoleAssignment` | `USES`                 | `ERoFObject`       | `0..n`                       | `1..n`                |
-| `ERoFObject`     | `OWNED_BY`             | `RoFOrg`           | `0..n`                       | `0..n`                |
+| Source                   | relationship           | Target             | Goals depending on<br>Source | Sources per<br>Target |
+| ------------------------ | ---------------------- | ------------------ | ---------------------------: | --------------------: |
+| `PiF1o`                  | `HAS_SUCCESS_CRITERIA` | `SuccessCriterion` | `1..n`                       | `1`                   |
+| `PiF1o`                  | `ACCOUNTABLE_MEMBER`   | `RoFTeamMember`    | `1`                          | `0..n`                |
+| `PiF2`, `PiF1s`, `PiF1t` | `ACCOUNTABLE_MEMBER`   | `RoFTeamMember`    | `0..1`                       | `0..n`                |
+| `PiF1o`                  | `DECOMPOSES_INTO`      | `Task`             | `1..n`                       | `1`                   |
+| `Task`                   | `DECOMPOSES_INTO`      | `Task`             | `0..n`                       | `0..1`                |
+| `Task`                   | `DEPENDS_ON`           | `Task`             | `0..n`                       | `0..n`                |
+| `Task`                   | `EXECUTED_BY`          | `RoleAssignment`   | `0..n`                       | `0..n`                |
+| `Task`                   | `RESPONSIBLE_TEAM`     | `RoFTeam`          | `1`                          | `0..n`                |
+| `Task`                   | `USES`                 | `ERoFObject`       | `0..n`                       | `0..n`                |
+| `RoleAssignment`         | `USES`                 | `ERoFObject`       | `0..n`                       | `1..n`                |
+| `ERoFObject`             | `OWNED_BY`             | `RoFOrg`           | `0..n`                       | `0..n`                |
 
 `HAS_MEMBER` and `HAS_ROLE` have a mandatory `validFrom: DateTime` and an optional `validUntil: DateTime` on the relationship. A `RoleAssignment` may only be valid within the temporal intersection of its team membership and role ownership. `validUntil` is never before `validFrom`.
 
@@ -604,6 +612,7 @@ Reading example for `ChangeEvent ── TRIGGERS ──► SyncEvent`: **Targets
 | historizable `JCIEntity` | `CHANGED_BY`      | `ChangeEvent`             | `0..n`                       | `0..1`                |
 | `ChangeEvent`            | `TRIGGERS`        | `SyncEvent`               | `0..n`                       | `1`                   |
 | `ChangeEvent`            | `REQUESTED_BY`    | `RoleAssignment`          | `1`                          | `0..n`                |
+| `ChangeEvent`            | `APPROVED_BY`     | `RoleAssignment`          | `0..n`                       | `0..n`                |
 | `ChangeEvent`            | `USES_EVIDENCE`   | `Evidence`                | `0..n`                       | `0..n`                |
 | `ChangeEvent`            | `TARGETS_HISTORY` | `PiH`                     | `0..1`                       | `0..n`                |
 | `SyncEvent`              | `EXECUTES`        | `SYNC`                    | `1`                          | `0..n`                |
@@ -903,7 +912,7 @@ TO SERVE CiV = Whom or what does the value serve, and what contribution does it 
 
 The required fields `notCiV`, `selfCiV`, and `toServeCiV` represent these dimensions structurally. The value holder is not stored as free text but through exactly one `HELD_BY` relationship to a `RoFOrg`, `RoFTeam`, or human `RoFTeamMember`. A technical `RoFTeamMember` has no personal value construct.
 
-Organizations, teams, and people may hold their own CiV, including CiV with the same name. They remain independent entities because their three dimensions and historical development may differ. A team may develop additional team-held values. Organization-held values are developed by the responsible team and acting `RoleAssignments`; `CREATED_BY`, the triggering `ChangeEvent`, and its `REQUESTED_BY` preserve human decision provenance.
+Organizations, teams, and people may hold their own CiV, including CiV with the same name. They remain independent entities because their three dimensions and historical development may differ. A team may develop additional team-held values. Organization-held values are developed by the responsible team and acting `RoleAssignments`; `CREATED_BY`, the triggering `ChangeEvent`, and its `REQUESTED_BY` preserve creation and request provenance. Human approval is additionally recorded through `APPROVED_BY` and verifiable receipts under section 12.9.
 
 When a team- or organization-held value is explicitly developed from other CiV, that provenance is stored through `INFORMED_BY`. Equal names, team membership, or organizational affiliation never create such a relationship automatically and never copy dimensions. Only explicitly selected CiV are connected to a long-term future state (`PiF2`) through `INSCRIBES_PURPOSE_IN`.
 
@@ -939,6 +948,7 @@ PiH ── PROVIDES_CONTEXT_TO ──► CiV ── HELD_BY ──► RoF scope
 4. The same value name in different scopes creates independent CiV. Values and dimensions are never inherited or copied automatically between person, team, and organization.
 5. `INFORMED_BY` optionally connects a CiV to zero, one, or more other CiV that explicitly influenced its confirmed development. Self-relationships are prohibited.
 6. Creation and every change of a CiV remain traceable through `CREATED_BY`, or through `ChangeEvent` and `REQUESTED_BY`, to a valid `RoleAssignment`. `SYNC` does not derive human value decisions.
+   The human decision additionally requires specific approval proof under section 12.9; technical creation provenance alone is insufficient.
 7. A `CiV` may ground zero, one, or more `PiF2` through `INSCRIBES_PURPOSE_IN`. It may therefore exist before a future state has been formulated.
 8. Every `PiF2` must be value-grounded by at least one `CiV`. All CiV directly grounding one `PiF2` have the same `HELD_BY` target; that shared value holder determines the scope of the `PiF2`.
 9. Historical `PiH` may provide context for forming or changing a `CiV`.
@@ -1046,6 +1056,8 @@ The machine-readable `condition` has exactly one `combiner = ALL | ANY` and at l
 | `value`    | comparative value; only not required for `EXISTS` and `NOT_EXISTS` |
 
 Paths are allowed to traverse properties directly or explicitly named relationships from the canonical relationship catalog. Unlimited or uncataloged traversals are not permitted. If a path cannot be evaluated clearly, the rule is `UNEVALUABLE`.
+
+Approvals use the narrower executable condition contract in section 12.9. An optional `RaN.approvalPolicy: ApprovalPolicy` explicitly identifies permitted roles and approval levels. Neither `ACCOUNTABLE_MEMBER` nor `CONTRIBUTES_TO`, role names, or a higher future level grants authority by itself.
 
 The effect is read like this:
 
@@ -1352,6 +1364,7 @@ PiF1o
 9. Additional `RoleAssignments` from other teams may support an atomic Task.
 10. The `ACCOUNTABLE_MEMBER` of a `PiF1o` may execute its atomic tasks, but does not have to belong to an executing `RoleAssignment`.
 11. Accountability for the `PiF1o`, team responsibility for the Task and the actual execution of atomic tasks by `RoleAssignments` remain technically separate.
+    Approval is checked as another separate decision under section 12.9. It replaces neither execution authority nor completion confirmation.
 12. An atomic Task can have none, one or more relationships with `ERoFObjects`. If he uses an environment object, at least one executing `RoleAssignment` must use the same `ERoFObject`.
 13. `DEPENDS_ON` may connect Tasks of the same or different `PiF1o`, but must have no self-links or cycles. In addition, the joint completion view combining hierarchy and prerequisites under section 9.4.2 must be acyclic. A prerequisite is satisfied only with `status = COMPLETED`.
 14. A released Task in `ACTIVE` or `BLOCKED` with at least one own unmet prerequisite becomes `BLOCKED`; completion is then prohibited. `DRAFT` first needs explicit release, and terminal Tasks are not rewritten. `REPLACED` and `REVOKED` do not satisfy a prerequisite; a valid successor must be explicitly connected through `DEPENDS_ON`.
@@ -1530,18 +1543,19 @@ If a RoF element, an organizational assignment or a `RoFOrgRelationship` is chan
 
 Reading example for `RoFOrg ── HAS_TEAM ──► RoFTeam`: **Targets per source `1..n`** means that each `RoFOrg` has at least one team; **Sources per destination `1`** means that each `RoFTeam` is assigned to exactly one `RoFOrg`.
 
-| Source           | relationship         | Target                                           | Targets per source | Sources per destination |
-| ---------------- | -------------------- | ------------------------------------------------ | -----------------: | ----------------------: |
-| `RoFOrg`         | `HAS_TEAM`           | `RoFTeam`                                        | `1..n`             | `1`                     |
-| `RoFTeam`        | `HAS_MEMBER`         | `RoFTeamMember`                                  | `1..n`             | `1..n`                  |
-| `RoFTeamMember`  | `HAS_ROLE`           | `RoFRole`                                        | `1..n`             | `0..n`                  |
-| `RoFTeamMember`  | `HAS_ASSIGNMENT`     | `RoleAssignment`                                 | `0..n`             | `1`                     |
-| `RoleAssignment` | `IN_TEAM`            | `RoFTeam`                                        | `1`                | `0..n`                  |
-| `RoleAssignment` | `ACTIVATES_ROLE`     | `RoFRole`                                        | `1`                | `0..n`                  |
-| `PiF1o`          | `ACCOUNTABLE_MEMBER` | `RoFTeamMember`                                  | `1`                | `0..n`                  |
-| `Task`           | `RESPONSIBLE_TEAM`   | `RoFTeam`                                        | `1`                | `0..n`                  |
-| `Task`           | `EXECUTED_BY`        | `RoleAssignment`                                 | `0..n`             | `0..n`                  |
-| `CiV`            | `HELD_BY`            | `RoFOrg`, `RoFTeam`, or<br>human `RoFTeamMember` | `1`                | `0..n`                  |
+| Source                   | relationship         | Target                                           | Targets per source | Sources per destination |
+| ------------------------ | -------------------- | ------------------------------------------------ | -----------------: | ----------------------: |
+| `RoFOrg`                 | `HAS_TEAM`           | `RoFTeam`                                        | `1..n`             | `1`                     |
+| `RoFTeam`                | `HAS_MEMBER`         | `RoFTeamMember`                                  | `1..n`             | `1..n`                  |
+| `RoFTeamMember`          | `HAS_ROLE`           | `RoFRole`                                        | `1..n`             | `0..n`                  |
+| `RoFTeamMember`          | `HAS_ASSIGNMENT`     | `RoleAssignment`                                 | `0..n`             | `1`                     |
+| `RoleAssignment`         | `IN_TEAM`            | `RoFTeam`                                        | `1`                | `0..n`                  |
+| `RoleAssignment`         | `ACTIVATES_ROLE`     | `RoFRole`                                        | `1`                | `0..n`                  |
+| `PiF1o`                  | `ACCOUNTABLE_MEMBER` | `RoFTeamMember`                                  | `1`                | `0..n`                  |
+| `PiF2`, `PiF1s`, `PiF1t` | `ACCOUNTABLE_MEMBER` | `RoFTeamMember`                                  | `0..1`             | `0..n`                  |
+| `Task`                   | `RESPONSIBLE_TEAM`   | `RoFTeam`                                        | `1`                | `0..n`                  |
+| `Task`                   | `EXECUTED_BY`        | `RoleAssignment`                                 | `0..n`             | `0..n`                  |
+| `CiV`                    | `HELD_BY`            | `RoFOrg`, `RoFTeam`, or<br>human `RoFTeamMember` | `1`                | `0..n`                  |
 
 Reading example for `RoFOrgRelationship ── SOURCE_ORG ──► RoFOrg`: **Targets per source `1`** means that each organizational relationship has exactly one source organization; **Sources per target `0..n`** means that a `RoFOrg` source can be none, one or more organizational relationships.
 
@@ -1587,6 +1601,7 @@ RoFOrg ◄── SOURCE_ORG ── RoFOrgRelationship ── TARGET_ORG ──�
 21. The team of each represented `RoleAssignment` must belong to the represented `RoFOrg`.
 22. A participating organization is not additionally duplicated as `ERoFObject`.
 23. Each `PiF1o` has exactly one accountable `RoFTeamMember`. Each of its tasks has exactly one responsible `RoFTeam`; only active or completed atomic tasks require at least one executing `RoleAssignment`. The accountable member does not have to execute the Task themselves.
+    `PiF2`, `PiF1s`, and `PiF1t` may also each identify one accountable member. Storage cardinality `0..1` permits incremental construction; an actually required approval level must not be skipped because its accountability is missing or ambiguous. A member is not inherited automatically from another level.
 24. A `HELD_BY` relationship to a `RoFTeamMember` is permitted only when `memberType = HUMAN`. Technical members have no personal value construct.
 25. The scope of a CiV is determined exclusively by `HELD_BY`. Team membership and organizational affiliation create no additional implicit scopes.
 26. An organization-held CiV remains assigned to the `RoFOrg`, even when an executive or other mandated team develops it. The people acting remain traceable through their `RoleAssignments`.
@@ -1810,6 +1825,8 @@ implementationReference
 implementationChecksum
 ```
 
+For approval-gated changes, the `SyncDefinition` additionally contains `approvalProfileVersion = "1.0"`, supports `APPROVED_BY`, and binds the approval validator through its package checksum. An unknown or missing profile grants no execution authority.
+
 The version information determines exactly which ontology, graph rules and SYNC specification are checked against. `implementationReference` means the executable rules package or artifact; `implementationChecksum` is its SHA-256 value. A SYNC definition may only become `ACTIVE` if all concrete entity and relationship types present in the model are supported and the checksum comparison is successful.
 
 **Short example:** `SYNC 2.0` refers to ontology 2.0, graph rules 2.0 and the handler package `jci-sync-2.0` with its checksum. A `SyncEvent` not only records “SYNC 2.0”, but also the exact definition in a comprehensible manner.
@@ -1985,6 +2002,8 @@ reason
 
 For all change types except `HISTORICAL_CORRECTION`, `operations[]` with at least one operation is additionally required. An operation uses `op = ADD | REPLACE | REMOVE | CONNECT | DISCONNECT`. Property operations have a unique `path` and, where required, `value: TypedValue`. Relationship operations have `relationshipType`, `direction`, `otherEntityId` and optionally a typed property map. `CONNECT` and `DISCONNECT` may use only relationships from the canonical catalog.
 
+`APPROVED_BY` is explicitly excluded: this audit relationship must not be requested through generic operations. It is derived only from fully validated approval receipts during acceptance under section 12.9.
+
 For `changeType = HISTORICAL_CORRECTION`, `target` denotes exactly the immutable `PiH`, `requestedRevision` is `1`, and exactly one structured `historicalCorrection` object replaces `operations[]`:
 
 ```text
@@ -2078,6 +2097,86 @@ Every committed JCI write increments the technical `graphEpoch`, even when it on
 `CONFLICT` or `FAILED` commits no invalid domain changes. If the database aborted the transaction, completion documentation is recovered in a new protected transaction with the same `runId`. For an unknown commit outcome, first consult the durable record to determine whether that exact run already succeeded; a timeout alone does not justify reexecution. Unchanged retries retain the requested revision. A newly desired starting revision or different payload requires a new request. A documented no-op may return `SUCCESS` with `changedCount = 0` and no `PiH`.
 
 The Neo4j projection and explicit transaction sequence are specified in [`implementations/neo4j/JCI_NEO4J_SCHEMA.md`](implementations/neo4j/JCI_NEO4J_SCHEMA.md). Executable reference checks model decision rules and competing candidates; they are neither a production SYNC engine nor evidence of actual Neo4j transaction isolation.
+
+### 12.9 Verifiable human approval – profile 1.0
+
+#### 12.9.1 Scope and separate responsibilities
+
+The approval profile extends rule package 2.0 without introducing another core element or graph object type. A pending approval request is a durably stored technical proposal, not yet an accepted `ChangeEvent`. Human responses are stored as immutable technical decision receipts. Rejections and abandoned proposals remain traceable too; they do not change the Task. Only a fully approved request is accepted normally and atomically schedules its first `SyncRun`. An already accepted event therefore never waits for approvals to be appended later.
+
+Approval is mandatory for explicit initial Task release (`Task.action.RELEASE`) and human model decisions (`Model.action.CONFIRM`): CiV content and holders, `INFORMED_BY`, value-grounded PiF2 formation through `INSCRIBES_PURPOSE_IN`, `PROTECTS`, and changes to approval policies and their accountability foundations. Validation considers both edge directions, removal, replacement, and revocation, and both previous and candidate states. Merely renaming a request or omitting its approval envelope must not bypass this requirement. Unsupported operation combinations are rejected, not treated as approval-free. Technical preparation of a proposal is not a confirmed value decision.
+
+`ACCOUNTABLE_MEMBER` identifies a contact, not automatic decision authority. A `PiF1o` retains exactly one accountable member; `PiF1t`, `PiF1s`, and `PiF2` may each have at most one. A level required by the route must have unambiguous accountability. A human approver acts through a valid `RoleAssignment`; its member must be uniquely resolvable through `HAS_ASSIGNMENT` with `memberType = HUMAN`. Team, organization, role, member, and assignment must be valid; the intervals of `HAS_MEMBER`, `HAS_ROLE`, and `RoleAssignment` must fit both at confirmation and at the protected decision point. Human identity must not be inferred from a Boolean supplied by the requester.
+
+Requester, approver, accountable member, responsible team, and executing role remain distinguishable. The same person may hold several functions; no universal four-eyes rule is invented. If a RaN requires separate people, that condition is binding too. Approval grants no technical access rights to an `ERoFObject`.
+
+Time validity in the approval profile uses half-open intervals: `validFrom <= validationTime < validUntil`; without `validUntil` there is no upper limit. The entire assignment interval must still lie within its membership and role ownership. The original requester may be technical but must be authenticated and proven through a valid role activation.
+
+#### 12.9.2 Explicit authority and escalation
+
+An `ApprovalPolicy` is a structured optional field of a `RaN`, not an additional edge or actor. `roleIds` are exact role IDs used as rule operands; names are not identities. The format is:
+
+```text
+approvalPolicy = {
+  profileVersion: "1.0",
+  mode: ACCOUNTABLE_CHAIN | VALUE_SCOPE,
+  roleIds: nonempty, unique list of RoFRole UUIDs,
+  levels: for ACCOUNTABLE_CHAIN a nonempty, unique list
+          from PiF1o, PiF1t, PiF1s, PiF2; absent or empty for VALUE_SCOPE
+}
+```
+
+Authority requires an active, time-valid, scope-compatible allowing `PERMIT` RaN with a matching policy, `decisionKey`, role, and satisfied condition. For Task release it governs the specific Task; for value decisions it governs the approving role activation within the appropriate value-holder scope. `GOVERNS` therefore gains no new `CiV` or `PiF2` target. All applicable denials and conflicts must still be checked; mere absence of a denying rule is not approval authority. A rule introduced in the requested candidate must not authorize its own introduction: previously valid authority is decisive.
+
+The approval route is derived from the complete current graph, not selected by the requester:
+
+A role that merely lacks authority is represented by absence of a matching `PERMIT`. `PROHIBIT` and an unsatisfied `REQUIRE` are actual restrictions, not a technical “please forward” signal.
+
+1. From the Task, the inverse reading of its direct `DECOMPOSES_INTO` assignment identifies exactly one `PiF1o`. Subtasks also use their direct PiF1o assignment.
+2. The accountable member of this `PiF1o` is checked first. If it has a suitable active human role activation with explicit authority, this level is responsible.
+3. Only lack of authority permits checking all current direct `CONTRIBUTES_TO` targets at the next level: `PiF1t`, then `PiF1s`, finally `PiF2`. Each branch stops at its first authorized accountability. Missing or ambiguous model assignments are errors, not permission to skip a level.
+4. Every required anchor derived this way must be approved. A shared ancestor or approver may cover several branches; duplicate edges and contradictory receipts are invalid. `contributionMode = ANY` concerns achievement and does not reduce this approval set.
+5. Escalation ends at `PiF2`. Without authority there is no approval. An explicit human rejection, effective `DENY`, or `UNEVALUABLE` must not be bypassed through a higher level or an alternative role.
+
+`CONTRIBUTES_TO` remains a future contribution. Routing uses the relationship for navigation but does not turn it into a reporting-line or permission edge. For value decisions (`VALUE_SCOPE`), suitable human approvals must cover every affected previous and candidate value holder; the Task future chain does not replace this scope check.
+
+A `VALUE_SCOPE` policy grants authority only for the holders of its protected CiV and PiF2. Actor organizational context and `APPLIES_IN` must also hold. Even `GLOBAL` does not turn protection of another holder's values into approval authority for a different holder. This restriction of allowing authority does not hide otherwise applicable denials.
+
+#### 12.9.3 Bounded executable condition contract
+
+Approval profile 1.0 uses only paths with exactly two segments: `target.<property>`, `actor.<property>`, or `request.<property>`. `target` identifies the governed decision subject: the candidate Task for `Task.action.RELEASE`, or the approving role activation for `Model.action.CONFIRM`. `request` identifies a direct scalar property of the base request. `actor` supplies graph-resolved fields `id`, `entityType`, `memberId`, `memberType`, `roleId`, `roleName`, `teamId`, `organizationId`, and `status`. These are technical validation views, not new graph relationships. Every actor field is grounded through canonical RoF edges.
+
+`EXISTS` and `NOT_EXISTS` distinguish a missing field from a present `null`. `EQUALS`, `NOT_EQUALS`, `IN`, and `NOT_IN` compare without type coercion; Boolean and Integer are distinct. Ordering comparisons permit only integers here, and `CONTAINS` only strings. `MATCHES`, decimal/date ordering, additional path segments, graph traversals, or unresolved types are `UNEVALUABLE` in this profile. Except for existence checks, a missing value is not simply `false`. Every clause is checked: even `ANY` must not hide an invalid clause. General RaN paths outside this bounded profile remain a separate specification task.
+
+#### 12.9.4 Receipts, hash binding, and SYNC
+
+The [approval envelope](../schemas/jci-approval-envelope.schema.json) contains `approvalProfileVersion`, `decisionKey`, the unchanged base request as `proposal`, `requestHash`, `contextHash`, and `receipts`. `requestHash` is SHA-256 over UTF-8 of the complete canonical base request under profile 2.0; receipts are outside this hash to avoid circular binding. It includes request ID, idempotency key, original requester, target, expected revision, time, reason, and every operation.
+
+`contextHash` additionally binds approval profile, decision, request hash, the canonically ordered relevant domain graph view, derived requirements, configured enrollment authorities, and their permanent disablement latches. The view contains accountability, future branches, RaN, and role/scope foundations including revisions and relationship properties. Pure audit and process references are excluded so storing a receipt does not change its own domain basis. Without the complete auditable context, a hash alone is not proof.
+
+Each receipt has `receiptId`, `requestHash`, `contextHash`, `decidedAt`, `validUntil`, `outcome = APPROVED | REJECTED`, `roleAssignmentId`, `memberId`, and `attestation`. Validity is `decidedAt <= decisionAt < validUntil`. A trusted authentication integration must confirm that the verified human confirmed exactly this content; an arbitrary attestation string or self-asserted member ID is insufficient. Reference validation requires an explicit verification adapter and grants no approval without verified proof. Production deployments must supply identity binding, tamper-resistant storage, and key/session verification.
+
+An envelope contains at most one receipt per role activation. `approvalHash` is SHA-256 over the complete canonical receipt. On acceptance all approving roles are linked to the new `ChangeEvent` through `APPROVED_BY`, with `receiptId`, `decidedAt`, `requestHash`, and `approvalHash` stored on the edge. Complete immutable receipts and the request remain durably available in technical storage; actor IDs are not duplicated as ChangeEvent properties. Creating these audit records also uses the shared commit gate.
+
+Under the gate, before the domain commit, `SYNC` rechecks the full request, profile support, requester, receipts, identity, time validity, current route, authority, RaN, and all other model conditions. A changed target revision, policy, accountability, scope, or additional required branch does not automatically preserve an earlier approval. Changed content or grounds require a new request and new confirmations; identical retries must not take effect twice.
+
+Only `SUCCESS` applies the release. The existing rules make a Task `ACTIVE`, or `BLOCKED` when dependencies remain unmet. Approval never directly produces `COMPLETED` or `ACHIEVED`. `CONFLICT` or `FAILED` applies no domain delta; approval and attempt provenance remain available. Deterministic follow-up changes stay within the same `SyncRun`, without a recursive approval or event chain.
+
+#### 12.9.5 Enrollment authority and adoption
+
+The first value decision cannot require an active RaN protecting the very values that have not yet been created. Therefore, an installation may hold enrollment authority explicitly configured by an authenticated human and technically documented: exact human member, specific role activation, and specific value holder. It applies only to `Model.action.CONFIRM`, never Task release, and undergoes the same identity, scope, hash, and time checks. Without such explicitly configured authority, the decision remains blocked. The technical root `RoleAssignment` gains no human decision authority; the six-entity bootstrap remains unchanged.
+
+Once an active `VALUE_SCOPE` policy has first been committed for a holder, that holder's enrollment authority is permanently disabled. This technical latch is stored atomically with the commit and forms part of the approval basis. Later revocation or removal of a policy does not reactivate it. The installation must maintain registration and permanent disablement in tamper-resistant storage; this is no automatic substitute for a missing governance decision.
+
+Existing terminal records and events receive no invented approvals. Missing historical evidence remains visibly missing. New protected changes are accepted only with a demonstrably profile-capable SYNC definition and handler package. The reference modules provide executable decision checks, not a production authentication, messaging, or database engine.
+
+#### 12.9.6 Example and effects on the Loop
+
+Jana is accountable for the operational customer-portal goal; Ernst requests release of the Task “Publish portal.” A suitable RaN permits Jana's active role to approve at `PiF1o` level. Jana confirms the specific request. The new `ChangeEvent` retains Ernst through `REQUESTED_BY` and Jana through `APPROVED_BY`. If the prerequisite portal test is not yet completed, successful `SYNC` applies release with status `BLOCKED`, not publication or goal achievement.
+
+If Jana lacks explicit authority, routing asks the accountability of the associated `PiF1t`. Two current tactical branches require both sets of approvals. If Jana rejects as an authorized decision maker, the proposal remains rejected; the tactical level must not treat that refusal as mere lack of authority.
+
+All ten core elements are affected: `CiV` retains human value decisions; `PiF2`, `PiF1s`, `PiF1t`, and `PiF1o` retain their state and contribution logic with traceable accountability; `RaN` defines authority and protection; `RoF` supplies verified actors; `ERoF` retains separate usage rights; `SYNC` validates and applies the decision; `PiH` arises only when an existing state is actually replaced. The WHY chain is preserved. General unresolved questions about RaN path grammar, historical removal corrections, terminal `GOVERNS` targets, DRAFT cardinalities, and complete technical model validation are not declared solved by this extension.
 
 ## 13. Conclusion
 

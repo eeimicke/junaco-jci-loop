@@ -8,6 +8,8 @@ Cardinalities and invariants are defined in [`JCI_GRAPH_RULES.md`](JCI_GRAPH_RUL
 
 **Rule package 2.0:** Ontology, graph rules, SYNC, new snapshots, correction values, and the exchange format use version `2.0`. JSON-LD remains `1.1`; existing namespace IRIs ending in `/1.0#` remain stable vocabulary identities and are not the rule version. Earlier records are interpreted only through their explicit version profiles.
 
+Approval-protected operations supplement this rule package with `approvalProfileVersion = "1.0"`. The underlying exchange format remains `2.0`; approval envelopes and full approval receipts are technical records outside `JCIEntity`.
+
 ## 2. Abstract types
 
 `JCIEntity` is the abstract supertype of every instance stored as a node. Its abstract subtypes are not stored as additional domain nodes:
@@ -89,6 +91,21 @@ The following type-specific required fields apply in particular to the entity ty
 
 Type-specific required fields and enumeration values are canonically defined in section 2.2.5 of [`JCI_CONTEXT.md`](../JCI_CONTEXT.md). Binding status transitions are defined in section 2.2.4. A database implementation may make them technically concrete but must not weaken or semantically reinterpret them.
 
+A `SyncDefinition` capable of executing approval-protected operations must have `approvalProfileVersion = "1.0"`. A `RaN` may additionally carry a typed `approvalPolicy`:
+
+```text
+ApprovalPolicy = {
+  profileVersion = "1.0",
+  mode = ACCOUNTABLE_CHAIN | VALUE_SCOPE,
+  roleIds = non-empty unique RoFRole UUID[],
+  levels = FutureType[]
+}
+
+FutureType = PiF1o | PiF1t | PiF1s | PiF2
+```
+
+For `ACCOUNTABLE_CHAIN`, `levels` is non-empty and unique. For `VALUE_SCOPE`, `levels` is absent or empty. The policy alone does not grant approval; it limits which human role assignments may approve under an active, temporally valid, scope-matching `PERMIT` rule whose condition holds. Approval profile 1.0 evaluates only the two-part paths `target.<property>`, `actor.<property>`, and `request.<property>` defined in `JCI_CONTEXT`. Other paths and unresolved types are `UNEVALUABLE`.
+
 Complex values exclusively use the types `TypedValue`, `StateSnapshot`, `RelationshipSnapshot`, `TypedValueMap`, `RuleExpression`, and `SyncDefinition` defined in section 2.2.7. Unstructured, implementation-dependent object content is not permitted.
 
 ## 5. Relationship catalogue
@@ -110,6 +127,9 @@ Each `CiV` describes exactly one value through the three non-empty dimensions `n
 ### 5.2 Operational implementation and verification
 
 ```text
+PiF2 ACCOUNTABLE_MEMBER RoFTeamMember
+PiF1s ACCOUNTABLE_MEMBER RoFTeamMember
+PiF1t ACCOUNTABLE_MEMBER RoFTeamMember
 PiF1o HAS_SUCCESS_CRITERIA SuccessCriterion
 PiF1o ACCOUNTABLE_MEMBER RoFTeamMember
 PiF1o DECOMPOSES_INTO Task
@@ -126,6 +146,8 @@ Verification CHECKS SuccessCriterion
 Verification USES_EVIDENCE Evidence
 Verification SUPERSEDES Verification
 ```
+
+`ACCOUNTABLE_MEMBER` is optional for `PiF2`, `PiF1s`, and `PiF1t`, with at most one target per future entity. This permits gradual adoption by existing data. As soon as one of these levels is needed for an approval route, however, its accountable member must be present unambiguously; accountability is not inherited between levels. Exactly one accountable member remains mandatory for `PiF1o`.
 
 A `Verification` uses `evaluatedResultRevision` and `checkedCriterionRevision` to bind exactly the revisions that were checked. Its `Result` is `COMPLETED`, its `SuccessCriterion` is `ACTIVE`, and both belong to the same `PiF1o`. Only a non-superseded Verification whose bound revisions still match the current revisions of both targets is applicable.
 
@@ -168,12 +190,17 @@ A `RaN` has `effect`, `decisionKey`, `scopeType`, `governedTypes`, and a normali
 ```text
 JCIEntity CREATED_BY RoleAssignment
 ChangeEvent REQUESTED_BY RoleAssignment
+ChangeEvent APPROVED_BY RoleAssignment
 HistoricalCorrection CORRECTED_BY RoleAssignment
 RaNConflict RESOLVED_BY RoleAssignment
 RaNConflict USES_EVIDENCE Evidence
 ChangeEvent USES_EVIDENCE Evidence
 HistoricalCorrection USES_EVIDENCE Evidence
 ```
+
+`REQUESTED_BY` preserves the original requester. `APPROVED_BY` records only approvals for an accepted approval-protected request. Each such edge carries exactly one `receiptId`, `decidedAt`, `requestHash`, and `approvalHash`; at most one edge is allowed per `ChangeEvent` and `RoleAssignment`. The edges are born immutably with the accepted `ChangeEvent` and are never appended or changed later. The same human may request and approve unless an applicable `RaN` explicitly requires separation.
+
+A pending proposal and rejected or abandoned approvals remain, with their full technical states or decision receipts, outside the JCI graph. They create no `ChangeEvent`, `APPROVED_BY`, `SyncRun`, `SyncEvent`, or domain change. Receipts carry only `outcome = APPROVED | REJECTED`; pending is the technical state of the proposal, not an invented third receipt outcome.
 
 The initial bootstrap exclusively establishes the trust root of a completely empty graph. It creates exactly one root `RoleAssignment` with `bootstrapKey = "ROOT"`. Only this RoleAssignment may permanently exist without `CREATED_BY`. The atomic minimal graph contains one `RoFOrg`, one `RoFTeam`, one technical `RoFTeamMember`, one `RoFRole`, the root `RoleAssignment`, and one `SYNC` definition. All six entities are created directly with `status = ACTIVE`, `revision = 1`, and the same `createdAt` and `updatedAt`; any `validFrom` values on the types and relationships equal the same bootstrap timestamp. This is the only exception to the regular `DRAFT` start. All entities except the root `RoleAssignment` refer to this trust root via `CREATED_BY`. The bootstrap creates neither a `ChangeEvent`, `SyncRun`, `SyncEvent`, nor `PiH`, cannot be repeated, and is not a data import.
 
@@ -260,6 +287,10 @@ The completion graph is a virtual union of current hierarchy and explicit prereq
 Complete graph and ontology exports use JSON-LD 1.1 with the context [`schemas/jci-context.jsonld`](../schemas/jci-context.jsonld). Entities are identified as `urn:jci:<UUID>`; concrete types and relationships use the public, versioned namespace `https://eeimicke.github.io/junaco-jci-loop/ns/jci/1.0#`.
 
 `JCIChangeRequest` and `JCISyncResult` use `schemaVersion = "2.0"`. For `HISTORICAL_CORRECTION`, a structured `historicalCorrection` object replaces the general `operations`; it includes in particular `expectedHistoryViewHash`, unique lexicographically sorted `correctedFields`, `previousValue`, and `correctedValue`.
+
+An approval-protected proposal embeds that unchanged `JCIChangeRequest` in an approval envelope containing `approvalProfileVersion`, `decisionKey`, `requestHash`, `contextHash`, and complete technical decision receipts. Only a fully approved envelope revalidated against both hashes may be accepted as a request. Its valid `APPROVED` receipts become immutable `APPROVED_BY` edges when the `ChangeEvent` is created; the envelope, waiting states, and rejected receipts do not become graph nodes.
+
+For the first `Model.action.CONFIRM` value decision, an installation may maintain initial authority explicitly configured by an authenticated human for one exact member, role assignment, and value holder. It never applies to Task release and gives the technical root `RoleAssignment` no human authority. Once the first active `VALUE_SCOPE` policy has been adopted for that value holder, a durable technical disable latch deactivates the initial authority; later policy revocation never enables it again.
 
 Complex properties use the structured types from [`JCI_CONTEXT.md`](JCI_CONTEXT.md) and are transferred as JSON-LD-compatible JSON values. The Neo4j projection as a canonical JSON string does not change the exchange format.
 

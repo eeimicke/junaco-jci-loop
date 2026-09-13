@@ -17,6 +17,7 @@ class ModelRuleTests(unittest.TestCase):
             "protected_pif2_ids": ["pif2-trusted-platform"],
             "inscriptions": {("civ-security", "pif2-trusted-platform")},
             "governed_types": ["Task", "Verification", "RoFRole"],
+            "human_confirmed": True,  # structural fixture, never an auth proof
         }
         self.assertTrue(valid_ran_protection(**base))
         self.assertFalse(valid_ran_protection(**(base | {"protected_civ_ids": []})))

@@ -64,6 +64,8 @@ SYNC: JCI-Standardprozess
 
 Diese Entitäten werden in einer einzigen Transaktion mit `status = ACTIVE`, `revision = 1` sowie demselben `createdAt` und `updatedAt` angelegt; vorhandene `validFrom`-Werte entsprechen demselben Bootstrapzeitpunkt. Nur das Root-`RoleAssignment` besitzt kein `CREATED_BY`; alle weiteren Bootstrap-Entitäten verweisen auf dieses Root-`RoleAssignment`. Der Bootstrap erzeugt kein `ChangeEvent`, keinen `SyncRun`, kein `SyncEvent` und kein `PiH`. Erst danach legt das Root-`RoleAssignment` die fachlichen Entitäten dieses Beispiels über reguläre `CREATED`-Aufträge an. Ein zweiter Bootstrap ist nicht zulässig.
 
+Das technische Root darf dabei keine menschliche Wertentscheidung ersetzen. Für die ersten CiV und Schutzentscheidungen wird eine ausdrücklich authentifiziert eingerichtete Anfangsbefugnis für Anna, ihre später regulär angelegte aktive `RoleAssignment` und den Werteträger Beispiel GmbH benötigt. Sie gilt nur für `Model.action.CONFIRM`. Sobald eine passende `VALUE_SCOPE`-Policy aktiv übernommen wird, deaktiviert ein dauerhaft gespeicherter Sperrmerker diese Anfangsbefugnis; auch ein späterer Policy-Widerruf reaktiviert sie nicht. Die verwendete `SYNC.definition` unterstützt ausdrücklich `approvalProfileVersion = "1.0"` und `APPROVED_BY`.
+
 ## 3. Organisation, Partnerschaft und Rollen
 
 Die Beispiel GmbH nutzt eine Plattform der Service Cloud AG. Beide bleiben eigenständige Organisationen:
@@ -120,9 +122,44 @@ Nur die atomaren Tasks besitzen `EXECUTED_BY`, `USES` und `PRODUCES`. Eigene une
 
 Wird `Antwort erstellen` ersetzt, bleibt der frühere Task mit dem `PiF1o` verbunden und erhält `REPLACED`. Sein ausdrücklich eingebundener Nachfolger zählt im aktuellen Umfang. `REVOKED`-Tasks und zurückgezogene Kriterien werden ebenfalls nur nach bestätigter Umfangsänderung ausgeschlossen. Das Ziel verlangt mindestens einen aktuellen Task und ein aktuelles `REQUIRED`-Kriterium; alle aktuellen Tasks müssen `COMPLETED` und alle aktuellen Pflichtkriterien aktiv und erfüllt sein. Aufhebung eines Composite lässt dessen aktuelle Nachkommen nicht verschwinden. Ein ungeklärter Teilbaum führt zu `CONFLICT`.
 
-Benötigt der Composite zusätzlich eine Freigabe als `DEPENDS_ON`, bleibt er bis zu deren Abschluss `BLOCKED`. Diese Voraussetzung wird nicht automatisch auf jedes Kind übertragen. Bleiben nach bestätigter Umfangsänderung nur `DRAFT`-Kinder, wird ein schon freigegebener Composite `ACTIVE`. Ein noch nicht freigegebener Entwurf darf nicht durch Umfangsreduktion direkt `COMPLETED` werden.
+Benötigt der Composite zusätzlich den vorbereitenden Task `Freigabe vorbereiten` als `DEPENDS_ON`, bleibt er bis zu dessen Abschluss `BLOCKED`. Dieser Arbeitsschritt ist nicht der menschliche Genehmigungsbeleg aus Abschnitt 4.2. Die Voraussetzung wird nicht automatisch auf jedes Kind übertragen. Bleiben nach bestätigter Umfangsänderung nur `DRAFT`-Kinder, wird ein schon freigegebener Composite `ACTIVE`. Ein noch nicht freigegebener Entwurf darf nicht durch Umfangsreduktion direkt `COMPLETED` werden.
 
 Wenn der Parent den Abschluss von `Antwort erstellen` benötigt und dieser Task über `DEPENDS_ON` wiederum den Parent benötigt, entsteht im berechneten Abschlussgraphen ein Zyklus. `SYNC` weist den Auftrag ab, bevor eine Teiländerung übernommen wird. Alle übrigen Tasks werden in der gemeinsamen Reihenfolge ihrer Abschlussvoraussetzungen ausgewertet.
+
+### 4.2 Einen Task nachvollziehbar freigeben
+
+Der Task `Antwort versenden` ist zunächst `DRAFT`. Eine technische Antragsrolle bereitet seine Freigabe vor. Anna ist als `RoFTeamMember` mit `memberType = HUMAN` accountable für den direkt verbundenen `PiF1o`; ihre aktive Service-Agent-Rollenaktivierung darf nur dann genehmigen, wenn eine passende RaN diese Befugnis ausdrücklich erteilt. Eine beispielhafte, menschlich bestätigte Policy lautet:
+
+```text
+RaN: Freigabe atomarer Serviceaufgaben
+  effect = PERMIT
+  decisionKey = Task.action.RELEASE
+  approvalPolicy.profileVersion = "1.0"
+  approvalPolicy.mode = ACCOUNTABLE_CHAIN
+  approvalPolicy.roleIds = [UUID der RoFRole Service Agent]
+  approvalPolicy.levels = [PiF1o]
+  condition = ALL(target.taskKind EQUALS ATOMIC)
+  PROTECTS → CiV: Verbindlichkeit
+  PROTECTS → PiF2: verlässlicher Partner
+  GOVERNS → Task: Antwort versenden
+```
+
+Der [Freigabe-Envelope](../schemas/jci-approval-envelope.schema.json) bindet den exakten Basisauftrag samt Antragsteller, Zielrevision und Operationen durch `requestHash` sowie die geprüften Rollen, Regeln und Zukunftswege durch `contextHash`. Vorschlag und Antworten bleiben bis zur vollständigen Genehmigung technische Workflowdaten außerhalb des Fachgraphen. Ein vertrauenswürdiger Prüfadapter weist nach, dass Anna genau diesen Inhalt bestätigt hat. Der unveränderliche Beleg enthält `receiptId`, `decidedAt`, `validUntil`, `outcome`, `roleAssignmentId`, `memberId`, beide Hashes und `attestation`; eine behauptete Zustimmung allein genügt nicht.
+
+Nach Annahme bleiben Antragsteller und Genehmiger getrennt sichtbar:
+
+```text
+ChangeEvent ── REQUESTED_BY ──► technische Antragsrolle
+ChangeEvent ── APPROVED_BY ──► RoleAssignment: Anna als Service Agent
+```
+
+`APPROVED_BY` trägt `receiptId`, `decidedAt`, `requestHash` und `approvalHash`. Die Kante gehört ausschließlich dem bei Annahme erzeugten `ChangeEvent`, bleibt unveränderlich und verändert Annas Rollenrevision nicht. Fehlende oder abgelehnte Genehmigung erzeugt keinen freigegebenen Task und kein angenommenes Änderungsereignis. Die vollständige Annahme plant den ersten `SyncRun`; `SYNC` prüft die Belege, Befugnisse, Zeitgültigkeit und sämtliche übrigen Modellbedingungen unter dem Commit-Gate erneut.
+
+Ist `Antwort erstellen` noch nicht `COMPLETED`, führt die bestätigte Freigabe von `Antwort versenden` nach `SUCCESS` zu `BLOCKED`. Erst erfüllte Voraussetzungen erlauben `ACTIVE`. Genehmigung bedeutet weder versendete Antwort noch `COMPLETED` oder `PiF1o.ACHIEVED`; Ergebnisse und Verification bleiben gesondert erforderlich, soweit die vorhandenen Abschlussregeln sie verlangen. Die Genehmigung erteilt auch keine zusätzlichen Nutzungsrechte für Ticketsystem oder Service-API.
+
+Fehlt Anna ausschließlich die Befugnis, kann die Anforderung zur ausdrücklich zugeordneten Accountability des `PiF1t`, danach des `PiF1s` und zuletzt des `PiF2` weitergehen. Dort erlaubt `ACCOUNTABLE_MEMBER` jeweils `0..1`; eine benötigte Zuordnung darf nicht fehlen. Der `PiF1o` behält genau `1`. Jeder aktuelle Beitragszweig muss bis zu seinem ersten befugten Anker berücksichtigt werden, auch bei `contributionMode = ANY`. Ein wirksames `DENY`, `UNEVALUABLE` oder Annas ausdrückliches Nein darf nicht durch die höhere Ebene umgangen werden.
+
+Für eine spätere Änderung des CiV oder der `PROTECTS`-Auswahl gilt dagegen `Model.action.CONFIRM` mit `approvalPolicy.mode = VALUE_SCOPE`. Die Policy regelt die menschliche `RoleAssignment` und deckt über ihre geschützten CiV/PiF2 ausdrücklich den betroffenen Werteträger ab. Bei Wechsel von Organisations- zu Teamwert sind beide alten und neuen Werteträger zu bestätigen; eine globale Organisationspolicy ist keine automatische Teamwert-Befugnis. Bereits gültige Policies autorisieren die Änderung, nicht eine erst im Kandidaten neu erteilte Befugnis. Details und Grenzen stehen im [Implementierungsleitfaden](JCI_IMPLEMENTATION_GUIDE.md).
 
 ## 5. Umwelt
 

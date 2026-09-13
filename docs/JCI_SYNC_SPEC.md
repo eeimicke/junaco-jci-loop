@@ -6,6 +6,8 @@ Dieses Dokument beschreibt den technologieunabhängigen Ablauf von `SYNC`. Die f
 
 Regelpaket, `ontologyVersion`, `graphRulesVersion`, `syncSpecVersion`, `snapshotSchemaVersion`, `valueSchemaVersion` und Austausch-`schemaVersion` verwenden für neue Vorgänge `2.0`. JSON-LD bleibt `1.1`; Namespace-IRIs mit `/1.0#` sind stabile Identitäten und keine Regelversion. Alte Profile bleiben durch explizit versionierte Resolver lesbar; bestehende PiH, Korrekturen und Hashes werden nicht umgeschrieben oder neu berechnet.
 
+Freigabegeschützte Operationen bleiben Basisaufträge `2.0`, benötigen aber eine SYNC-Definition mit `approvalProfileVersion = "1.0"` und einen gültigen technischen Freigabeumschlag. Ein unbekanntes oder fehlendes Profil scheitert geschlossen.
+
 ## 2. Begriffe
 
 ```text
@@ -21,6 +23,7 @@ ChangeEvent = unveränderliche Dokumentation eines angenommenen Veränderungsauf
 
 ```text
 vorhandene historisierbare JCIEntity ── CHANGED_BY ──► ChangeEvent
+ChangeEvent ── APPROVED_BY ──► RoleAssignment
 ChangeEvent ── plant ──► SyncRun (technisch)
 SyncRun ── verwendet ──► SYNC
 SyncRun ── Abschluss oder kontrollierter Abbruch ──► SyncEvent
@@ -36,7 +39,7 @@ SyncEvent ── CREATES_CORRECTION ──► HistoricalCorrection
 HistoricalCorrection ── CORRECTS ──► dasselbe PiH
 ```
 
-Die gespeicherten Kanten bilden die fachliche Provenienz ab. Die technischen Pfeile zu `SyncRun` sind Prozessschritte und keine Graphbeziehungen; ein `SyncRun` wird niemals als JCI-Knoten angelegt. Ein angenommenes `ChangeEvent` darf zunächst kein `TRIGGERS`-Ziel besitzen. Erst jeder beendete oder kontrolliert abgebrochene Versuch ergänzt genau eine solche Kante append-only.
+Die gespeicherten Kanten bilden die fachliche Provenienz ab. `APPROVED_BY` ist optional für allgemeine Ereignisse und bei angenommenen geschützten Aufträgen mindestens einmal vorhanden. Die technischen Pfeile zu `SyncRun` sind Prozessschritte und keine Graphbeziehungen; ein `SyncRun` wird niemals als JCI-Knoten angelegt. Ein angenommenes `ChangeEvent` darf zunächst kein `TRIGGERS`-Ziel besitzen. Erst jeder beendete oder kontrolliert abgebrochene Versuch ergänzt genau eine solche Kante append-only.
 
 ## 4. Eingaben eines SyncRun
 
@@ -68,17 +71,18 @@ status = RECORDED
 revision = 1
 ```
 
-Es besitzt genau eine `REQUESTED_BY`-Beziehung zu einem `RoleAssignment`. Optionale Nachweise werden über `USES_EVIDENCE` mit `Evidence` verbunden. Seine Eigenschaften werden nach der Annahme nicht verändert.
+Es besitzt genau eine `REQUESTED_BY`-Beziehung zu einem `RoleAssignment`. Ein angenommener geschützter Auftrag besitzt zusätzlich mindestens ein bei seiner Erzeugung festgeschriebenes `APPROVED_BY` zu einer menschlichen Rollenaktivierung; je Kante werden `receiptId`, `decidedAt`, `requestHash` und `approvalHash` gespeichert. Diese source-owned Kanten dürfen später nicht angehängt oder verändert werden. Optionale Nachweise werden über `USES_EVIDENCE` mit `Evidence` verbunden. Seine Eigenschaften werden nach der Annahme nicht verändert.
 
 ## 5. Ablauf
 
 ### 5.1 Annahme
 
-1. Den vollständigen normalisierten JCIChangeRequest einschließlich operations oder historicalCorrection dauerhaft technisch speichern und unveränderlich an requestId und idempotencyKey binden. Gleicher Schlüssel mit anderem Inhalt wird vor erneuter Annahme abgewiesen. Ein identischer bereits erfolgreicher Auftrag liefert sein gespeichertes Ergebnis ohne neuen Run.
-2. ChangeEvent und dauerhafte Einplanung seines Versuchs gemeinsam unter der Schreibsperre aus Abschnitt 9 speichern. Request-, Run- und Outbox-Belege sind keine JCIEntity und ersetzen keine fachliche Provenienz.
-3. Vor der entscheidenden Lesesicht dieselbe Sperre erwerben. Auftrag, gültiges REQUESTED_BY, Run-Besitz samt Fencing-Token, Idempotenzstatus und aktive SYNC-Definition erneut prüfen. Ihre tatsächlich verwendete Revision und Paketprüfsumme technisch binden.
-4. Bei CREATED müssen Ziel-ID frei und requestedRevision = null sein. Historische Korrektur erfordert Zieltyp PiH, Revision 1, genau ein TARGETS_HISTORY und keine CHANGED_BY-Quelle. Sonst muss die historisierbare Zielentität genau eine passende CHANGED_BY-Quelle bilden und weiterhin exakt die unveränderlich angeforderte Revision besitzen.
-5. Den geplanten SyncRun mit eindeutiger runId starten. Ein alter Worker darf nach Verlust seines Fencing-Tokens nicht übernehmen. Bis zum Abschluss bleibt TRIGGERS = 0 zulässig.
+1. Den vollständigen normalisierten `JCIChangeRequest` einschließlich `operations` oder `historicalCorrection` dauerhaft technisch speichern und unveränderlich an `requestId` und `idempotencyKey` binden. Gleicher Schlüssel mit anderem Inhalt wird vor erneuter Annahme abgewiesen. Ein identischer bereits erfolgreicher Auftrag liefert sein gespeichertes Ergebnis ohne neuen Run.
+2. Für `Task.action.RELEASE` und `Model.action.CONFIRM` zunächst ausschließlich einen technischen Freigabevorschlag registrieren. `PENDING`, `REJECTED` und aufgegebene Vorschläge erzeugen kein `ChangeEvent`; ein authentisches Nein eines erforderlichen Akteurs ist für diesen Antrag unveränderlich und nicht durch Eskalation ersetzbar.
+3. Bei einem geschützten Auftrag unter der Schreibsperre aus Abschnitt 9 nur einen vollständig freigegebenen, aktuell gültigen Umschlag annehmen; die allgemeine Annahme ungeschützter Basisaufträge `2.0` bleibt unverändert. `ChangeEvent`, unverändertes `REQUESTED_BY`, gegebenenfalls alle erforderlichen `APPROVED_BY`-Kanten und dauerhafte Einplanung des ersten Versuchs entstehen atomar. Request-, Freigabe-, Run- und Outbox-Belege sind keine `JCIEntity`.
+4. Vor der entscheidenden Lesesicht dieselbe Sperre erwerben. Basisauftrag, Profilfähigkeit, Hashes, Belege, Identität, Zeit, Route und RaN sowie gültiges `REQUESTED_BY`, Run-Besitz samt Fencing-Token, Idempotenzstatus und aktive SYNC-Definition erneut prüfen. Ihre tatsächlich verwendete Revision und Paketprüfsumme technisch binden.
+5. Bei `CREATED` müssen Ziel-ID frei und `requestedRevision = null` sein. Historische Korrektur erfordert Zieltyp PiH, Revision 1, genau ein `TARGETS_HISTORY` und keine `CHANGED_BY`-Quelle. Sonst muss die historisierbare Zielentität genau eine passende `CHANGED_BY`-Quelle bilden und weiterhin exakt die unveränderlich angeforderte Revision besitzen.
+6. Den geplanten `SyncRun` mit eindeutiger `runId` starten. Ein alter Worker darf nach Verlust seines Fencing-Tokens nicht übernehmen. Bis zum Abschluss bleibt `TRIGGERS = 0` zulässig.
 
 Ein Scheitern vor erfolgreicher Zielauflösung endet mit FAILED; ausschließlich dann darf AFFECTS leer sein. SUCCESS und CONFLICT dokumentieren mindestens eine tatsächlich bestehende oder erfolgreich neu übernommene betroffene Entität. Ein CREATED-Kandidat wird nicht allein für Fehlerdokumentation gespeichert.
 
@@ -110,32 +114,32 @@ Da `DEPENDS_ON` PiF1o-Grenzen überschreiten darf, kann eine Task-Änderung mehr
 
 Die folgende Matrix definiert die fachliche Mindesttraversierung. „Aufwärts“ bezeichnet den WHY-Pfad zur übergeordneten Zukunft und zu `CiV`; „abwärts“ bezeichnet beitragende Zukunftselemente bis zur operativen Umsetzung. Inverse Lesarten verwenden dieselbe gespeicherte Kante in Gegenrichtung.
 
-| Geänderter Typ         | Direkt prüfen                                                                                                 | Indirekt weiterverfolgen                                                                                            |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `CiV`                  | drei Dimensionen, `HELD_BY`, `INFORMED_BY`, schützende `RaN`, verbundene `PiF2`, Kontext gebende `PiH`        | zu Herkunfts-CiV, Werteträger und geschützten PiF2; abwärts bis zu allen geregelten Umsetzungselementen             |
-| `PiF2`                 | begründende `CiV`, gemeinsamer Werteträger, schützende `RaN`, beitragende `PiF1s`                             | zu geschützten CiV; abwärts bis `PiF1o` und allen geregelten Umsetzungselementen                                    |
-| `PiF1s`                | Ziel-`PiF2`, beitragende `PiF1t`, `RaN`                                                                       | aufwärts bis `CiV`, abwärts bis operative Graphobjekte                                                              |
-| `PiF1t`                | Ziel-`PiF1s`, beitragende `PiF1o`, `RaN`                                                                      | aufwärts bis `CiV`, abwärts bis Tasks und Prüfung                                                                   |
-| `PiF1o`                | Ziel-`PiF1t`, Kriterien, Accountable, alle Tasks, `RaN`                                                       | vollständiger WHY-Pfad, Task-Graph, Results, Verifications, Teams, Rollen und ERoF                                  |
-| `Task`                 | Parent, Subtasks, Voraussetzungen, abhängige Tasks, PiF1o, Team, Ausführende, ERoFObjects, Results, `RaN`     | alle dadurch erreichten Task- und PiF1o-Graphen sowie deren Zukunfts- und Prüfpfade                                 |
-| `SuccessCriterion`     | zugehöriges `PiF1o`, prüfende anwendbare aktuelle Verifications, `RaN`                                        | Results und Tasks der Verifications; anschließend PiF1o-Aggregation und Zukunftskette                               |
-| `Result`               | erzeugender Task, aktuelle und abgelöste Verifications, `RaN`                                                 | PiF1o, Kriterien, Task-Graph und höhere Zukunftsebenen                                                              |
-| `Verification`         | Result, Kriterium, deren gebundene Revisionen, Vorgänger/Nachfolger, Evidence                                 | erzeugender Task, PiF1o, alle anwendbaren aktuellen Verifications, Kriterien und höhere Zukunftsebenen              |
-| `Evidence`             | alle eingehenden `USES_EVIDENCE`, `RaN`                                                                       | jeweils deren fachliche Zielpfade; Evidence selbst entscheidet keinen Status                                        |
-| `RaN`                  | `PROTECTS`, `GOVERNS`, `APPLIES_IN`, offene Konflikte                                                         | alle geschützten CiV und PiF2, alle geregelten Umsetzungselemente und deren abhängige Pfade gemäß dieser Matrix     |
-| `RaNConflict`          | Konfliktregeln, betroffene Entitäten, erkennendes SyncEvent, Auflösungsbezüge                                 | bei Auflösung alle betroffenen Entitäten und Regeln erneut vollständig prüfen                                       |
-| `RoFOrg`               | Teams, Organisationsbeziehungen, eigene ERoFObjects, `RaN`                                                    | Mitglieder, Rollenaktivierungen, Tasks, PiF1o und fremde Organisationsseite                                         |
-| `RoFOrgRelationship`   | beide Organisationen, vertretende RoleAssignments, `RaN`                                                      | Teams, Mitglieder, ERoF und bei `SUBSIDIARY` gesamte Vorfahren-/Nachfahrenstruktur                                  |
-| `RoFTeam`              | Organisation, Mitglieder, RoleAssignments, verantwortete Tasks, `RaN`                                         | PiF1o, Task-Graph, ERoFObjects und Organisationsbeziehungen der Beteiligten                                         |
-| `RoFTeamMember`        | Teams, Rollen, Assignments, accountable PiF1o, `RaN`                                                          | ausgeführte Tasks, ERoFObjects, Organisationen und Zukunftspfade                                                    |
-| `RoFRole`              | besitzende Mitglieder, aktivierende Assignments, `RaN`                                                        | Teams, Tasks, ERoFObjects und betroffene Organisationen                                                             |
-| `RoleAssignment`       | Mitglied, Team, Rolle, Tasks, ERoFObjects, Organisationsvertretungen, `RaN`                                   | Organisation, PiF1o, Task-Graph und Umwelt aller direkten Verwendungen                                              |
-| `ERoFObject`           | verwendende Assignments und Tasks, Eigentümer, `RaN`                                                          | Teams, Mitglieder, Organisationen, PiF1o und Zukunftspfade der Tasks                                                |
-| `SYNC`                 | verwendende SyncEvents und gültige Vorgängerdefinition                                                        | die neue Definition wird durch die bisher aktive Definition geprüft; keine rückwirkende Änderung alter SyncEvents   |
-| `ChangeEvent`          | Zielkoordinaten, optionale `CHANGED_BY`-Quelle, `TARGETS_HISTORY`, Requester, Evidence, ausgelöste SyncEvents | nur innerhalb des bestehenden Veränderungsvorgangs; kein rekursives ChangeEvent                                     |
-| `SyncEvent`            | ChangeEvent, ausgeführte SYNC-Definition, betroffene Entitäten, erzeugte Historie/Korrekturen/Konflikte       | unveränderlich; nur Konsistenz seiner gespeicherten Bezüge prüfen                                                   |
-| `PiH`                  | ursprüngliche Entität, erzeugendes SyncEvent, Korrekturen, Kontextverwendung                                  | unveränderlich; Abweichungen ausschließlich als HistoricalCorrection behandeln                                      |
-| `HistoricalCorrection` | PiH, ChangeEvent, SyncEvent, Korrektor, Evidence, `baseHistoryViewHash`, Vorgänger/Nachfolger                 | unveränderlich; wirksame `HistoryView` bestimmen und eine aktuelle Modellkorrektur als getrennten Vorgang behandeln |
+| Geänderter Typ         | Direkt prüfen                                                                                                | Indirekt weiterverfolgen                                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| `CiV`                  | drei Dimensionen, `HELD_BY`, `INFORMED_BY`, schützende `RaN`, verbundene `PiF2`, Kontext gebende `PiH`       | zu Herkunfts-CiV, Werteträger und geschützten PiF2; abwärts bis zu allen geregelten Umsetzungselementen             |
+| `PiF2`                 | begründende `CiV`, Werteträger, optional Accountable, schützende `RaN`, beitragende `PiF1s`                  | zu geschützten CiV; abwärts bis `PiF1o` und allen geregelten Umsetzungselementen                                    |
+| `PiF1s`                | Ziel-`PiF2`, optional Accountable, beitragende `PiF1t`, `RaN`                                                | aufwärts bis `CiV`, abwärts bis operative Graphobjekte                                                              |
+| `PiF1t`                | Ziel-`PiF1s`, optional Accountable, beitragende `PiF1o`, `RaN`                                               | aufwärts bis `CiV`, abwärts bis Tasks und Prüfung                                                                   |
+| `PiF1o`                | Ziel-`PiF1t`, Kriterien, Accountable, alle Tasks, `RaN`                                                      | vollständiger WHY-Pfad, Task-Graph, Results, Verifications, Teams, Rollen und ERoF                                  |
+| `Task`                 | Parent, Subtasks, Voraussetzungen, abhängige Tasks, PiF1o, Team, Ausführende, ERoFObjects, Results, `RaN`    | alle dadurch erreichten Task- und PiF1o-Graphen sowie deren Zukunfts- und Prüfpfade                                 |
+| `SuccessCriterion`     | zugehöriges `PiF1o`, prüfende anwendbare aktuelle Verifications, `RaN`                                       | Results und Tasks der Verifications; anschließend PiF1o-Aggregation und Zukunftskette                               |
+| `Result`               | erzeugender Task, aktuelle und abgelöste Verifications, `RaN`                                                | PiF1o, Kriterien, Task-Graph und höhere Zukunftsebenen                                                              |
+| `Verification`         | Result, Kriterium, deren gebundene Revisionen, Vorgänger/Nachfolger, Evidence                                | erzeugender Task, PiF1o, alle anwendbaren aktuellen Verifications, Kriterien und höhere Zukunftsebenen              |
+| `Evidence`             | alle eingehenden `USES_EVIDENCE`, `RaN`                                                                      | jeweils deren fachliche Zielpfade; Evidence selbst entscheidet keinen Status                                        |
+| `RaN`                  | `PROTECTS`, `GOVERNS`, `APPLIES_IN`, optionale `approvalPolicy`, offene Konflikte                            | alle geschützten CiV und PiF2, alle geregelten Umsetzungselemente und deren abhängige Pfade gemäß dieser Matrix     |
+| `RaNConflict`          | Konfliktregeln, betroffene Entitäten, erkennendes SyncEvent, Auflösungsbezüge                                | bei Auflösung alle betroffenen Entitäten und Regeln erneut vollständig prüfen                                       |
+| `RoFOrg`               | Teams, Organisationsbeziehungen, eigene ERoFObjects, `RaN`                                                   | Mitglieder, Rollenaktivierungen, Tasks, PiF1o und fremde Organisationsseite                                         |
+| `RoFOrgRelationship`   | beide Organisationen, vertretende RoleAssignments, `RaN`                                                     | Teams, Mitglieder, ERoF und bei `SUBSIDIARY` gesamte Vorfahren-/Nachfahrenstruktur                                  |
+| `RoFTeam`              | Organisation, Mitglieder, RoleAssignments, verantwortete Tasks, `RaN`                                        | PiF1o, Task-Graph, ERoFObjects und Organisationsbeziehungen der Beteiligten                                         |
+| `RoFTeamMember`        | Teams, Rollen, Assignments, accountable `PiF2`/`PiF1s`/`PiF1t`/`PiF1o`, `RaN`                                | ausgeführte Tasks, ERoFObjects, Organisationen und Zukunftspfade                                                    |
+| `RoFRole`              | besitzende Mitglieder, aktivierende Assignments, `RaN`                                                       | Teams, Tasks, ERoFObjects und betroffene Organisationen                                                             |
+| `RoleAssignment`       | Mitglied, Team, Rolle, Tasks, ERoFObjects, Organisationsvertretungen, `RaN`                                  | Organisation, PiF1o, Task-Graph und Umwelt aller direkten Verwendungen                                              |
+| `ERoFObject`           | verwendende Assignments und Tasks, Eigentümer, `RaN`                                                         | Teams, Mitglieder, Organisationen, PiF1o und Zukunftspfade der Tasks                                                |
+| `SYNC`                 | verwendende SyncEvents und gültige Vorgängerdefinition                                                       | die neue Definition wird durch die bisher aktive Definition geprüft; keine rückwirkende Änderung alter SyncEvents   |
+| `ChangeEvent`          | Zielkoordinaten, optionale `CHANGED_BY`-Quelle, `TARGETS_HISTORY`, Requester, Approver, Evidence, SyncEvents | nur innerhalb des bestehenden Veränderungsvorgangs; kein rekursives ChangeEvent                                     |
+| `SyncEvent`            | ChangeEvent, ausgeführte SYNC-Definition, betroffene Entitäten, erzeugte Historie/Korrekturen/Konflikte      | unveränderlich; nur Konsistenz seiner gespeicherten Bezüge prüfen                                                   |
+| `PiH`                  | ursprüngliche Entität, erzeugendes SyncEvent, Korrekturen, Kontextverwendung                                 | unveränderlich; Abweichungen ausschließlich als HistoricalCorrection behandeln                                      |
+| `HistoricalCorrection` | PiH, ChangeEvent, SyncEvent, Korrektor, Evidence, `baseHistoryViewHash`, Vorgänger/Nachfolger                | unveränderlich; wirksame `HistoryView` bestimmen und eine aktuelle Modellkorrektur als getrennten Vorgang behandeln |
 
 Bei einer Beziehungsänderung beginnt `SYNC` an beiden Endpunkten und verwendet für beide deren Matrixzeile. Bei `REPLACED_BY`, `SUPERSEDES`, `DEPENDS_ON`, `DECOMPOSES_INTO`, `CONTRIBUTES_TO` und `SUBSIDIARY` wird die jeweilige Kette bis zu ihrem Ende traversiert und auf Zyklen geprüft.
 
@@ -155,7 +159,7 @@ Vor der Aktivierung oder dem Abschluss eines atomaren Tasks prüft `SYNC` außer
 
 Bei jeder Erzeugung oder Änderung eines CiV prüft `SYNC`, dass genau ein Wert mit den drei nicht leeren Dimensionen `notCiV`, `selfCiV` und `toServeCiV` vorliegt, genau ein zulässiger `HELD_BY`-Werteträger existiert und kein technisches Mitglied als persönlicher Scope dient. `INFORMED_BY` darf keine Selbstbeziehung bilden und wird niemals aus Namen, Mitgliedschaften oder Zugehörigkeiten abgeleitet. Für jedes verbundene `PiF2` müssen alle unmittelbar begründenden CiV denselben Werteträger besitzen. Eine Wertentscheidung oder Dimensionsübernahme erfordert menschliche Bestätigung und wird von `SYNC` nicht selbst erzeugt.
 
-Bei jeder Erzeugung, Aktivierung oder Änderung eines RaN prüft `SYNC` `PROTECTS` getrennt von `GOVERNS`: Ein aktives RaN schützt mindestens ein CiV und ein PiF2, regelt mindestens ein zulässiges Umsetzungselement und erfüllt die beidseitige Kohärenz über `INSCRIBES_PURPOSE_IN`. Die Schutzobjekte müssen organisatorisch zu `scopeType`, `APPLIES_IN` und bei `ENTITY` zu den WHY-Pfaden der geregelten Ziele passen. Ein `GOVERNS` zu `PiF2` ist unzulässig. `SYNC` prüft menschlich beantragte Schutzkanten, erzeugt oder errät sie aber nicht selbst.
+Bei jeder Erzeugung, Aktivierung oder Änderung eines RaN prüft `SYNC` `PROTECTS` getrennt von `GOVERNS`: Ein aktives RaN schützt mindestens ein CiV und ein PiF2, regelt mindestens ein zulässiges Umsetzungselement und erfüllt die beidseitige Kohärenz über `INSCRIBES_PURPOSE_IN`. Die Schutzobjekte müssen organisatorisch zu `scopeType`, `APPLIES_IN` und bei `ENTITY` zu den WHY-Pfaden der geregelten Ziele passen. Ein `GOVERNS` zu `PiF2` ist unzulässig. `SYNC` prüft menschlich genehmigte Schutzkanten, erzeugt oder errät sie aber nicht selbst; der technische Antragsteller muss nicht selbst der genehmigende Mensch sein.
 
 Bei `changeType = REPLACED` prüft `SYNC`, dass genau ein typgleicher Nachfolger über `REPLACED_BY` angegeben ist. Bei allen anderen Status darf die zu ändernde Entität keine ausgehende `REPLACED_BY`-Beziehung besitzen. Selbstbezüge und Zyklen werden abgewiesen.
 
@@ -262,6 +266,15 @@ Ein niedriger priorisiertes `RaN` wird durch den Vorrang nicht aufgehoben und bl
 Vor dem Anlegen prüft `SYNC`, ob für denselben Veränderungsauftrag bereits ein `RaNConflict` mit demselben `conflictKey` besteht. Ein Wiederholungsversuch darf keinen Duplikatknoten erzeugen. Optionale Nachweise werden ausschließlich als `Evidence`-Knoten über `USES_EVIDENCE` verbunden.
 
 Zur Auflösung eines vorhandenen Konflikts prüft ein nachfolgender `SyncRun` die über `CONFLICTING_RULE` verbundenen Regeln und die betroffenen Entitäten erneut. Nur wenn der dokumentierte Widerspruch nicht mehr besteht und der Versuch erfolgreich ist, bereitet `SYNC` `status = RESOLVED`, `resolvedAt`, `resolution`, `RESOLVED_BY` und `RESOLVED_THROUGH` vor. Der offene Ausgangszustand wird als `PiH` vorbereitet.
+
+### 5.3.5 Auswertung geschützter Freigaben
+
+1. Für `Task.action.RELEASE` und `Model.action.CONFIRM` die Fähigkeit `approvalProfileVersion = "1.0"`, den exakten Basisauftrag `2.0`, `requestHash`, `contextHash` und alle Belege prüfen. Jeder Beleg bindet beide Hashes, `decidedAt`, `validUntil`, Ergebnis, Rollenaktivierung, Mitglied und eine durch den vertrauenswürdigen Adapter verifizierte Attestation; es gilt `decidedAt <= decisionAt < validUntil`. Pro Rollenaktivierung ist höchstens ein Beleg zulässig.
+2. Autorität nur aus einer aktiven, zeit- und scope-gültigen `PERMIT`-RaN mit passendem `decisionKey`, erfüllter Bedingung und `approvalPolicy` ableiten. Die Policy besitzt `profileVersion = "1.0"`, nicht leere eindeutige `roleIds` und entweder `mode = ACCOUNTABLE_CHAIN` mit nicht leeren eindeutigen `levels` aus `PiF1o`, `PiF1t`, `PiF1s`, `PiF2` oder `mode = VALUE_SCOPE` ohne Ebenen. Fehlendes `PERMIT` ist keine Erlaubnis; `DENY`, `UNEVALUABLE`, Konflikt und ein authentisches `REJECTED` blockieren ohne Eskalation.
+3. Im Profil sind ausschließlich direkte skalare Zwei-Segment-Pfade `target.*`, `actor.*` und `request.*` ausführbar. `target` bezeichnet beim Release den Task-Kandidaten, beim Model-Confirm die genehmigende Rollenaktivierung. Typen werden nicht umgewandelt; nicht unterstützte Pfade, Operatoren oder Typen ergeben `UNEVALUABLE`, und auch `ANY` wertet jede Klausel aus.
+4. Für Task-Release vom genau einen direkten `PiF1o` aus jede aktuelle `CONTRIBUTES_TO`-Verzweigung prüfen. Das dortige `ACCOUNTABLE_MEMBER` wird als erster Anker geprüft; ein technisches Mitglied darf durchlaufen werden, kann aber nicht genehmigen. Nur wenn ausschließlich menschliche ausdrückliche Befugnis fehlt, über `PiF1t`, `PiF1s` und `PiF2` eskalieren; jeder Zweig endet an seiner ersten befugten, als `HUMAN` nachgewiesenen Accountability. Alle Zweige müssen unabhängig freigegeben sein, auch bei `contributionMode = ANY`. Fehlende oder mehrdeutige Verantwortung scheitert geschlossen.
+5. Für Model-Confirm alle betroffenen alten und neuen Werteträger der CiV-, `HELD_BY`-, `INFORMED_BY`-, `INSCRIBES_PURPOSE_IN`-, `PROTECTS`-, Policy- und Accountability-Änderungen bestimmen. Eine `VALUE_SCOPE`-Erlaubnis gilt nur für Werteträger, die aus den `PROTECTS`-verbundenen CiV/PiF2 desselben RaN abgeleitet werden, und nur für einen Akteur im passenden Werteträger-Scope; `GLOBAL` erweitert dieses Mandat nicht. Die vorher gültigen Policies entscheiden über ihre Änderung, sodass der Kandidat sich nicht selbst freigeben kann.
+6. Vor dem Commit die vollständige aktuelle Fachgrundlage erneut hashen und prüfen. Eine Änderung an Revision, Graph, Policy, Route, Scope oder Kandidaten macht alte Belege ungültig. Nur ein vollständiger Satz `APPROVED`-Belege erlaubt den Versuch; Freigabe allein überführt einen Task nur nach allen Modellprüfungen zu `ACTIVE` oder `BLOCKED`, niemals zu `COMPLETED` oder ein Zukunftselement zu `ACHIEVED`. Bei `CONFLICT` oder `FAILED` bleibt das Fachdelta aus; das bereits angenommene Ereignis und seine unveränderliche Genehmigungs- und Versuchsprovenienz bleiben erhalten.
 
 ### 5.4 Vorbereitung der Änderung
 
@@ -422,6 +435,21 @@ ChangeEvent.requestedRevision = requestedRevision
 
 Bei `CREATED` ist `requestedRevision = null`; bei allen anderen Änderungstypen ist es eine positive Ganzzahl. Allgemeine Änderungen verwenden mindestens eine Operation aus `ADD | REPLACE | REMOVE | CONNECT | DISCONNECT`.
 
+Ein geschützter Vorgang wird vor der Annahme durch das [Freigabe-Envelope](schemas/jci-approval-envelope.schema.json) umschlossen; der Basisauftrag bleibt unverändert:
+
+```text
+JCIApprovalEnvelope = {
+  approvalProfileVersion: "1.0",
+  decisionKey: "Task.action.RELEASE" | "Model.action.CONFIRM",
+  proposal: JCIChangeRequest 2.0,
+  requestHash: SHA-256,
+  contextHash: SHA-256,
+  receipts: ApprovalReceipt[]
+}
+```
+
+`requestHash` umfasst den vollständigen kanonischen Basisauftrag ohne Belege. `contextHash` umfasst zusätzlich Profil und Entscheidung, die geordnete relevante Fachgraphsicht, abgeleitete Anforderungen und Kandidaten sowie technische Anfangsbefugnisse und dauerhafte Sperrmerker. Ein Beleg enthält `receiptId`, beide Hashes, `decidedAt`, `validUntil`, `outcome = APPROVED | REJECTED`, `roleAssignmentId`, `memberId` und `attestation`; der vollständige kanonische Beleg ergibt `approvalHash`. Wartende, abgelehnte und aufgegebene Umschläge bleiben dauerhafte technische Auditdaten außerhalb des JCI-Graphen. Nur bei vollständiger Annahme werden ihre Genehmigungen als unveränderliche `APPROVED_BY`-Kanten des neuen `ChangeEvent` projiziert.
+
 `HISTORICAL_CORRECTION` verwendet keine generischen `operations`, sondern genau einen strukturierten Payload:
 
 ```text
@@ -454,5 +482,6 @@ Der initiale Bootstrap ist kein `SyncRun`, kein Veränderungsauftrag und kein Im
 6. Vor dem Commit werden Eindeutigkeit der Vertrauenswurzel, Vollständigkeit des Minimalgraphen, `ACTIVE`-Status aller sechs Entitäten und Ausführbarkeit der SYNC-Definition geprüft. Bei einem Fehler wird alles zurückgerollt.
 7. Nach erfolgreichem Commit sind Wiederholung und ein zweites Root-`RoleAssignment` verboten. Alle weiteren Änderungen verwenden ausschließlich den normalen SYNC-Ablauf.
 8. Importierte Entitäten ohne vollständige Erstellungsprovenienz bleiben `DRAFT`; ein Import darf die Bootstrap-Ausnahme nicht beanspruchen.
+9. Das technische Root-`RoleAssignment` erhält keine menschliche Freigabeautorität. Soll diese Installation geschützte Vorgänge verarbeiten, muss die SYNC-Definition `approvalProfileVersion = "1.0"` ausdrücklich aktivieren. Eine genau konfigurierte menschliche Anfangsbefugnis für `Model.action.CONFIRM` bleibt technischer Zustand und wird je Werteträger beim ersten Commit einer aktiven `VALUE_SCOPE`-Policy dauerhaft gesperrt; sie gilt niemals für Task-Release.
 
 **Kurzes Beispiel:** Das Deployment legt Organisation, Administrationsteam, technisches Mitglied, Rolle, Root-Zuordnung und aktive SYNC-Definition gemeinsam an. Danach fordert dieses Root-`RoleAssignment` den ersten regulären `CREATED`-Vorgang an.

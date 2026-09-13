@@ -1,9 +1,10 @@
 """Executable reference for selected JCI invariants.
 
 Functions consume complete candidate data supplied by a caller. They do not
-implement SYNC persistence, authorization, the complete RaN evaluator or Neo4j
-transactions. Domain changes, human approvals and write locking remain explicit
-caller responsibilities. A RuleViolation must never be treated as success.
+implement SYNC persistence, the complete RaN evaluator or Neo4j transactions.
+The separate jci_approval module implements the fail-closed approval profile;
+these lower-level primitives grant no authority. Domain changes and write
+locking remain caller responsibilities. A RuleViolation is never success.
 """
 
 from copy import deepcopy
@@ -60,7 +61,7 @@ for _source, _relation, _targets in (
     ("PiF1t", "CONTRIBUTES_TO", "PiF1s"),
     ("PiF1o", "CONTRIBUTES_TO", "PiF1t"),
     ("PiF1o", "HAS_SUCCESS_CRITERIA", "SuccessCriterion"),
-    ("PiF1o", "ACCOUNTABLE_MEMBER", "RoFTeamMember"),
+    ("PiF2 PiF1s PiF1t PiF1o", "ACCOUNTABLE_MEMBER", "RoFTeamMember"),
     ("PiF1o Task", "DECOMPOSES_INTO", "Task"),
     ("Task", "DEPENDS_ON", "Task"),
     ("Task", "RESPONSIBLE_TEAM", "RoFTeam"),
@@ -97,6 +98,7 @@ for _source, _relation, _targets in (
     ("HistoricalCorrection", "USES_EVIDENCE", "Evidence"),
     ("HistoricalCorrection", "SUPERSEDES", "HistoricalCorrection"),
     ("ChangeEvent", "REQUESTED_BY", "RoleAssignment"),
+    ("ChangeEvent", "APPROVED_BY", "RoleAssignment"),
     ("ChangeEvent", "TARGETS_HISTORY", "PiH"),
     ("ChangeEvent", "USES_EVIDENCE", "Evidence"),
     ("SyncEvent", "EXECUTES", "SYNC"),
@@ -779,7 +781,7 @@ def pif1o_achievable(goal: str, tasks: Mapping[str, TaskRecord], criteria,
 COMMON_SNAPSHOT_PROPERTIES = frozenset({"name", "description", "status"})
 TYPE_PROPERTIES = {
     "CiV": "notCiV selfCiV toServeCiV",
-    "RaN": "ruleType effect statement decisionKey scopeType governedTypes condition priority validFrom validUntil",
+    "RaN": "ruleType effect statement decisionKey scopeType governedTypes condition priority validFrom validUntil approvalPolicy",
     "SYNC": "version definition validFrom validUntil",
     "PiF2": "targetState horizonStart horizonEnd targetDate contributionMode",
     "PiF1s": "targetState horizonStart horizonEnd targetDate contributionMode",
@@ -804,7 +806,8 @@ SNAPSHOT_PROPERTIES = {
     for kind, fields in TYPE_PROPERTIES.items()
 }
 RELATIONSHIP_PROPERTIES = {"HAS_MEMBER": frozenset({"validFrom", "validUntil"}),
-                           "HAS_ROLE": frozenset({"validFrom", "validUntil"})}
+                           "HAS_ROLE": frozenset({"validFrom", "validUntil"}),
+                           "APPROVED_BY": frozenset({"receiptId", "decidedAt", "requestHash", "approvalHash"})}
 DECIMAL_PATTERN = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]*[1-9])?\Z")
 NULL_VALUE = {"valueType": "NULL", "value": None}
 
@@ -1063,6 +1066,21 @@ def _field_set(fields, entity_type):
             raise RuleViolation("overlapping fields within correction")
 
 
+def _relationship_correction_identity(parts, typed):
+    """Resolve all immutable identity fields of a whole relationship value."""
+    validate_typed_value(typed)
+    if typed["valueType"] != "OBJECT":
+        raise RuleViolation("whole relationship correction must contain an OBJECT")
+    edge = typed["value"]
+    key = relationship_key(edge)
+    if key != parts[1]:
+        raise RuleViolation("relationship identity cannot change under a stable key")
+    other_type = edge.get("otherEntityType")
+    if not isinstance(other_type, str) or other_type not in ENTITY_TYPES:
+        raise RuleViolation("invalid relationship counterpart type")
+    return key, other_type
+
+
 def _active_corrections(corrections, pih, entity_type):
     records = list(corrections)
     by_id = {record.id: record for record in records}
@@ -1088,6 +1106,14 @@ def _active_corrections(corrections, pih, entity_type):
                 raise RuleViolation("missing/branching correction predecessor")
             if not set(record.fields) >= set(predecessor.fields):
                 raise RuleViolation("partial supersession")
+            # Check immutable identities across stored records without replaying
+            # previousValue conditions or superseded property changes.
+            for pointer in predecessor.fields:
+                parts = parse_correction_path(pointer, entity_type)
+                if (len(parts) == 2
+                        and _relationship_correction_identity(parts, record.corrected.get(pointer))
+                        != _relationship_correction_identity(parts, predecessor.corrected.get(pointer))):
+                    raise RuleViolation("relationship identity cannot change across supersession")
             try:
                 old_time = datetime.fromisoformat(predecessor.corrected_at.replace("Z", "+00:00"))
                 new_time = datetime.fromisoformat(record.corrected_at.replace("Z", "+00:00"))
@@ -1133,14 +1159,12 @@ def _overlay(view, parts, typed):
             raise RuleViolation("missing correction parent")
         parent = parent[part]
     if len(parts) == 2:
-        if typed["valueType"] != "OBJECT":
-            raise RuleViolation("whole relationship correction must contain an OBJECT")
-        edge = typed["value"]
-        if relationship_key(edge) != parts[1]:
-            raise RuleViolation("relationship identity cannot change under a stable key")
-        if parts[-1] in parent and parent[parts[-1]]["otherEntityType"] != edge["otherEntityType"]:
-            raise RuleViolation("relationship counterpart type cannot change")
-        parent[parts[-1]] = deepcopy(edge)
+        identity = _relationship_correction_identity(parts, typed)
+        if (parts[-1] in parent
+                and identity != _relationship_correction_identity(
+                    parts, {"valueType": "OBJECT", "value": parent[parts[-1]]})):
+            raise RuleViolation("relationship identity cannot change")
+        parent[parts[-1]] = deepcopy(typed["value"])
     else:
         parent[parts[-1]] = deepcopy(typed)
 
@@ -1215,6 +1239,10 @@ def validate_correction(snapshot, existing, candidate: HistoricalCorrectionRecor
             old_typed = {"valueType": "OBJECT", "value": old} if len(parts) == 2 else old
             if canonical_json(previous) != canonical_json(old_typed):
                 raise RuleViolation("previousValue differs from effective history")
+            if (len(parts) == 2
+                    and _relationship_correction_identity(parts, corrected)
+                    != _relationship_correction_identity(parts, old_typed)):
+                raise RuleViolation("relationship identity differs from effective history")
     return build_history_view(snapshot, existing + [candidate], pih=pih)
 
 
@@ -1285,10 +1313,14 @@ def valid_ran_protection(
     protected_pif2_ids: list[str],
     inscriptions: set[tuple[str, str]],
     governed_types: list[str],
-    human_confirmed: bool = True,
+    human_confirmed: bool = False,
     scope_compatible: bool = True,
 ) -> bool:
-    """Check protection subjects, inscription coherence and concrete governed types."""
+    """Structural primitive, not proof of human identity or approval authority.
+
+    The final commit must use jci_approval's authenticated immutable receipts.
+    An omitted historical human-confirmation input is deliberately fail-closed.
+    """
     if status not in {"DRAFT", "ACTIVE"}:
         return False
     if not set(governed_types).issubset(RAN_GOVERNED_TYPES):

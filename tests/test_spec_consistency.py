@@ -26,7 +26,7 @@ RELATIONSHIPS = {
     "HAS_MEMBER", "HAS_ROLE", "HAS_ASSIGNMENT", "IN_TEAM", "ACTIVATES_ROLE",
     "SOURCE_ORG", "TARGET_ORG", "REPRESENTED_BY", "OWNED_BY", "PROTECTS", "GOVERNS",
     "APPLIES_IN", "CONFLICTING_RULE", "AFFECTS", "DETECTED_BY", "RESOLVED_BY",
-    "RESOLVED_THROUGH", "CREATED_BY", "REQUESTED_BY", "CORRECTED_BY",
+    "RESOLVED_THROUGH", "CREATED_BY", "REQUESTED_BY", "APPROVED_BY", "CORRECTED_BY",
     "CHANGED_BY", "TRIGGERS", "EXECUTES", "REPLACED_BY",
     "HAS_HISTORICAL_STATE", "CREATES_HISTORY", "CORRECTS", "CAUSED_BY",
     "CREATES_CORRECTION", "TARGETS_HISTORY",
@@ -152,6 +152,30 @@ class SpecificationConsistencyTests(unittest.TestCase):
             "TypedValueMap", "RuleExpression", "SyncDefinition",
         ):
             self.assertIn(type_name, self.context)
+
+    def test_approval_profile_is_projected_without_new_core_entities(self):
+        """Approval capability and provenance must survive every normative projection."""
+        from reference import jci_rules
+
+        self.assertEqual(ENTITY_TYPES, set(jci_rules.ENTITY_TYPES))
+        self.assertEqual(
+            jci_rules.revision_owners("ChangeEvent", "APPROVED_BY", "RoleAssignment"),
+            {"source"},
+        )
+        for future in ("PiF1o", "PiF1t", "PiF1s", "PiF2"):
+            self.assertEqual(
+                jci_rules.revision_owners(future, "ACCOUNTABLE_MEMBER", "RoFTeamMember"),
+                {"source", "target"},
+            )
+        for language in ("", "en/"):
+            for document in (
+                "JCI_CONTEXT.md", "JCI_ONTOLOGY.md", "JCI_GRAPH_RULES.md", "JCI_SYNC_SPEC.md",
+                "implementations/neo4j/JCI_NEO4J_SCHEMA.md",
+            ):
+                content = read(language + document)
+                for term in ("APPROVED_BY", "approvalProfileVersion", "ACCOUNTABLE_CHAIN", "VALUE_SCOPE"):
+                    with self.subTest(document=language + document, term=term):
+                        self.assertTrue(term in content, f"{term} missing in {language + document}")
 
     def test_neo4j_validates_complete_sync_event_result(self):
         """The Neo4j projection must enforce every canonical SyncEvent result field."""

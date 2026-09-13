@@ -6,6 +6,8 @@ Dieses Dokument legt technologieunabhängige Kardinalitäten und Invarianten des
 
 **Regelpaket 2.0:** Ontologie, Graphregeln, SYNC, neue Snapshots, Korrekturwerte und das Austauschformat verwenden Version `2.0`. JSON-LD bleibt `1.1`; bestehende Namespace-IRIs mit `/1.0#` bleiben stabile Vokabularidentitäten und bezeichnen nicht die Regelversion. Frühere Datensätze werden ausschließlich nach ihren ausdrücklich angegebenen Versionsprofilen gelesen.
 
+Freigabegeschützte Operationen verwenden weiterhin dieses Basispaket `2.0`, setzen jedoch die ausdrücklich aktivierte SYNC-Fähigkeit `approvalProfileVersion = "1.0"` und den technischen Freigabeumschlag aus Abschnitt 5.2 voraus.
+
 ## 2. Allgemeine Entitätsregeln
 
 1. Jede konkrete `JCIEntity` besitzt genau eine global eindeutige und unveränderliche UUID als `id`.
@@ -70,6 +72,9 @@ Die Spalte „Ziele je Quelle“ gilt in Pfeilrichtung; „Quellen je Ziel“ gi
 
 | Quelle           | Beziehung              | Ziel               | Ziele je Quelle | Quellen je Ziel |
 | ---------------- | ---------------------- | ------------------ | --------------: | --------------: |
+| `PiF2`           | `ACCOUNTABLE_MEMBER`   | `RoFTeamMember`    | `0..1`          | `0..n`          |
+| `PiF1s`          | `ACCOUNTABLE_MEMBER`   | `RoFTeamMember`    | `0..1`          | `0..n`          |
+| `PiF1t`          | `ACCOUNTABLE_MEMBER`   | `RoFTeamMember`    | `0..1`          | `0..n`          |
 | `PiF1o`          | `HAS_SUCCESS_CRITERIA` | `SuccessCriterion` | `1..n`          | `1`             |
 | `PiF1o`          | `ACCOUNTABLE_MEMBER`   | `RoFTeamMember`    | `1`             | `0..n`          |
 | `PiF1o`          | `DECOMPOSES_INTO`      | `Task`             | `1..n`          | `1`             |
@@ -106,6 +111,7 @@ Die Spalte „Ziele je Quelle“ gilt in Pfeilrichtung; „Quellen je Ziel“ gi
 | ---------------------- | --------------- | ---------------- | --------------: | --------------: |
 | `JCIEntity`            | `CREATED_BY`    | `RoleAssignment` | `0..1`          | `0..n`          |
 | `ChangeEvent`          | `REQUESTED_BY`  | `RoleAssignment` | `1`             | `0..n`          |
+| `ChangeEvent`          | `APPROVED_BY`   | `RoleAssignment` | `0..n`          | `0..n`          |
 | `HistoricalCorrection` | `CORRECTED_BY`  | `RoleAssignment` | `1`             | `0..n`          |
 | `ChangeEvent`          | `USES_EVIDENCE` | `Evidence`       | `0..n`          | `0..n`          |
 | `HistoricalCorrection` | `USES_EVIDENCE` | `Evidence`       | `0..n`          | `0..n`          |
@@ -173,13 +179,24 @@ Bedingte Invarianten:
 5. Anwendbare `RaN` werden aus `GOVERNS`, Gültigkeit, Status und Scope bestimmt; ein fehlender Regelpfad ist nur zulässig, wenn tatsächlich keine Regel anwendbar ist.
 6. Ein `DRAFT` darf unvollständige Pfade besitzen. Der Übergang zu `ACTIVE` ist bei einem unvollständigen WHY- oder WHO-Pfad unzulässig.
 
+### 5.2 Freigaberegeln
+
+1. Ein freigabegeschützter Vorschlag bleibt bis zur vollständigen Entscheidung technischer Zustand außerhalb des JCI-Graphen. `PENDING`, `REJECTED` und aufgegebene Vorschläge erzeugen weder `ChangeEvent`, `SyncRun`, `SyncEvent` noch eine Fachänderung.
+2. Erst ein vollständig freigegebener Vorschlag wird angenommen. Das neue `ChangeEvent`, sein unverändertes `REQUESTED_BY`, sämtliche erforderlichen `APPROVED_BY`-Kanten und die Terminierung des ersten `SyncRun` entstehen atomar. Ein angenommenes geschütztes Ereignis besitzt mindestens eine solche Kante; sonst gilt `0..n`.
+3. Jede `APPROVED_BY`-Kante besitzt genau `receiptId: UUID`, `decidedAt: DateTime`, `requestHash: SHA-256` und `approvalHash: SHA-256`. Je Paar aus `ChangeEvent` und `RoleAssignment` ist höchstens eine zulässig. Die Kante gehört dem Ereignis, entsteht nur mit ihm und darf später weder ergänzt, verändert noch entfernt werden.
+4. `REQUESTED_BY` bleibt die ursprüngliche anfragende Rollenaktivierung. Dieselbe menschliche Person darf anfragen und freigeben, sofern kein anwendbares RaN ausdrücklich Funktionstrennung verlangt; eine allgemeine Vier-Augen-Regel wird nicht angenommen.
+5. Ein vertrauenswürdiger Adapter muss die reale menschliche Identität attestieren. Genehmigende Rollenaktivierung, menschliches Mitglied, Rolle, Team, Organisation, Mitgliedschaft und Rollenbesitz müssen sowohl bei `decidedAt` als auch am Commit-Zeitpunkt `decisionAt` gültig und scope-kompatibel sein. Clientangaben wie ein Boolean oder `memberType` genügen nicht.
+6. Der technische Umschlag bindet den unveränderten `JCIChangeRequest` `2.0`, `decisionKey`, `requestHash`, `contextHash` und vollständige signierte Belege. `requestHash` hasht kanonisch den Basisauftrag; `contextHash` bindet Profil, Auftrag, relevanten Fachgraphen, Regeln, abgeleitete Anforderungen und Kandidaten sowie konfigurierte Anfangsbefugnisse und ihre Sperrmerker. Abweichung oder Veraltung erfordert einen neuen Antrag und neue Belege.
+7. Jeder Beleg enthält `receiptId`, beide Hashes, `decidedAt`, `validUntil`, `outcome = APPROVED | REJECTED`, `roleAssignmentId`, `memberId` und `attestation`; es gilt `decidedAt <= decisionAt < validUntil`. `approvalHash` hasht den vollständigen kanonischen Beleg. Pro Rollenaktivierung ist höchstens ein Beleg zulässig. Ein authentisches `REJECTED` eines erforderlichen Akteurs blockiert den Antrag dauerhaft und darf weder ersetzt noch durch Eskalation umgangen werden.
+8. Deployment darf zur ersten Wertentscheidung außerhalb des Graphen ausschließlich für `Model.action.CONFIRM` eine genaue vertrauenswürdige Kombination aus menschlichem Mitglied, Rollenaktivierung und Werteträger konfigurieren. Das technische Root-`RoleAssignment` erhält keine menschliche Autorität; `Task.action.RELEASE` ist ausgeschlossen. Mit dem ersten Commit einer aktiven `VALUE_SCOPE`-Policy für den Werteträger wird diese Anfangsbefugnis atomar und dauerhaft gesperrt. Widerruf reaktiviert sie nicht; die vor dem Kandidaten gültigen Policies verhindern Selbstfreigabe.
+
 ## 6. Organisations- und Umweltregeln
 
 1. Jedes `CiV` beschreibt genau einen Wert und besitzt nicht leere Strings für `notCiV`, `selfCiV` und `toServeCiV`; die alten Felder `purpose`, `values` und `scope` sind für CiV unzulässig.
 2. Jedes `CiV` besitzt genau ein `HELD_BY` zu einer `RoFOrg`, einem `RoFTeam` oder einem menschlichen `RoFTeamMember`. Ein technisches Mitglied ist als Werteträger unzulässig.
 3. `INFORMED_BY` verbindet ausschließlich unterschiedliche CiV nach ausdrücklicher fachlicher Bestätigung. Gleicher Name, Mitgliedschaft oder Zugehörigkeit erzeugen weder eine Kante noch eine automatische Übernahme von Dimensionen.
 4. Alle CiV, die dasselbe `PiF2` unmittelbar über `INSCRIBES_PURPOSE_IN` begründen, besitzen denselben `HELD_BY`-Zielknoten. Dieser bestimmt den Scope des `PiF2`; ein redundantes CiV-Zweck- oder Scope-Feld ist unzulässig.
-5. Ein organisationsbezogenes CiV bleibt mit der `RoFOrg` verbunden, auch wenn ein beauftragtes Team es erarbeitet. Die menschliche Entscheidung bleibt über `CREATED_BY`, `ChangeEvent`, `REQUESTED_BY` und die beteiligten `RoleAssignments` nachvollziehbar.
+5. Ein organisationsbezogenes CiV bleibt mit der `RoFOrg` verbunden, auch wenn ein beauftragtes Team es erarbeitet. Der ursprüngliche Antrag bleibt über `REQUESTED_BY`, die nachweisbare menschliche Bestätigung eines geschützten Vorgangs über die bei Annahme festgeschriebenen `APPROVED_BY`-Kanten nachvollziehbar; `CREATED_BY` dokumentiert die Erzeugungsrolle, ersetzt aber keinen Freigabebeleg.
 6. Jede aktive `RoFOrg` besitzt mindestens ein Team; jedes aktive Team mindestens ein Mitglied.
 7. Ein `RoleAssignment` gehört genau zu einem Mitglied, einem Team und einer aktivierten Rolle.
 8. Das Mitglied eines `RoleAssignment` muss Mitglied des verbundenen Teams sein und die aktivierte Rolle besitzen.
@@ -196,6 +213,7 @@ Bedingte Invarianten:
 19. Eine aktive `PARTNERSHIP` speichert die Organisation mit der lexikografisch kleineren UUID als `SOURCE_ORG`.
 20. Aktive Organisationsbeziehungen desselben Typs und Organisationspaars besitzen keine überlappenden Gültigkeitszeiträume.
 21. `INTERNAL` beziehungsweise `EXTERNAL` wird je betrachteter Organisation abgeleitet: Eine `OWNED_BY`-Kante zu ihr ergibt `INTERNAL`, ihr Fehlen `EXTERNAL`.
+22. `PiF2`, `PiF1s` und `PiF1t` dürfen optional genau ein direktes `ACCOUNTABLE_MEMBER` besitzen. Eine Freigaberoute, die eine solche Ebene verwendet, verlangt diese Kante ausdrücklich; Zuständigkeit wird weder aus einem anderen Zukunftselement noch aus Teamzugehörigkeit geerbt. Für `PiF1o` bleibt genau ein direkt verantwortliches Mitglied Pflicht.
 
 ## 7. RaN-Schutz, Priorität und Konflikte
 
@@ -222,6 +240,11 @@ Bedingte Invarianten:
 21. `REQUIRE` erlaubt bei wahrer und verweigert bei falscher Bedingung. `PROHIBIT` verweigert bei wahrer Bedingung. `PERMIT` erlaubt bei wahrer Bedingung. Falsches `PROHIBIT` oder `PERMIT` trifft keine eigene Entscheidung.
 22. Eine Regelverletzung blockiert die angeforderte Entscheidung, erzeugt allein aber keinen `RaNConflict`.
 23. Ein Widerspruch liegt nur vor, wenn Regeln mit gleichem `decisionKey`, überlappendem Scope und gemeinsamem Ziel gleichzeitig erlauben und verweigern.
+24. `approvalPolicy` ist optional und besitzt `profileVersion = "1.0"`, `mode = ACCOUNTABLE_CHAIN | VALUE_SCOPE`, eine nicht leere eindeutige Liste bestehender `RoFRole`-UUIDs in `roleIds` sowie `levels`. Bei `ACCOUNTABLE_CHAIN` enthält `levels` eine nicht leere eindeutige Liste aus `PiF1o`, `PiF1t`, `PiF1s`, `PiF2`; bei `VALUE_SCOPE` fehlt `levels` oder ist leer.
+25. Freigabegewalt entsteht nur durch ein anwendbares ausdrückliches `PERMIT`-RaN mit passendem `decisionKey`, erfüllter Bedingung, gültigem Scope, passender Policy und genauer Rolle der genehmigenden Rollenaktivierung. Bei `VALUE_SCOPE` muss zusätzlich der betroffene Werteträger zur aus den `PROTECTS`-verbundenen CiV/PiF2 dieses RaN abgeleiteten Werteträgermenge gehören und der Akteur in diesem Werteträger-Scope handeln; eine globale Regel schützt nicht automatisch andere Werteträger. Bloßes Fehlen eines `DENY` begründet keine Autorität. `DENY`, `UNEVALUABLE`, ein Konflikt oder menschliches `REJECTED` darf nicht durch eine andere Rolle oder höhere Ebene umgangen werden.
+26. Im Freigabeprofil hat jeder Bedingungspfad genau zwei Segmente und beginnt mit `target`, `actor` oder `request`; zulässig sind direkte skalare Eigenschaften. `target` ist beim Release der Task im Kandidatenzustand und beim Model-Confirm die genehmigende Rollenaktivierung. `actor` stellt ausschließlich die graphseitig aufgelösten Felder `id`, `entityType`, `memberId`, `memberType`, `roleId`, `roleName`, `teamId`, `organizationId` und `status` bereit; `request` enthält direkte skalare Auftragseigenschaften. `EXISTS` und `NOT_EXISTS` unterscheiden fehlend von `null`; sonst wird streng typisiert ohne Umwandlung verglichen. Größenvergleiche gelten nur für Integer und `CONTAINS` nur für Strings. `MATCHES`, Dezimal-/Datumsordnung, weitere Pfadsegmente, Traversierung oder ungeklärte Typen ergeben `UNEVALUABLE`; auch bei `ANY` werden alle Klauseln geprüft. Die allgemeine RaN-Pfadgrammatik bleibt davon unberührt.
+27. Für `Task.action.RELEASE` wird genau das direkte `PiF1o` des Tasks bestimmt und dort das verantwortliche Mitglied geprüft. Ein technisches `ACCOUNTABLE_MEMBER` ist als Zwischenanker zulässig, kann aber nicht genehmigen. Fehlt ausschließlich eine menschliche ausdrückliche Befugnis, folgt die Route allen aktuellen direkten `CONTRIBUTES_TO`-Zweigen über `PiF1t`, `PiF1s` und `PiF2`; jeder Zweig endet bei seiner ersten befugten, als `HUMAN` nachgewiesenen Accountability. Fehlende oder mehrdeutige Zuordnung scheitert geschlossen. Alle ermittelten Endanker müssen unabhängig genehmigen, auch bei `contributionMode = ANY`; ein gemeinsamer Vorfahr oder Genehmiger darf mehrere Zweige abdecken.
+28. `Model.action.CONFIRM` umfasst Änderungen an CiV-Inhalt und `HELD_BY`, `INFORMED_BY`, `INSCRIBES_PURPOSE_IN`, `PROTECTS`, Freigabe-Policies und Verantwortungsgrundlagen. Alter und neuer Zustand, beide Kantenrichtungen, Entfernen, Ersatz und Widerruf werden geprüft. `VALUE_SCOPE` verlangt Genehmigungen aller betroffenen alten und neuen Werteträger, ohne `GOVERNS` um CiV zu erweitern. Nicht unterstützte Operationskombinationen scheitern geschlossen.
 
 ## 8. Erfolgskriterien und Erreichung
 
@@ -311,6 +334,8 @@ Bedingte Invarianten:
 21. Der vollständige normalisierte Payload und seine unveränderliche Identitätsbindung werden dauerhaft gespeichert. Gleiche Kennung mit anderem Payload ist unzulässig; geänderte Ausgangsrevision verlangt einen neuen Auftrag.
 22. Run-Eigentümerschaft, Fencing und idempotenter Commitbeleg verhindern Doppelübernahme. Bei `SUCCESS` werden Fachdelta, `PiH`, Beziehungen und `SyncEvent` zusammen mit dem Commitbeleg atomar gespeichert. Unbekannter Commit-Ausgang wird vor Wiederholung geklärt.
 23. Alle zeitabhängigen Prüfungen gelten für den dokumentierten Datenbank-Entscheidungszeitpunkt unmittelbar vor Übernahme unter der Sperre. Ein No-op darf `SUCCESS` mit `changedCount = 0` ohne neue Revision und ohne `PiH` liefern.
+24. Eine SYNC-Definition darf freigabegeschützte Operationen nur ausführen, wenn `definition.approvalProfileVersion = "1.0"` ausdrücklich gesetzt ist. Ein fehlendes oder unbekanntes Profil scheitert geschlossen. Unter demselben Gate werden Profil, Vorschlag, Hashes, Belege, Identität, Zeit, Route, Policies, Rollen, Scopes, RaN und alle Modellbedingungen erneut geprüft.
+25. `SUCCESS` einer Task-Freigabe wendet ausschließlich den zulässigen Release-Übergang an und führt den Task je nach Abhängigkeiten zu `ACTIVE` oder `BLOCKED`; Freigabe allein erzeugt niemals `COMPLETED` oder `ACHIEVED`. Bei `CONFLICT` oder `FAILED` bleibt das Fachdelta aus, während unveränderliche Genehmigungs- und Versuchsprovenienz erhalten bleibt.
 
 ## 12. Initialer Bootstrap
 
@@ -322,6 +347,7 @@ Bedingte Invarianten:
 6. Der Bootstrap erzeugt weder `ChangeEvent`, `SyncRun`, `SyncEvent` noch `PiH`.
 7. Nach erfolgreichem Commit sind Wiederholung und ein zweites Root-`RoleAssignment` verboten. Alle weiteren Änderungen verwenden den normalen SYNC-Prozess.
 8. Ein Import ist kein Bootstrap. Importierte Entitäten ohne vollständige Provenienz bleiben `DRAFT`, bis sie regulär validiert wurden.
+9. Das technische Root-`RoleAssignment` ist keine menschliche Freigabeautorität. Eine optionale technisch konfigurierte Anfangsbefugnis folgt ausschließlich Abschnitt 5.2 Regel 8 und schafft weder eine allgemeine Root-Ausnahme noch automatische fachliche Bestätigung.
 
 **Kurzes Beispiel:** Das Deployment erzeugt in der leeren Datenbank Organisation, Administrationsteam, technisches Mitglied, Rolle, Root-Zuordnung und aktive SYNC-Definition gemeinsam. Erst danach fordert das Root-`RoleAssignment` regulär die erste fachliche Entität an.
 

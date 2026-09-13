@@ -383,6 +383,79 @@ class CorrectionRegressionTests(unittest.TestCase):
         view = jci.validate_correction(base, [], candidate, pih="history", expected_hash=candidate.base_hash)
         self.assertIn("description", view["stateData"]["properties"])
 
+    def test_added_relationship_cannot_change_identity_when_superseded(self):
+        base = {"stateData": {"entityType": "CiV", "revision": 1,
+                              "properties": {"name": typed("Clarity"),
+                                             "status": typed("ACTIVE"),
+                                             "notCiV": typed("No ambiguity"),
+                                             "selfCiV": typed("Clear decisions"),
+                                             "toServeCiV": typed("Shared understanding")}},
+                "relationshipData": []}
+        edge = {"direction": "OUTGOING", "relationshipType": "HELD_BY",
+                "otherEntityId": TEAM, "otherEntityType": "RoFOrg", "properties": {}}
+        path = f"/relationshipData/OUTGOING:HELD_BY:{TEAM}"
+        first = correction(base, fields=[path], previous={path: jci.NULL_VALUE},
+                           corrected={path: typed(edge, "OBJECT")}, kind="ADDITION")
+        view = jci.validate_correction(base, [], first, pih="history", expected_hash=first.base_hash)
+        for kind in ("CORRECTION", "CLARIFICATION"):
+            for field, value in (("otherEntityType", "RoFTeam"),
+                                 ("otherEntityId", OTHER),
+                                 ("direction", "INCOMING"),
+                                 ("relationshipType", "INFORMED_BY")):
+                with self.subTest(kind=kind, field=field):
+                    second = correction(
+                        view, identity="c2", fields=[path],
+                        previous={path: typed(edge, "OBJECT")},
+                        corrected={path: typed(dict(edge, **{field: value}), "OBJECT")},
+                        kind=kind, supersedes="c1", time="2026-09-06T12:00:01Z")
+                    with self.assertRaises(jci.RuleViolation):
+                        jci.validate_correction(base, [first], second, pih="history",
+                                                expected_hash=second.base_hash)
+                    # Imported/stored records must not bypass the same invariant.
+                    with self.assertRaises(jci.RuleViolation):
+                        jci.build_history_view(base, [second, first], pih="history")
+
+        # A later return to the initial type cannot hide an invalid intermediate record.
+        changed = typed(dict(edge, otherEntityType="RoFTeam"), "OBJECT")
+        second = correction(view, identity="c2", fields=[path],
+                            previous={path: typed(edge, "OBJECT")}, corrected={path: changed},
+                            supersedes="c1", time="2026-09-06T12:00:01Z")
+        third = correction(view, identity="c3", fields=[path], previous={path: changed},
+                           corrected={path: typed(edge, "OBJECT")}, supersedes="c2",
+                           time="2026-09-06T12:00:02Z")
+        with self.assertRaises(jci.RuleViolation):
+            jci.build_history_view(base, [third, first, second], pih="history")
+        self.assertEqual(base["relationshipData"], [])
+
+    def test_added_relationship_keeps_valid_property_corrections_across_supersession(self):
+        base = member_snapshot()
+        edge = base["relationshipData"].pop()
+        original = deepcopy(base)
+        original_hash = jci.history_hash(base)
+        path = f"/relationshipData/INCOMING:HAS_MEMBER:{TEAM}"
+        first = correction(base, fields=[path], previous={path: jci.NULL_VALUE},
+                           corrected={path: typed(edge, "OBJECT")}, kind="ADDITION")
+        view = jci.validate_correction(base, [], first, pih="history", expected_hash=first.base_hash)
+        revised = deepcopy(edge)
+        revised["properties"]["validFrom"] = typed("2026-02-01T00:00:00Z", "DATETIME")
+        second = correction(view, identity="c2", fields=[path],
+                            previous={path: typed(edge, "OBJECT")},
+                            corrected={path: typed(revised, "OBJECT")}, supersedes="c1",
+                            time="2026-09-06T12:00:01Z")
+        view = jci.validate_correction(base, [first], second, pih="history", expected_hash=second.base_hash)
+        clarified = deepcopy(revised)
+        clarified["properties"]["validUntil"] = typed("2026-03-01T00:00:00Z", "DATETIME")
+        third = correction(view, identity="c3", fields=[path],
+                           previous={path: typed(revised, "OBJECT")},
+                           corrected={path: typed(clarified, "OBJECT")}, kind="CLARIFICATION",
+                           supersedes="c2", time="2026-09-06T12:00:02Z")
+        final = jci.validate_correction(base, [first, second], third, pih="history",
+                                        expected_hash=third.base_hash)
+        self.assertEqual(final["relationshipData"], [clarified])
+        self.assertEqual(jci.build_history_view(base, [third, first, second], pih="history"), final)
+        self.assertEqual(base, original)
+        self.assertEqual(jci.history_hash(base), original_hash)
+
     def test_multiple_predecessors_partial_supersession_and_stale_hash_conflict(self):
         base = snapshot()
         first = correction(base)
@@ -600,7 +673,14 @@ class ExchangeProfileRegressionTests(unittest.TestCase):
         entity = self.request_schema["properties"]["target"]["properties"]["entityType"]
         self.assertEqual(set(entity["enum"]), set(jci.ENTITY_TYPES))
         self.assertEqual(set(self.request_schema["$defs"]["operation"]["properties"]["relationshipType"]["enum"]),
-                         {key[1] for key in jci.RELATIONSHIP_OWNERS})
+                         {key[1] for key in jci.RELATIONSHIP_OWNERS} - {"APPROVED_BY"})
+        # Approval provenance is generated from authenticated receipts, never a
+        # generic client-supplied graph operation.
+        operation = Draft202012Validator({"$ref": "#/$defs/operation", "$defs": self.request_schema["$defs"]})
+        for mutation in ("CONNECT", "DISCONNECT"):
+            with self.assertRaises(ValidationError):
+                operation.validate({"op": mutation, "relationshipType": "APPROVED_BY",
+                                    "direction": "OUTGOING", "otherEntityId": TEAM})
 
 
 if __name__ == "__main__":

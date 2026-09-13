@@ -81,6 +81,12 @@ Ein Composite kann eigene `DEPENDS_ON`-Voraussetzungen besitzen: Solange eine un
 
 Neue `EVALUATES`, `CHECKS`, `USES_EVIDENCE` und `SUPERSEDES` einer Verification gehören zur neuen Prüfung. Sie erhöhen die Revisionen der referenzierten Ziele nicht. Eine echte Kriterienänderung macht die ältere Prüfung dagegen weiterhin revisionsveraltet. Die [Änderungsdokumentation](../changes/JCI_LOGIC_2_0.md) erläutert diese Regeln.
 
+### Menschliche Freigabe
+
+Eine Task-Freigabe wird zuerst an das `ACCOUNTABLE_MEMBER` des zugehörigen `PiF1o` gerichtet. Nur eine ausdrücklich durch `RaN` befugte menschliche Rollenaktivierung darf genehmigen. Fehlt die Befugnis, wird entlang aller erforderlichen Zukunftszweige zu `PiF1t`, `PiF1s` und höchstens `PiF2` eskaliert. Auch diese Ebenen können Accountability besitzen; eine fehlende Zuordnung wird nicht erfunden. Ablehnung und Regelkonflikt erlauben keine Eskalation als Umgehung.
+
+Der Antragsteller bleibt über `REQUESTED_BY`, die Genehmigung über `APPROVED_BY` nachvollziehbar. Erst nach erfolgreicher `SYNC`-Prüfung wird der Task `ACTIVE` oder bei offenen Voraussetzungen `BLOCKED`. Freigabe bedeutet weder Ausführung noch Abschluss. Wertentscheidungen zu `CiV` und `PROTECTS` benötigen ebenfalls einen konkreten menschlichen Nachweis. Details stehen im [Freigabeprofil](../JCI_CONTEXT.md#129-nachweisbare-menschliche-freigabe--profil-10).
+
 ## Umwelt
 
 ```mermaid

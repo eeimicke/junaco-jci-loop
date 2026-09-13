@@ -40,9 +40,39 @@ Eigene unerfüllte Voraussetzungen eines freigegebenen Composite haben Vorrang u
 
 Vor dieser Auswertung wird ein gemeinsamer Abschlussgraph aus Composite-zu-Kind und `DEPENDS_ON` gebildet. Ein gemischter Zyklus erzeugt `CONFLICT`. Die Reihenfolge folgt den Voraussetzungen zuerst und mischt atomare und zusammengesetzte Tasks. Erst anschließend werden aktuelle Pflichtkriterien, Zielerreichung und höhere Zukunftsbeiträge ausgewertet.
 
+### 3.3 Menschliche Freigaben implementieren
+
+Freigabepflichtige Vorgänge verwenden zusätzlich `approvalProfileVersion = "1.0"`. Die gespeicherte `SYNC.definition` muss dieses Profil ausdrücklich unterstützen, `APPROVED_BY` im Beziehungskatalog führen und das passende Prüfmodul über die Paketprüfsumme binden. Der Basisauftrag und sein kanonisches Hashprofil bleiben `2.0`; ein älterer Handler darf das zusätzliche Profil nicht ignorieren.
+
+`ACCOUNTABLE_MEMBER` bleibt für `PiF1o` genau `1`; auf `PiF1t`, `PiF1s` und `PiF2` gilt jeweils `0..1`. Eine tatsächlich benötigte Freigabeebene muss eindeutig besetzt sein. Accountability, `CONTRIBUTES_TO` und Rollennamen erteilen keine Befugnis. Diese benötigt eine aktive, zeitlich gültige, scope-passende `PERMIT`-RaN mit passender `condition`, `decisionKey` und optionalem strukturiertem Feld:
+
+```text
+approvalPolicy = {
+  profileVersion: "1.0",
+  mode: ACCOUNTABLE_CHAIN | VALUE_SCOPE,
+  roleIds: nicht leere, eindeutige Liste von RoFRole-UUIDs,
+  levels: bei ACCOUNTABLE_CHAIN nicht leere Liste aus PiF1o, PiF1t, PiF1s, PiF2;
+          bei VALUE_SCOPE nicht gesetzt oder leer
+}
+```
+
+Für `Task.action.RELEASE` beginnt `ACCOUNTABLE_CHAIN` beim direkt zugeordneten `PiF1o`. Fehlt ausschließlich die Befugnis, werden sämtliche aktuellen Beitragszweige bis zur ersten befugten Accountability je Zweig verfolgt, höchstens bis `PiF2`. Alle erforderlichen Anker müssen genehmigt sein, unabhängig von `contributionMode`. Fehlende Zuordnungen, `UNEVALUABLE`, wirksames `DENY` und menschliche Ablehnung erlauben kein Überspringen oder Ausweichen auf andere Rollen.
+
+Für `Model.action.CONFIRM` prüft `VALUE_SCOPE` alle betroffenen alten und neuen Werteträger bei CiV-, Herkunfts-, Zweck-, Schutz-, Policy- und Accountability-Änderungen. Die erlaubende Policy muss den jeweiligen Werteträger über ihre geschützten CiV/PiF2 abdecken; `GLOBAL` erweitert dieses Mandat nicht. Zusätzlich gelten Rollenoperand, Akteurszugehörigkeit und `APPLIES_IN`. Ausgewertet wird die geregelte `RoleAssignment`, nicht ein neues `GOVERNS` zu `CiV` oder `PiF2`. Maßgeblich ist die vor der Änderung gültige Befugnis; der Kandidat darf sich nicht selbst autorisieren.
+
+Der [Freigabe-Envelope](../schemas/jci-approval-envelope.schema.json) enthält den unveränderten `proposal`, `decisionKey`, `requestHash`, `contextHash` und `receipts`. Vorschläge und auch abgelehnte Belege bleiben dauerhaft technischer Workflowzustand außerhalb von `JCIEntity`. Eine vertrauenswürdige Integration muss die authentifizierte Antragstellerrolle sowie den zustimmenden Menschen hinter `memberId` und `roleAssignmentId` nachweisen. Der Beleg bindet den exakten Auftrag, Kontext und Gültigkeitszeitraum; eine selbst gesetzte Bestätigungsvariable ist kein Nachweis.
+
+Erst die vollständige Genehmigung erzeugt das angenommene `ChangeEvent` mit unverändertem `REQUESTED_BY` und den source-owned `APPROVED_BY`-Kanten. Jede Kante trägt `receiptId`, `decidedAt`, `requestHash` und `approvalHash`, gehört ausschließlich zum neuen Ereignis und bleibt unveränderlich; die referenzierte Rollenaktivierung erhält dadurch keine Revision. Generische `CONNECT`-Operationen dürfen solche Belege nicht vortäuschen. Annahme und abschließender Commit prüfen Identität, sämtliche erforderlichen Belege, Route, Policy, Revisionen und Zeitgültigkeit erneut unter dem gemeinsamen Gate.
+
+Eine ausdrücklich eingerichtete Anfangsbefugnis darf vor der ersten passenden Policy genau einen nachgewiesenen Menschen, seine Rollenaktivierung und einen Werteträger für `Model.action.CONFIRM` verbinden. Sie ist niemals eine Task-Freigabe oder automatische Root-Befugnis. Die erste Aktivierung einer `VALUE_SCOPE`-Policy für diesen Werteträger setzt atomar einen dauerhaften Sperrmerker; späterer Widerruf aktiviert die Anfangsbefugnis nicht wieder.
+
+Die [Freigabereferenz](../../reference/jci_approval.py) trennt Registrierung, unveränderliche Antwortbelege, Annahme und Commit. `release_with_approval` bindet die Task-Prüfsicht an den signierten Graphen und verlangt zusätzlich eine vollständige Kandidatenvalidierung für WHY, WHO, Abhängigkeiten, RaN und ERoF. Eine Genehmigung führt erst nach erfolgreichem `SYNC` zu `ACTIVE` oder `BLOCKED`, niemals unmittelbar zu `COMPLETED` oder `ACHIEVED`. Fehlende oder abgelehnte Genehmigungen verändern keinen Task. Die Referenz benötigt reale Authentifizierungs-, Persistenz- und Transaktionsadapter; sie ist keine produktive Freigabe-Engine.
+
 ## 4. Änderungsauftrag annehmen
 
 Ein Auftrag wird gegen [`schemas/jci-change-request.schema.json`](../schemas/jci-change-request.schema.json) geprüft. Das Schema kontrolliert Transportform und Datentypen. Nach der Annahme wird das `ChangeEvent` eindeutig gespeichert und ein technischer Versuch eingeplant. Bis ein Versuch abgeschlossen ist, darf das `ChangeEvent` noch keine `TRIGGERS`-Beziehung besitzen.
+
+Bei freigabepflichtigen Vorgängen ist dies der innere Basisauftrag des Envelopes aus Abschnitt 3.3. Solange die vollständige menschliche Genehmigung fehlt, besteht ausschließlich der technische Vorschlag, noch kein angenommenes Ereignis. Freigabe-Envelopes werden nicht nachträglich an ein bereits unveränderliches `ChangeEvent` angehängt.
 
 Die Provenienz hängt vom Änderungstyp ab:
 
@@ -59,7 +89,8 @@ Der vollständige normalisierte Request wird unveränderlich an `requestId` und 
 ```mermaid
 flowchart TD
     Request[JCIChangeRequest] --> Transport[Transportschema prüfen]
-    Transport --> ChangeEvent[ChangeEvent annehmen: TRIGGERS = 0]
+    Transport --> Approval[erforderliche menschliche Freigaben prüfen]
+    Approval --> ChangeEvent[ChangeEvent annehmen: TRIGGERS = 0]
     ChangeEvent -. plant .-> Run[SyncRun mit eindeutiger runId]
     Run --> Gate[gemeinsame technische Schreibsperre erwerben]
     Gate --> Validate[Revision und vollständigen Kandidaten prüfen]
@@ -117,8 +148,12 @@ Regeln, Snapshot-, Korrekturwert- und Austauschprofil verwenden Version `2.0`. D
 
 Die gesamte Reihenfolge läuft innerhalb der geschützten Entscheidungsgrundlage. Vor der Übernahme werden der endgültige Kandidat, die vollständige Prüfungsmenge und die Zeitbedingungen erneut bestätigt; eine Vorberechnung außerhalb der Sperre ist unverbindlich.
 
+Freigabepflicht, `approvalProfileVersion`, menschliche Identität, alte/neue Wertescopes, vollständige Route und unveränderliche Belege werden zusätzlich bei Annahme und erneut am endgültigen Entscheidungspunkt geprüft. Eine bereits dauerhaft belegte erfolgreiche Wiederholung liefert das gespeicherte Ergebnis, ohne eine abgelaufene Genehmigung erneut auszuführen oder ein zweites Fachdelta zu erzeugen.
+
 ## 9. Tests
 
 Die vorhandenen Python-Tests prüfen zentrale Modellregeln und Dokumentkonsistenz. Eine konkrete Datenbankimplementierung benötigt zusätzlich Integrations-, Migrations-, Nebenläufigkeits-, Rollback- und Wiederanlauftests. Besonders zu testen sind der einmalige atomare Bootstrap, der ausstehende Zustand `TRIGGERS = 0`, genau ein `SyncEvent` je `runId`, die bedingten Kanten bei `CREATED` und frühem `FAILED`, revisionsveraltete Verifications sowie konkurrierende historische Korrekturen mit gleichem und überlappendem `HistoryView`-Stand.
 
 Die [Referenzfunktionen](../../reference/jci_rules.py) und die [23 Abnahmefälle](../changes/JCI_LOGIC_2_0.md) machen die Regeln überprüfbar. Referenzfunktionen sind keine produktive SYNC-Engine und implementieren keine Neo4j-Transaktionen. Erfolgreiche lokale Tests belegen deshalb keine Datenbank-Atomarität oder Wiederanlaufgarantie. Dafür bleiben reale Transaktionstests mit kontrollierten parallelen Abläufen erforderlich.
+
+Die [Freigabetests](../../tests/test_approval_rules.py) ergänzen lokale und verzweigte Genehmigungen, fehlende Befugnis, Ablehnung, gefälschte Belege, geänderte Grundlagen, alte/neue Werteträger, Enrollment-Abschaltung und sichere Wiederholungen. Ihr Authentifizierungsadapter ist ein Testdouble, kein Nachweis einer produktiven Identitätsintegration.

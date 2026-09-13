@@ -42,9 +42,39 @@ An unmet prerequisite of a released Composite takes precedence and yields `BLOCK
 
 Before this evaluation, a combined completion graph is built from Composite-to-child and `DEPENDS_ON` dependencies. A mixed cycle produces `CONFLICT`. Prerequisites are processed first, interleaving atomic and composite Tasks. Current mandatory criteria, target achievement, and higher future contributions are evaluated afterwards.
 
+### 3.3 Implement human approvals
+
+Protected operations additionally use `approvalProfileVersion = "1.0"`. The stored `SYNC.definition` must explicitly support this profile, include `APPROVED_BY` in its relationship catalog, and bind the matching validator through its package checksum. The base request and canonical hash profile remain `2.0`; an older handler must not ignore the additional profile.
+
+`ACCOUNTABLE_MEMBER` remains exactly `1` for `PiF1o`; it is `0..1` on each `PiF1t`, `PiF1s`, and `PiF2`. An approval level actually required by the route must have an unambiguous assignment. Accountability, `CONTRIBUTES_TO`, and role names confer no authority. Authority requires an active, temporally valid, scope-compatible `PERMIT` RaN with matching `condition`, `decisionKey`, and the optional structured field:
+
+```text
+approvalPolicy = {
+  profileVersion: "1.0",
+  mode: ACCOUNTABLE_CHAIN | VALUE_SCOPE,
+  roleIds: nonempty, unique list of RoFRole UUIDs,
+  levels: for ACCOUNTABLE_CHAIN, a nonempty list from PiF1o, PiF1t, PiF1s, PiF2;
+          absent or empty for VALUE_SCOPE
+}
+```
+
+For `Task.action.RELEASE`, `ACCOUNTABLE_CHAIN` starts at the directly associated `PiF1o`. When only authority is missing, follow every current contribution branch to its first authorized accountability, no further than `PiF2`. All required anchors must approve, independently of `contributionMode`. Missing assignments, `UNEVALUABLE`, effective `DENY`, and human rejection do not permit skipping levels or switching roles to bypass the decision.
+
+For `Model.action.CONFIRM`, `VALUE_SCOPE` checks every affected old and new value holder when values, provenance, purpose links, protection, policy, or accountability change. The granting policy must cover that holder through its protected CiV/PiF2; `GLOBAL` does not broaden this mandate. The role operand, actor membership, and `APPLIES_IN` also apply. Evaluation uses the governed `RoleAssignment`, not a new `GOVERNS` link to `CiV` or `PiF2`. Authority must exist before the change; a candidate cannot authorize itself.
+
+The [approval envelope](../../schemas/jci-approval-envelope.schema.json) contains the unchanged `proposal`, `decisionKey`, `requestHash`, `contextHash`, and `receipts`. Proposals and rejected receipts remain durable technical workflow state outside `JCIEntity`. A trusted integration must establish the authenticated requester assignment and the consenting human behind `memberId` and `roleAssignmentId`. Each receipt binds the exact request, context, and validity interval; a self-declared confirmation variable is not evidence.
+
+Only complete approval creates the accepted `ChangeEvent` with its unchanged `REQUESTED_BY` and source-owned `APPROVED_BY` edges. Each edge carries `receiptId`, `decidedAt`, `requestHash`, and `approvalHash`, belongs exclusively to the new event, and remains immutable; referencing the assignment does not increment its revision. Generic `CONNECT` operations must not fabricate this provenance. Acceptance and final commit recheck identity, all required receipts, route, policy, revisions, and temporal validity under the shared gate.
+
+An explicitly configured initial authority may bind one authenticated human, their assignment, and one value holder for `Model.action.CONFIRM` before the first matching policy exists. It never authorizes Task release or grants automatic root authority. The first activation of a `VALUE_SCOPE` policy for that holder atomically sets a permanent disable latch; later revocation does not reactivate initial authority.
+
+The [approval reference](../../../reference/jci_approval.py) separates registration, immutable decision receipts, acceptance, and commit. `release_with_approval` binds the Task evaluation view to the signed graph and additionally requires complete candidate validation for WHY, WHO, dependencies, RaN, and ERoF. Approval produces `ACTIVE` or `BLOCKED` only after successful `SYNC`, never directly `COMPLETED` or `ACHIEVED`. Missing or rejected approvals change no Task. The reference requires real authentication, persistence, and transaction adapters; it is not a production approval engine.
+
 ## 4. Accept a change request
 
 Validate a request against [`schemas/jci-change-request.schema.json`](../../schemas/jci-change-request.schema.json). The schema checks transport structure and data types. After acceptance, store the `ChangeEvent` unambiguously and schedule a technical attempt. Until an attempt ends, the `ChangeEvent` may still have no `TRIGGERS` relationship.
+
+For protected operations, this is the inner base request of the envelope in section 3.3. Until complete human approval exists, there is only a technical proposal, not an accepted event. Approval envelopes are not attached later to an already immutable `ChangeEvent`.
 
 Provenance depends on the change type:
 
@@ -61,7 +91,8 @@ The complete normalized request is bound immutably to `requestId` and `idempoten
 ```mermaid
 flowchart TD
     Request[JCIChangeRequest] --> Transport[validate transport schema]
-    Transport --> ChangeEvent[accept ChangeEvent: TRIGGERS = 0]
+    Transport --> Approval[validate required human approvals]
+    Approval --> ChangeEvent[accept ChangeEvent: TRIGGERS = 0]
     ChangeEvent -. schedules .-> Run[SyncRun with unique runId]
     Run --> Gate[acquire shared technical write lock]
     Gate --> Validate[validate revision and complete candidate]
@@ -119,8 +150,12 @@ Rules, snapshot, correction-value, and exchange profiles use version `2.0`. This
 
 The entire sequence uses the protected decision basis. Before adoption, the final candidate, complete verification set, and temporal conditions are confirmed again; a calculation outside the lock is non-binding.
 
+Approval requirements, `approvalProfileVersion`, human identity, old/new value scopes, the complete route, and immutable receipts are additionally checked at acceptance and again at the final decision point. A retry with an already durable successful commit returns the stored result without reexecuting an expired approval or creating another domain delta.
+
 ## 9. Tests
 
 The Python tests cover central model rules and documentation consistency. A concrete database implementation additionally needs integration, migration, concurrency, rollback, and recovery tests. In particular, test the one-time atomic bootstrap, pending `TRIGGERS = 0`, exactly one `SyncEvent` per `runId`, conditional edges for `CREATED` and early `FAILED`, stale verification revisions, and competing historical corrections against equal and overlapping `HistoryView` states.
 
 The [reference functions](../../../reference/jci_rules.py) and [23 acceptance cases](../changes/JCI_LOGIC_2_0.md) make the rules testable. Reference functions are not a production SYNC engine and implement no Neo4j transactions. Successful local tests therefore establish neither database atomicity nor recovery guarantees. Real transaction tests with controlled concurrent execution remain required.
+
+The [approval tests](../../../tests/test_approval_rules.py) add local and branching approvals, missing authority, rejection, forged receipts, changed decision bases, old/new holders, enrollment shutdown, and safe retries. Their authentication adapter is a test double, not evidence of a production identity integration.

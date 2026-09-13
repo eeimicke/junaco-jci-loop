@@ -48,6 +48,10 @@ Neue Prüf- und Ereignisbezüge verändern den geprüften Fachzustand nicht alle
 
 Die [sechs Umsetzungsschritte](../changes/JCI_LOGIC_2_0.md) beschreiben Auswirkungen, Migration und Abnahmefälle. Die Referenzfunktionen sind keine fertige SYNC-Anwendung.
 
+## Menschliche Entscheidungen bleiben menschlich
+
+Die Freigabe eines Tasks beginnt bei der verantwortlichen Person seines operativen Zukunftszustands. `RaN` bestimmt, ob diese Person in ihrer aktiven Rolle genehmigen darf oder eine höhere Zukunftsebene zuständig ist. Die menschliche Genehmigung wird getrennt vom Antragsteller als `APPROVED_BY` dokumentiert und löst die `SYNC`-Prüfung aus. Erst deren Erfolg macht die Änderung wirksam. Auch CiV- und Schutzentscheidungen dürfen nicht durch eine technische Rolle automatisch bestätigt werden. Das [Freigabeprofil 1.0](../JCI_CONTEXT.md#129-nachweisbare-menschliche-freigabe--profil-10) ergänzt dafür nachprüfbare Belege und eindeutige Eskalationsregeln.
+
 ## Nächster Schritt
 
 Lies als Nächstes die [Übersicht der JCI-Elemente](JCI_ELEMENTS.md) oder verfolge das [durchgängige Beispiel](JCI_EXAMPLE.md).

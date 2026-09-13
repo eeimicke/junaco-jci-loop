@@ -83,6 +83,12 @@ A Composite may have its own `DEPENDS_ON` prerequisites: while any is unmet, the
 
 New `EVALUATES`, `CHECKS`, `USES_EVIDENCE`, and `SUPERSEDES` references from a Verification belong to the new verification. They do not increment the referenced targets' revisions. A genuine criterion change still makes the earlier verification stale. The [change documentation](../changes/JCI_LOGIC_2_0.md) explains these rules.
 
+### Human approval
+
+A Task release request first goes to the `ACCOUNTABLE_MEMBER` of its associated `PiF1o`. Only a human role activation explicitly authorized by `RaN` may approve. Lacking authority permits escalation along every required future branch to `PiF1t`, `PiF1s`, and at most `PiF2`. These levels may also have accountability; missing assignments are not invented. Rejection and rule conflict do not permit escalation as a bypass.
+
+The requester remains traceable through `REQUESTED_BY`, and approval through `APPROVED_BY`. Only successful `SYNC` validation makes the Task `ACTIVE`, or `BLOCKED` if prerequisites remain unmet. Approval means neither execution nor completion. Value decisions concerning `CiV` and `PROTECTS` also require specific human proof. See the [approval profile](../JCI_CONTEXT.md#129-verifiable-human-approval--profile-10).
+
 ## Environment
 
 ```mermaid

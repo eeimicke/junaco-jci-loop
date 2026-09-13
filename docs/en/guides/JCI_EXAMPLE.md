@@ -64,6 +64,8 @@ SYNC: JCI standard process
 
 These entities are created in one transaction with `status = ACTIVE`, `revision = 1`, and the same `createdAt` and `updatedAt`; any `validFrom` values equal the same bootstrap timestamp. Only the root `RoleAssignment` has no `CREATED_BY`; every other bootstrap entity points to that root `RoleAssignment`. The bootstrap creates no `ChangeEvent`, `SyncRun`, `SyncEvent`, or `PiH`. Only afterwards does the root `RoleAssignment` create this example's domain entities through regular `CREATED` requests. A second bootstrap is prohibited.
 
+The technical root must not replace a human value decision. The first CiV and protection decisions require an explicitly authenticated initial authority for Anna, her active `RoleAssignment` subsequently created through the regular process, and the value holder Example GmbH. It applies only to `Model.action.CONFIRM`. Once a matching `VALUE_SCOPE` policy is activated, a durable disable latch turns off this initial authority; later policy revocation does not restore it. The used `SYNC.definition` explicitly supports `approvalProfileVersion = "1.0"` and `APPROVED_BY`.
+
 ## 3. Organisation, partnership, and roles
 
 Example GmbH uses a platform operated by Service Cloud AG. Both remain independent organisations:
@@ -120,9 +122,44 @@ Only atomic Tasks carry `EXECUTED_BY`, `USES`, and `PRODUCES`. The released Comp
 
 When `Create response` is replaced, the former Task remains connected to the `PiF1o` and receives `REPLACED`. Its explicitly connected successor counts in the current scope. `REVOKED` Tasks and withdrawn criteria are likewise excluded only after a confirmed scope change. The target requires at least one current Task and one current `REQUIRED` criterion; all current Tasks must be `COMPLETED` and all current mandatory criteria active and satisfied. Withdrawing a Composite does not remove its current descendants. An unresolved subtree produces `CONFLICT`.
 
-If the Composite additionally needs an approval Task through `DEPENDS_ON`, it remains `BLOCKED` until that prerequisite completes. This prerequisite is not automatically inherited by every child. If only `DRAFT` children remain after a confirmed scope change, an already released Composite becomes `ACTIVE`. An unreleased draft cannot become directly `COMPLETED` by reducing scope.
+If the Composite additionally needs the preparatory Task `Prepare approval` through `DEPENDS_ON`, it remains `BLOCKED` until that Task completes. This work step is not the human approval receipt in section 4.2. The prerequisite is not automatically inherited by every child. If only `DRAFT` children remain after a confirmed scope change, an already released Composite becomes `ACTIVE`. An unreleased draft cannot become directly `COMPLETED` by reducing scope.
 
 If the Parent needs `Create response` to finish and that Task in turn needs the Parent through `DEPENDS_ON`, the calculated completion graph contains a cycle. `SYNC` rejects the request before adopting a partial change. All other Tasks are evaluated in the combined order of their completion prerequisites.
+
+### 4.2 Release a Task with traceable approval
+
+The Task `Send response` initially remains `DRAFT`. A technical requester assignment prepares its release. Anna is a `RoFTeamMember` with `memberType = HUMAN` and is accountable for the directly connected `PiF1o`; her active Service Agent assignment may approve only if a matching RaN explicitly grants that authority. An illustrative, human-confirmed policy is:
+
+```text
+RaN: Release atomic service work
+  effect = PERMIT
+  decisionKey = Task.action.RELEASE
+  approvalPolicy.profileVersion = "1.0"
+  approvalPolicy.mode = ACCOUNTABLE_CHAIN
+  approvalPolicy.roleIds = [UUID of RoFRole Service Agent]
+  approvalPolicy.levels = [PiF1o]
+  condition = ALL(target.taskKind EQUALS ATOMIC)
+  PROTECTS → CiV: Reliability
+  PROTECTS → PiF2: reliable partner
+  GOVERNS → Task: Send response
+```
+
+The [approval envelope](../../schemas/jci-approval-envelope.schema.json) binds the exact base request, including requester, target revision, and operations, through `requestHash`, and the checked roles, rules, and future paths through `contextHash`. Proposal and responses remain technical workflow data outside the domain graph until approval is complete. A trusted verifier establishes that Anna confirmed exactly this content. The immutable receipt includes `receiptId`, `decidedAt`, `validUntil`, `outcome`, `roleAssignmentId`, `memberId`, both hashes, and `attestation`; a claimed approval alone is insufficient.
+
+After acceptance, requester and approver remain separately visible:
+
+```text
+ChangeEvent ── REQUESTED_BY ──► technical requester assignment
+ChangeEvent ── APPROVED_BY ──► RoleAssignment: Anna as Service Agent
+```
+
+`APPROVED_BY` carries `receiptId`, `decidedAt`, `requestHash`, and `approvalHash`. The edge belongs exclusively to the `ChangeEvent` created at acceptance, remains immutable, and does not change Anna's assignment revision. Missing or rejected approval creates neither a released Task nor an accepted change event. Complete acceptance schedules the first `SyncRun`; `SYNC` rechecks receipts, authority, temporal validity, and every other model condition under the commit gate.
+
+If `Create response` is not yet `COMPLETED`, confirmed release of `Send response` produces `BLOCKED` after `SUCCESS`. Only satisfied prerequisites permit `ACTIVE`. Approval means neither a sent response nor `COMPLETED` or `PiF1o.ACHIEVED`; results and Verification remain separately required wherever the existing completion rules require them. Approval also grants no additional access rights to the ticket system or service API.
+
+When only Anna's authority is missing, the request may proceed to the explicitly assigned accountability of `PiF1t`, then `PiF1s`, and finally `PiF2`. Each permits `ACCOUNTABLE_MEMBER = 0..1`; a required assignment must not be missing. `PiF1o` retains exactly `1`. Every current contribution branch must be considered up to its first authorized anchor, even with `contributionMode = ANY`. An effective `DENY`, `UNEVALUABLE`, or Anna's explicit rejection must not be bypassed through a higher level.
+
+A later change to the CiV or selected `PROTECTS` relationships instead uses `Model.action.CONFIRM` with `approvalPolicy.mode = VALUE_SCOPE`. The policy governs the human `RoleAssignment` and explicitly covers the affected value holder through its protected CiV/PiF2. Moving an organisational value to a team requires confirmation for both old and new holders; a global organisational policy does not automatically authorize team-value decisions. Previously valid policies authorize the change, not authority newly introduced in the candidate. See the [implementation guide](JCI_IMPLEMENTATION_GUIDE.md) for details and limits.
 
 ## 5. Environment
 

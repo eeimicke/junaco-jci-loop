@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/eeimicke/junaco-jci-loop/main/docs/schemas/jci-approval-envelope.schema.json",
+  "title": "JCIApprovalEnvelope 1.0 for JCIChangeRequest 2.0",
+  "description": "A closed approval envelope around an unchanged JCIChangeRequest 2.0. Cross-field hash equality, one receipt per RoleAssignment, expiry at the server-side decision time, required-route completeness, and attestation authenticity are semantic gate checks.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "approvalProfileVersion",
+    "decisionKey",
+    "proposal",
+    "requestHash",
+    "contextHash",
+    "receipts"
+  ],
+  "properties": {
+    "approvalProfileVersion": {
+      "const": "1.0"
+    },
+    "decisionKey": {
+      "enum": [
+        "Task.action.RELEASE",
+        "Model.action.CONFIRM"
+      ]
+    },
+    "proposal": {
+      "$ref": "jci-change-request.schema.json"
+    },
+    "requestHash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "contextHash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "receipts": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/approvalReceipt"
+      }
+    }
+  },
+  "$defs": {
+    "approvalReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "receiptId",
+        "requestHash",
+        "contextHash",
+        "decidedAt",
+        "validUntil",
+        "outcome",
+        "roleAssignmentId",
+        "memberId",
+        "attestation"
+      ],
+      "properties": {
+        "receiptId": {
+          "$ref": "#/$defs/canonicalUuid"
+        },
+        "requestHash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "contextHash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "decidedAt": {
+          "$ref": "#/$defs/zonedDateTime"
+        },
+        "validUntil": {
+          "$ref": "#/$defs/zonedDateTime"
+        },
+        "outcome": {
+          "enum": [
+            "APPROVED",
+            "REJECTED"
+          ]
+        },
+        "roleAssignmentId": {
+          "$ref": "#/$defs/canonicalUuid"
+        },
+        "memberId": {
+          "$ref": "#/$defs/canonicalUuid"
+        },
+        "attestation": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        }
+      }
+    },
+    "canonicalUuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "zonedDateTime": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2})$"
+    }
+  }
+}
