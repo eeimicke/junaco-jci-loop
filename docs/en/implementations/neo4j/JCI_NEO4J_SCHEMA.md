@@ -4,11 +4,11 @@
 
 This document specifies the technical mapping of the JCI model to Neo4j. It implements [`JCI_CONTEXT.md`](../../JCI_CONTEXT.md), [`JCI_ONTOLOGY.md`](../../JCI_ONTOLOGY.md), [`JCI_GRAPH_RULES.md`](../../JCI_GRAPH_RULES.md), and [`JCI_SYNC_SPEC.md`](../../JCI_SYNC_SPEC.md). In the event of a conflict, the domain specification applies; this schema must not change its semantics.
 
-## Versioned rule and snapshot profile 2.0
+## Versioned rule profile 2.0 and snapshot profile 2.1
 
-New SYNC operations use rule package, ontology, graph rules, SYNC specification, snapshotSchemaVersion, valueSchemaVersion, and exchange schemaVersion 2.0. Approval-required operations additionally require the explicit handler capability `approvalProfileVersion = "1.0"`; a handler without that capability rejects them. JSON-LD remains 1.1; existing /1.0# namespace IRIs are identities, not rule versions. Old profiles are explicitly read through their resolvers. Existing PiH, HistoricalCorrections, SyncEvents, approvals, and hashes are not retroactively rewritten or recalculated.
+New SYNC operations use rule package, ontology, graph rules, SYNC specification, and exchange `schemaVersion` 2.0 plus `snapshotSchemaVersion = "2.1"`; historical corrections support `valueSchemaVersion` 2.0 and 2.1. Approval-required operations additionally require the explicit handler capability `approvalProfileVersion = "1.0"`; a handler without that capability rejects them. JSON-LD remains 1.1; existing /1.0# namespace IRIs are identities, not rule versions. Old profiles are explicitly read through their resolvers. Existing PiH, HistoricalCorrections, SyncEvents, approvals, and hashes are not retroactively rewritten or recalculated.
 
-Revision belongs to domain state under the endpoint ownership matrix in section 2.2.8 of [`JCI_CONTEXT.md`](../../JCI_CONTEXT.md). New verification, event, and correction references do not revision their targets. `TRIGGERS`, `CHANGED_BY`, `HAS_HISTORICAL_STATE`, `APPROVED_BY`, and new `CREATED_BY` references create no history recursion. `APPROVED_BY` belongs exclusively to the immutable `ChangeEvent` created at acceptance; it does not revision the referenced `RoleAssignment`. Permitted addition of `CREATED_BY` to an imported draft changes that draft; RaNConflict resolution changes only the conflict. `PROVIDES_CONTEXT_TO` belongs to the CiV context. Other cataloged structure relationships change both mutable owners. New PiH project only their assigned revisioned relationship state. Revision-neutral references nevertheless remain fully subject to gate/graphEpoch and their own immutable provenance rules.
+Revision belongs to domain state under the endpoint ownership matrix in section 2.2.8 of [`JCI_CONTEXT.md`](../../JCI_CONTEXT.md). New verification, event, and correction references do not revision their targets. `TRIGGERS`, `CHANGED_BY`, `HAS_HISTORICAL_STATE`, `APPROVED_BY`, and new `CREATED_BY` references create no history recursion. `APPROVED_BY` belongs exclusively to the immutable `ChangeEvent` created at acceptance; it does not revision the referenced `RoleAssignment`. Permitted addition of `CREATED_BY` to an imported draft changes that draft; RaNConflict resolution changes only the conflict. `PROVIDES_CONTEXT_TO` belongs to the CiV context. `GOVERNS` belongs to the `RaN` source and additionally to a mutable target; a terminal or immutable target remains revision-neutral. Other cataloged structure relationships change both mutable owners. New PiH project only their assigned revisioned relationship state. Revision-neutral references nevertheless remain fully subject to gate/graphEpoch and their own immutable provenance rules.
 
 ## Common label and property strategy
 
@@ -627,6 +627,64 @@ WHERE size(concrete) <> 1 OR size(abstract) <> 1 OR e.entityType <> concrete[0]
 RETURN e.id AS entityId, e.entityType, concrete, abstract;
 ```
 
+### Closed relationship catalogue and complete endpoint cardinalities
+
+The package-bound adapter supplies `$canonicalRelationshipContexts` and `$canonicalEndpointCardinalities` from the same versioned relationship catalogue whose checksum is bound by the `SyncRun`. The context list contains every allowed concrete source type, relationship type, and target type exactly once, together with `requiredProperties` and `allowedProperties`. The endpoint list contains, for each table row and endpoint, `entityType`, `relationshipType`, `direction`, `otherEntityTypes`, `minimum`, `draftMinimum`, and optional `maximum`. A handwritten subset is not permitted.
+
+The first query finds unknown or multiply defined relationship contexts and missing or foreign relationship properties:
+
+```cypher
+MATCH (source:JCIEntity)-[relationship]->(target:JCIEntity)
+WITH source, relationship, target,
+     [context IN $canonicalRelationshipContexts
+      WHERE context.sourceEntityType = source.entityType
+        AND context.relationshipType = type(relationship)
+        AND context.targetEntityType = target.entityType] AS contexts
+WHERE size(contexts) <> 1
+   OR any(context IN contexts WHERE
+        any(property IN context.requiredProperties
+            WHERE relationship[property] IS NULL)
+        OR any(property IN keys(relationship)
+               WHERE NOT property IN context.allowedProperties))
+RETURN source.id AS sourceId, source.entityType AS sourceType,
+       type(relationship) AS relationshipType,
+       target.id AS targetId, target.entityType AS targetType,
+       keys(relationship) AS relationshipProperties,
+       size(contexts) AS matchingContextCount;
+```
+
+The second query validates every catalogue cardinality using the raw number of stored edges. `draftMinimum` is `0` only where the DRAFT contract relaxes the minimum; maxima remain unchanged. Parallel edges to the same target therefore cannot bypass validation through `DISTINCT`:
+
+```cypher
+MATCH (entity:JCIEntity)
+UNWIND $canonicalEndpointCardinalities AS rule
+WITH entity, rule
+WHERE entity.entityType = rule.entityType
+WITH entity, rule,
+     CASE rule.direction
+       WHEN 'OUTGOING' THEN COUNT {
+         MATCH (entity)-[relationship]->(other:JCIEntity)
+         WHERE type(relationship) = rule.relationshipType
+           AND other.entityType IN rule.otherEntityTypes
+       }
+       ELSE COUNT {
+         MATCH (other:JCIEntity)-[relationship]->(entity)
+         WHERE type(relationship) = rule.relationshipType
+           AND other.entityType IN rule.otherEntityTypes
+       }
+     END AS rawRelationshipCount
+WITH entity, rule, rawRelationshipCount,
+     CASE WHEN entity.status = 'DRAFT'
+          THEN rule.draftMinimum ELSE rule.minimum END AS requiredMinimum
+WHERE rawRelationshipCount < requiredMinimum
+   OR (rule.maximum IS NOT NULL AND rawRelationshipCount > rule.maximum)
+RETURN entity.id AS entityId, entity.entityType,
+       rule.relationshipType, rule.direction,
+       rawRelationshipCount, requiredMinimum, rule.maximum;
+```
+
+Both queries run during pre- and post-validation. If the complete parameters for the active package are missing or their checksum does not match, `SYNC` must not attempt a commit.
+
 ### Common mandatory values ​​and immutable documents
 
 ```cypher
@@ -843,12 +901,6 @@ Parallel duplicate edges must not bypass a cardinality check through `DISTINCT` 
 
 ```cypher
 MATCH (source:JCIEntity)-[relationship]->(target:JCIEntity)
-WHERE type(relationship) IN [
-  'CREATED_BY','REQUESTED_BY','APPROVED_BY','CORRECTED_BY','CHANGED_BY',
-  'TARGETS_HISTORY','TRIGGERS','EXECUTES','AFFECTS',
-  'HAS_HISTORICAL_STATE','CREATES_HISTORY','CREATES_CORRECTION',
-  'CORRECTS','CAUSED_BY','SUPERSEDES'
-]
 WITH source, type(relationship) AS relationshipType, target,
      count(relationship) AS relationshipCount
 WHERE relationshipCount > 1
@@ -1740,9 +1792,9 @@ Changes are forward-only immutable migrations with source/target versions, preva
 
 1. Inventory old profiles and their required resolvers. Existing immutable documents, snapshot data, and hashes remain unchanged; no random backfills of historical run IDs, revisions, or checksums.
 2. Initialize the new technical gate/request/run/commit/outbox structures in a controlled manner. Require every write path, including import and recovery, to use the same gate.
-3. Activate a new SYNC definition with rule, ontology, graph-rule, sync-spec, snapshot, correction, and exchange profile 2.0 only when all existing types and legacy read profiles are explicitly supported and the package checksum matches. Namespace identities and JSON-LD1.1 remain unchanged.
+3. Activate a new SYNC definition with rule, ontology, graph-rule, sync-spec, and exchange profile 2.0, snapshot profile 2.1, and correction-value profiles 2.0/2.1 only when all existing types and legacy read profiles are explicitly supported and the package checksum matches. Namespace identities and JSON-LD1.1 remain unchanged.
 4. Prevalidate every existing Task/criterion scope, replacement assignment, current parent structure, Composite status, and mixed completion cycle. Empty active scopes or unresolved subtrees require reasoned domain requests; no automatic revocation, redirection, or reopening of terminal facts.
-5. Create new PiH under revision ownership and snapshot profile 2.0. Existing PiH retain their original profiles; stored relationship snapshots are not retroactively filtered or rehashed.
+5. Create complete new PiH under revision ownership and snapshot profile 2.1. Existing PiH retain their original profiles; stored states and relationship snapshots are not retroactively completed, filtered, or rehashed.
 6. Read historical corrections through their explicit profile resolver. Ambiguous addresses, colliding relationship keys, or overlapping active legacy corrections stop transition for the affected data. A new 2.0 operation uses stable addresses and the unambiguously resolved effective-view hash.
 7. Do not blindly rename old GOVERNS edges to PiF2 into PROTECTS. An authorized human confirms protected PiF2, coherent CiV, and actual implementation elements. Only a regular validated request commits the new protection/governance references.
 8. Apply constraints only after validating their preconditions. Every applicable stored-state query must return zero errors; transaction, revision, resolver, and concurrency tests must pass additionally. Incompatible combinations are not activated.

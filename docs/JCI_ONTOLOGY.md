@@ -6,7 +6,7 @@ Dieses Dokument übersetzt die fachliche Bedeutung aus [`JCI_CONTEXT.md`](JCI_CO
 
 Kardinalitäten und Invarianten stehen in [`JCI_GRAPH_RULES.md`](JCI_GRAPH_RULES.md). Der Ablauf von `SYNC` steht in [`JCI_SYNC_SPEC.md`](JCI_SYNC_SPEC.md). Datenbankspezifische Labels, Properties, Constraints und Indizes gehören in [`implementations/neo4j/JCI_NEO4J_SCHEMA.md`](implementations/neo4j/JCI_NEO4J_SCHEMA.md).
 
-**Regelpaket 2.0:** Ontologie, Graphregeln, SYNC, neue Snapshots, Korrekturwerte und das Austauschformat verwenden Version `2.0`. JSON-LD bleibt `1.1`; bestehende Namespace-IRIs mit `/1.0#` bleiben stabile Vokabularidentitäten und bezeichnen nicht die Regelversion. Frühere Datensätze werden ausschließlich nach ihren ausdrücklich angegebenen Versionsprofilen gelesen.
+**Regelpaket 2.0:** Ontologie, Graphregeln, SYNC und das Austauschformat verwenden Version `2.0`; neue Snapshots verwenden Vollständigkeitsprofil `2.1`, historische Korrekturen unterstützen die Korrekturwertprofile `2.0` und `2.1`. JSON-LD bleibt `1.1`; bestehende Namespace-IRIs mit `/1.0#` bleiben stabile Vokabularidentitäten und bezeichnen nicht die Regelversion. Frühere Datensätze werden ausschließlich nach ihren ausdrücklich angegebenen Versionsprofilen gelesen.
 
 Freigabepflichtige Vorgänge ergänzen dieses Regelpaket um `approvalProfileVersion = "1.0"`. Das zugrunde liegende Austauschformat bleibt `2.0`; Freigabeumschläge und vollständige Freigabebelege sind technische Datensätze außerhalb von `JCIEntity`.
 
@@ -106,7 +106,7 @@ FutureType = PiF1o | PiF1t | PiF1s | PiF2
 
 Bei `ACCOUNTABLE_CHAIN` ist `levels` nicht leer und eindeutig. Bei `VALUE_SCOPE` fehlt `levels` oder ist leer. Die Richtlinie erteilt allein noch keine Genehmigung; sie begrenzt, welche menschlichen Rollenaktivierungen unter einer aktiven, zeitlich und im Scope passenden `PERMIT`-Regel mit erfüllter Bedingung genehmigen dürfen. Freigabeprofil 1.0 wertet ausschließlich die in `JCI_CONTEXT` definierten zweigliedrigen Pfade `target.<Eigenschaft>`, `actor.<Eigenschaft>` und `request.<Eigenschaft>` aus. Andere Pfade und ungeklärte Typen sind `UNEVALUABLE`.
 
-Komplexe Werte verwenden ausschließlich die in Abschnitt 2.2.7 definierten Typen `TypedValue`, `StateSnapshot`, `RelationshipSnapshot`, `TypedValueMap`, `RuleExpression` und `SyncDefinition`. Unstrukturierte, implementierungsabhängige Objektinhalte sind nicht zulässig.
+Komplexe Werte verwenden ausschließlich die in Abschnitt 2.2.7 definierten Typen `TypedValue`, `StateSnapshot`, `RelationshipSnapshot`, `TypedValueMap`, `RuleExpression` und `SyncDefinition`. Allgemeine `RuleExpression` verwenden Profil `2.0` mit gerichteten typisierten Schritten, Quantor und ausdrücklichem Ergebnis für fehlende Werte; Freigaberegeln verwenden ausschließlich den begrenzten Vertrag des Freigabeprofils `1.0`. Unstrukturierte, implementierungsabhängige Objektinhalte sind nicht zulässig.
 
 ## 5. Beziehungskatalog
 
@@ -229,13 +229,13 @@ ersetzbare JCIEntity REPLACED_BY gleicher konkreter JCIEntity-Typ
 
 `AFFECTS` kann leer sein, wenn ein Versuch mit `outcome = FAILED` bereits vor erfolgreicher Zielauflösung endet. Ein `SyncEvent` mit `SUCCESS` oder `CONFLICT` besitzt mindestens ein `AFFECTS`-Ziel.
 
-Eine `HistoricalCorrection` bindet den wirksamen Inhalt vor ihrer Erzeugung durch `baseHistoryViewHash`. Profil `2.0` definiert kanonische Property- und stabile Beziehungspfade, segmentbasierte Vorfahr-/Nachfahrüberlappung, vollständige Ablösung genau einer aktiven Vorgängerin und absolute Wertüberlagerung beim Neuaufbau. Snapshot- und Sicht-Hashes verwenden dasselbe Inhaltsobjekt. Fehlende Werte sind von vorhandenem `NULL` verschieden; frühere Profildaten und Hashes bleiben unveränderlich. Abschnitt 2.2.9 von [`JCI_CONTEXT.md`](JCI_CONTEXT.md) definiert den verbindlichen Vertrag.
+Eine `HistoricalCorrection` bindet den wirksamen Inhalt vor ihrer Erzeugung durch `baseHistoryViewHash`. Korrekturwertprofil `2.0` definiert die bestehende Ergänzungs- und Wertüberlagerungslogik; Profil `2.1` ergänzt `REMOVAL` mit dem ausschließlich in Korrekturwert-Maps zulässigen Marker `ABSENT`. Kanonische Property- und stabile Beziehungspfade, segmentbasierte Vorfahr-/Nachfahrüberlappung sowie die vollständige Ablösung genau einer aktiven Vorgängerin gelten profilübergreifend. Snapshot- und Sicht-Hashes verwenden dasselbe Inhaltsobjekt nach Hashprofil `2.0`. Fehlende Werte sind von vorhandenem `NULL` verschieden; frühere Profildaten und Hashes bleiben unveränderlich. Abschnitt 2.2.9 von [`JCI_CONTEXT.md`](JCI_CONTEXT.md) definiert den verbindlichen Vertrag.
 
 **Kurzes Beispiel:** Während der erste SyncRun noch läuft, besitzt das `ChangeEvent` noch kein `TRIGGERS`-Ziel. Erst sein Abschluss erzeugt das `SyncEvent`. Eine spätere historische Berichtigung verweist bereits mit `TARGETS_HISTORY` auf das betroffene `PiH`, ohne dieses zu verändern.
 
 `REPLACED_BY` ist die gespeicherte Nachfolgebeziehung einer Entität mit `status = REPLACED`. Quelle und Ziel besitzen denselben konkreten `entityType`; Selbstbezüge und Zyklen sind unzulässig.
 
-Revisionszuordnung gehört zum Beziehungsvertrag und ist kein neuer Kanten- oder Entitätstyp. `EVALUATES`, `CHECKS` und Prüfungs-`SUPERSEDES` gehören zur neuen `Verification`; ihre Ziele behalten ihre Revisionen. `CREATED_BY` revisioniert niemals das referenzierte `RoleAssignment`. Neue Snapshots verwenden `snapshotSchemaVersion = "2.0"` und enthalten nur den der Entität zugeordneten Beziehungszustand. Die vollständige Matrix in Abschnitt 2.2.8 von [`JCI_CONTEXT.md`](JCI_CONTEXT.md) ist für jede Implementierung verbindlich.
+Revisionszuordnung gehört zum Beziehungsvertrag und ist kein neuer Kanten- oder Entitätstyp. `EVALUATES`, `CHECKS` und Prüfungs-`SUPERSEDES` gehören zur neuen `Verification`; ihre Ziele behalten ihre Revisionen. `CREATED_BY` revisioniert niemals das referenzierte `RoleAssignment`. Neue Snapshots verwenden `snapshotSchemaVersion = "2.1"`, enthalten sämtliche erforderlichen Eigenschaften und nur den der Entität zugeordneten Beziehungszustand. Bestehende Snapshots des Profils `2.0` bleiben unverändert. Die vollständige Matrix in Abschnitt 2.2.8 von [`JCI_CONTEXT.md`](JCI_CONTEXT.md) ist für jede Implementierung verbindlich.
 
 ## 6. Inverse Lesarten
 
@@ -272,7 +272,7 @@ ATOMIC    = unmittelbar ausführbare Tätigkeit
 COMPOSITE = Strukturknoten aus mindestens einem untergeordneten Task
 ```
 
-`PiF1o DECOMPOSES_INTO Task` ordnet jeden Task unabhängig von seiner Hierarchiestufe genau einem operativen Zukunftszustand zu. `Task DECOMPOSES_INTO Task` bildet eine zyklusfreie Hierarchie ab, in der ein Task höchstens einen direkten übergeordneten Task besitzt. `Task DEPENDS_ON Task` beschreibt eine fachliche Ausführungsvoraussetzung und darf auch über Hierarchie- und PiF1o-Grenzen hinweg verlaufen, bleibt aber selbst- und zyklusfrei.
+`PiF1o DECOMPOSES_INTO Task` ordnet jeden Task außerhalb von `DRAFT` unabhängig von seiner Hierarchiestufe genau einem operativen Zukunftszustand zu. Während des schrittweisen DRAFT-Aufbaus darf diese Zuordnung vorübergehend fehlen, niemals aber mehrfach bestehen; vor Freigabe wird sie zwingend geprüft. `Task DECOMPOSES_INTO Task` bildet eine zyklusfreie Hierarchie ab, in der ein Task höchstens einen direkten übergeordneten Task besitzt. `Task DEPENDS_ON Task` beschreibt eine fachliche Ausführungsvoraussetzung und darf auch über Hierarchie- und PiF1o-Grenzen hinweg verlaufen, bleibt aber selbst- und zyklusfrei.
 
 `HAS_MEMBER` und `HAS_ROLE` besitzen `validFrom` und optional `validUntil`. Der Zeitraum eines `RoleAssignment` liegt vollständig innerhalb der gleichzeitig gültigen Mitgliedschaft und des Rollenbesitzes. `OWNED_BY` ermöglicht die organisationsbezogene Ableitung von internem und externem Umweltkontext; tatsächliche Interaktion bleibt über `USES` personengebunden.
 

@@ -133,7 +133,7 @@ class FixtureRules:
                 "CREATE (h:JCIEntity:PiH {id:$id, entityType:'PiH', name:'Previous test state', "
                 "status:'RECORDED', revision:1, createdAt:$at, updatedAt:$at, "
                 "originalEntityId:$target, originalEntityType:'Task', originalRevision:$revision, "
-                "recordedAt:$at, validFrom:$previousAt, validUntil:$at, snapshotSchemaVersion:'2.0', "
+                "recordedAt:$at, validFrom:$previousAt, validUntil:$at, snapshotSchemaVersion:'2.1', "
                 "stateDataJson:$state, relationshipDataJson:'[]', contentHash:$hash}) "
                 "CREATE (target)-[:HAS_HISTORICAL_STATE]->(h), (h)-[:CREATED_BY]->(actor) "
                 "SET target.name=$name, target.revision=target.revision+1, target.updatedAt=$at",

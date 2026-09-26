@@ -6,7 +6,7 @@ This document translates the domain meaning from [`JCI_CONTEXT.md`](../JCI_CONTE
 
 Cardinalities and invariants are defined in [`JCI_GRAPH_RULES.md`](JCI_GRAPH_RULES.md). The `SYNC` process is defined in [`JCI_SYNC_SPEC.md`](JCI_SYNC_SPEC.md). Database-specific labels, properties, constraints, and indexes belong in [`implementations/neo4j/JCI_NEO4J_SCHEMA.md`](implementations/neo4j/JCI_NEO4J_SCHEMA.md).
 
-**Rule package 2.0:** Ontology, graph rules, SYNC, new snapshots, correction values, and the exchange format use version `2.0`. JSON-LD remains `1.1`; existing namespace IRIs ending in `/1.0#` remain stable vocabulary identities and are not the rule version. Earlier records are interpreted only through their explicit version profiles.
+**Rule package 2.0:** Ontology, graph rules, SYNC, and the exchange format use version `2.0`; new snapshots use completeness profile `2.1`, and historical corrections support correction-value profiles `2.0` and `2.1`. JSON-LD remains `1.1`; existing namespace IRIs ending in `/1.0#` remain stable vocabulary identities and are not the rule version. Earlier records are interpreted only through their explicit version profiles.
 
 Approval-protected operations supplement this rule package with `approvalProfileVersion = "1.0"`. The underlying exchange format remains `2.0`; approval envelopes and full approval receipts are technical records outside `JCIEntity`.
 
@@ -106,7 +106,7 @@ FutureType = PiF1o | PiF1t | PiF1s | PiF2
 
 For `ACCOUNTABLE_CHAIN`, `levels` is non-empty and unique. For `VALUE_SCOPE`, `levels` is absent or empty. The policy alone does not grant approval; it limits which human role assignments may approve under an active, temporally valid, scope-matching `PERMIT` rule whose condition holds. Approval profile 1.0 evaluates only the two-part paths `target.<property>`, `actor.<property>`, and `request.<property>` defined in `JCI_CONTEXT`. Other paths and unresolved types are `UNEVALUABLE`.
 
-Complex values exclusively use the types `TypedValue`, `StateSnapshot`, `RelationshipSnapshot`, `TypedValueMap`, `RuleExpression`, and `SyncDefinition` defined in section 2.2.7. Unstructured, implementation-dependent object content is not permitted.
+Complex values exclusively use the types `TypedValue`, `StateSnapshot`, `RelationshipSnapshot`, `TypedValueMap`, `RuleExpression`, and `SyncDefinition` defined in section 2.2.7. General `RuleExpression` uses profile `2.0` with directed typed steps, a quantifier, and an explicit result for missing values; approval rules use only the bounded contract of approval profile `1.0`. Unstructured, implementation-dependent object content is not permitted.
 
 ## 5. Relationship catalogue
 
@@ -229,13 +229,13 @@ replaceable JCIEntity REPLACED_BY same concrete JCIEntity type
 
 `AFFECTS` may be empty if an attempt ends with `outcome = FAILED` before successful target resolution. A `SyncEvent` with `SUCCESS` or `CONFLICT` has at least one `AFFECTS` target.
 
-A `HistoricalCorrection` binds the effective pre-correction content through `baseHistoryViewHash`. Profile `2.0` defines canonical property and stable relationship paths, segment-based ancestor/descendant overlap, complete supersession of exactly one active predecessor, and absolute value overlays for reconstruction. Snapshot and view hashes use the same content object. Missing values differ from existing `NULL`; prior profile data and hashes remain immutable. Section 2.2.9 of [`JCI_CONTEXT.md`](JCI_CONTEXT.md) defines the binding contract.
+A `HistoricalCorrection` binds the effective pre-correction content through `baseHistoryViewHash`. Correction-value profile `2.0` defines the existing addition and value-overlay logic; profile `2.1` adds `REMOVAL` with the `ABSENT` marker permitted only in correction-value maps. Canonical property and stable relationship paths, segment-based ancestor/descendant overlap, and complete supersession of exactly one active predecessor apply across profiles. Snapshot and view hashes use the same content object under hash profile `2.0`. Missing values differ from existing `NULL`; prior profile data and hashes remain immutable. Section 2.2.9 of [`JCI_CONTEXT.md`](JCI_CONTEXT.md) defines the binding contract.
 
 **Short example:** While the first SyncRun is still running, the `ChangeEvent` has no `TRIGGERS` target. Only its completion creates the `SyncEvent`. A later historical correction already refers to the affected `PiH` via `TARGETS_HISTORY` without changing it.
 
 `REPLACED_BY` is the stored successor relationship of an entity with `status = REPLACED`. Source and target have the same concrete `entityType`; self-references and cycles are prohibited.
 
-Revision ownership is part of the relationship contract, not a new edge or entity type. `EVALUATES`, `CHECKS`, and verification `SUPERSEDES` belong to the new `Verification`; their targets retain their revisions. `CREATED_BY` never revises the referenced `RoleAssignment`. New snapshots use `snapshotSchemaVersion = "2.0"` and include only the entity's owned relationship state. The complete matrix in section 2.2.8 of [`JCI_CONTEXT.md`](JCI_CONTEXT.md) is binding for every implementation.
+Revision ownership is part of the relationship contract, not a new edge or entity type. `EVALUATES`, `CHECKS`, and verification `SUPERSEDES` belong to the new `Verification`; their targets retain their revisions. `CREATED_BY` never revises the referenced `RoleAssignment`. New snapshots use `snapshotSchemaVersion = "2.1"`, include every required property, and include only the entity's owned relationship state. Existing profile `2.0` snapshots remain unchanged. The complete matrix in section 2.2.8 of [`JCI_CONTEXT.md`](JCI_CONTEXT.md) is binding for every implementation.
 
 ## 6. Inverse readings
 
@@ -272,7 +272,7 @@ ATOMIC    = directly executable activity
 COMPOSITE = structural node made up of at least one subordinate Task
 ```
 
-`PiF1o DECOMPOSES_INTO Task` assigns every Task, irrespective of hierarchy level, to exactly one operational future state. `Task DECOMPOSES_INTO Task` forms an acyclic hierarchy in which a Task has at most one direct parent. `Task DEPENDS_ON Task` describes a domain execution prerequisite and may cross hierarchy and PiF1o boundaries, but remains free of self-references and cycles.
+`PiF1o DECOMPOSES_INTO Task` assigns every Task outside `DRAFT`, irrespective of hierarchy level, to exactly one operational future state. During incremental DRAFT assembly, this assignment may temporarily be absent but may never exist more than once; it is mandatory before release. `Task DECOMPOSES_INTO Task` forms an acyclic hierarchy in which a Task has at most one direct parent. `Task DEPENDS_ON Task` describes a domain execution prerequisite and may cross hierarchy and PiF1o boundaries, but remains free of self-references and cycles.
 
 `HAS_MEMBER` and `HAS_ROLE` have `validFrom` and optionally `validUntil`. The validity period of a `RoleAssignment` lies completely within the simultaneously valid membership and role ownership. `OWNED_BY` enables the organization-relative derivation of internal and external environment context; actual interaction remains person-bound through `USES`.
 

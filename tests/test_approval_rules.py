@@ -176,6 +176,25 @@ class ApprovalRuleTests(unittest.TestCase):
         proof = self.validate(envelope)
         self.assertEqual([r.anchor_id for r in proof.context.requirements], [self.goals[1]])
 
+    def test_technical_accountability_is_traversed_but_never_approves(self):
+        self.nodes[self.members[0]]["memberType"] = "TECHNICAL"
+        self.nodes[self.rule]["approvalPolicy"].update(roleIds=[self.roles[1]], levels=["PiF1t"])
+        envelope = self.envelope(indices=(1,))
+        proof = self.validate(envelope)
+        self.assertEqual([r.anchor_id for r in proof.context.requirements], [self.goals[1]])
+        self.assertEqual(proof.approved_by[0].target, self.assignments[1])
+
+    def test_technical_accountability_cannot_approve_at_end_of_chain(self):
+        for member in self.members:
+            self.nodes[member]["memberType"] = "TECHNICAL"
+        with self.assertRaisesRegex(ApprovalRequired, "end of future chain"):
+            self.envelope()
+
+    def test_unknown_accountable_member_type_is_a_model_conflict(self):
+        self.nodes[self.members[0]]["memberType"] = "SERVICE"
+        with self.assertRaisesRegex(ApprovalConflict, "unknown accountable"):
+            self.envelope()
+
     def test_two_branches_require_all_approvals_even_with_any_contribution_mode(self):
         second = self.node("tactical-second", "PiF1t", contributionMode="ANY")
         self.edge(second, "ACCOUNTABLE_MEMBER", self.members[2])

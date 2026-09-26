@@ -1,6 +1,7 @@
 import json
 import re
 import unittest
+from copy import deepcopy
 from pathlib import Path
 
 from jsonschema import Draft202012Validator, FormatChecker, ValidationError
@@ -205,6 +206,23 @@ class SpecificationConsistencyTests(unittest.TestCase):
         self.assertIn("zählen nicht zu `changedCount`", self.neo4j)
         self.assertNotIn("[:CHANGES]", self.neo4j)
 
+    def test_neo4j_relationship_projection_is_closed_and_counts_raw_edges(self):
+        """Every catalog context/cardinality must reach the database validation layer."""
+        for document in (
+            "implementations/neo4j/JCI_NEO4J_SCHEMA.md",
+            "en/implementations/neo4j/JCI_NEO4J_SCHEMA.md",
+        ):
+            content = read(document)
+            with self.subTest(document=document):
+                self.assertIn("$canonicalRelationshipContexts", content)
+                self.assertIn("$canonicalEndpointCardinalities", content)
+                self.assertIn("size(contexts) <> 1", content)
+                cardinality_query = content.split(
+                    "UNWIND $canonicalEndpointCardinalities AS rule", 1
+                )[1].split("```", 1)[0]
+                self.assertIn("rawRelationshipCount", cardinality_query)
+                self.assertNotIn("DISTINCT", cardinality_query)
+
     def test_six_clarified_invariants_are_projected_across_specifications(self):
         """Every normative layer must retain the six clarified model decisions."""
         normative_layers = {
@@ -367,6 +385,31 @@ class SpecificationConsistencyTests(unittest.TestCase):
         }
         correction_request.pop("operations")
         request_validator.validate(correction_request)
+
+        removal_request = deepcopy(correction_request)
+        removal_request["idempotencyKey"] = "correct-history-removal-1"
+        removal_request["historicalCorrection"].update(
+            correctionType="REMOVAL", valueSchemaVersion="2.1",
+            previousValue={
+                "/stateData/properties/description": {
+                    "valueType": "STRING", "value": "Never existed"
+                }
+            },
+            correctedValue={
+                "/stateData/properties/description": {"valueType": "ABSENT"}
+            },
+        )
+        request_validator.validate(removal_request)
+
+        legacy_removal = deepcopy(removal_request)
+        legacy_removal["historicalCorrection"]["valueSchemaVersion"] = "2.0"
+        with self.assertRaises(ValidationError):
+            request_validator.validate(legacy_removal)
+
+        absent_domain_value = deepcopy(base_request)
+        absent_domain_value["operations"][0]["value"] = {"valueType": "ABSENT"}
+        with self.assertRaises(ValidationError):
+            request_validator.validate(absent_domain_value)
 
         invalid_correction = dict(correction_request, operations=base_request["operations"])
         with self.assertRaises(ValidationError):

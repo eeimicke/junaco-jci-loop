@@ -18,7 +18,7 @@ This page leads from an accessible introduction to the formal and technical spec
 9. [Approval profile 1.0](changes/JCI_APPROVAL_1_0.md) – human approval, accountability, escalation, and protected SYNC adoption.
 10. [Neo4j runtime](implementations/neo4j/JCI_NEO4J_RUNTIME.md) – executable transaction adapter, recovery, and real database tests.
 
-New rule, snapshot, value and exchange profiles use `2.0`. JSON-LD `1.1` and the existing vocabulary namespace remain unchanged. The [snapshot payload schema](../schemas/jci-history-snapshot.schema.json) describes historical payloads; [legacy schemas](../schemas/legacy/1.1/) preserve older profiles.
+New rule, value, and exchange profiles use `2.0`; new snapshots use completeness profile `2.1`. JSON-LD `1.1` and the existing vocabulary namespace remain unchanged. The [snapshot payload schema](../schemas/jci-history-snapshot.schema.json) describes historical payloads; [legacy schemas](../schemas/legacy/1.1/) preserve older profiles.
 
 ## Language policy
 

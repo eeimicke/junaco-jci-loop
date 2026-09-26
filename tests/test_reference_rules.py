@@ -48,13 +48,14 @@ def member_snapshot():
 
 
 def correction(before, *, identity="c1", fields=None, previous=None, corrected=None,
-               kind="CORRECTION", supersedes=None, time="2026-09-06T12:00:00Z"):
+               kind="CORRECTION", supersedes=None, time="2026-09-06T12:00:00Z",
+               profile=jci.PROFILE):
     path = "/stateData/properties/name"
     return jci.HistoricalCorrectionRecord(
         identity, "history", time, tuple(fields or [path]),
         previous if previous is not None else {path: typed("API")},
         corrected if corrected is not None else {path: typed("New API")},
-        kind, jci.history_hash(before), supersedes)
+        kind, jci.history_hash(before), supersedes, profile)
 
 
 class OwnershipRegressionTests(unittest.TestCase):
@@ -172,6 +173,17 @@ class OwnershipRegressionTests(unittest.TestCase):
         with self.assertRaises(jci.RuleViolation):
             jci.revision_plan(entities, edges)
 
+    def test_governs_can_reference_terminal_target_without_reopening_it(self):
+        entities = {
+            "rule": {"entityType": "RaN", "status": "ACTIVE", "revision": 2},
+            "result": {"entityType": "Result", "status": "COMPLETED", "revision": 4},
+        }
+        edge = jci.RelationshipChange("rule", "GOVERNS", "result")
+        self.assertEqual(jci.revision_plan(entities, [edge]), {"rule": 3})
+
+        entities["result"]["status"] = "ACTIVE"
+        self.assertEqual(jci.revision_plan(entities, [edge]), {"rule": 3, "result": 5})
+
     def test_snapshot_profile_excludes_incoming_reference_only_edges(self):
         data = snapshot()
         data["relationshipData"] = [{
@@ -180,6 +192,58 @@ class OwnershipRegressionTests(unittest.TestCase):
         }]
         with self.assertRaises(jci.RuleViolation):
             jci.validate_snapshot(data)
+
+    def test_draft_relaxes_only_relationship_minimum_until_activation(self):
+        self.assertTrue(jci.valid_relationship_cardinality(
+            status="DRAFT", count=0, minimum=1, maximum=1))
+        self.assertFalse(jci.valid_relationship_cardinality(
+            status="DRAFT", count=2, minimum=1, maximum=1))
+        self.assertFalse(jci.valid_relationship_cardinality(
+            status="ACTIVE", count=0, minimum=1, maximum=1))
+        self.assertTrue(jci.valid_relationship_cardinality(
+            status="ACTIVE", count=1, minimum=1, maximum=1))
+
+    def test_general_ran_path_has_explicit_direction_and_quantifier(self):
+        expression = {
+            "profileVersion": "2.0", "combiner": "ALL", "clauses": [{
+                "path": {"origin": "TARGET", "steps": [{
+                    "relationshipType": "EXECUTED_BY", "direction": "OUTGOING",
+                    "entityType": "RoleAssignment"}], "property": "status"},
+                "operator": "EQUALS", "value": {"valueType": "STRING", "value": "ACTIVE"},
+                "quantifier": "ALL", "missingResult": "UNEVALUABLE"}]}
+        entities = {
+            "task": {"entityType": "Task", "status": "ACTIVE"},
+            "a": {"entityType": "RoleAssignment", "status": "ACTIVE"},
+            "b": {"entityType": "RoleAssignment", "status": "ACTIVE"},
+        }
+        edges = [
+            {"source": "task", "relationship": "EXECUTED_BY", "target": "a"},
+            {"source": "task", "relationship": "EXECUTED_BY", "target": "b"},
+        ]
+        self.assertTrue(jci.evaluate_rule_expression(
+            expression, target_id="task", entities=entities, edges=edges))
+        expression["clauses"][0]["quantifier"] = "EXACTLY_ONE"
+        with self.assertRaises(jci.UnevaluableRule):
+            jci.evaluate_rule_expression(expression, target_id="task", entities=entities, edges=edges)
+
+    def test_general_ran_missing_behavior_and_parallel_edges_fail_closed(self):
+        expression = {
+            "profileVersion": "2.0", "combiner": "ALL", "clauses": [{
+                "path": {"origin": "TARGET", "steps": [], "property": "description"},
+                "operator": "NOT_EXISTS", "quantifier": "EXACTLY_ONE", "missingResult": "TRUE"}]}
+        entities = {"task": {"entityType": "Task", "status": "ACTIVE"}}
+        self.assertTrue(jci.evaluate_rule_expression(
+            expression, target_id="task", entities=entities, edges=[]))
+        expression["clauses"][0]["missingResult"] = "UNEVALUABLE"
+        with self.assertRaises(jci.UnevaluableRule):
+            jci.evaluate_rule_expression(expression, target_id="task", entities=entities, edges=[])
+
+        expression["clauses"][0].update(
+            {"operator": "EXISTS", "missingResult": "FALSE"})
+        edge = {"source": "task", "relationship": "DEPENDS_ON", "target": "task"}
+        with self.assertRaisesRegex(jci.UnevaluableRule, "parallel duplicate"):
+            jci.evaluate_rule_expression(
+                expression, target_id="task", entities=entities, edges=[edge, edge])
 
 
 class CompletionRegressionTests(unittest.TestCase):
@@ -383,6 +447,51 @@ class CorrectionRegressionTests(unittest.TestCase):
         view = jci.validate_correction(base, [], candidate, pih="history", expected_hash=candidate.base_hash)
         self.assertIn("description", view["stateData"]["properties"])
 
+    def test_profile_2_1_removes_false_optional_property_without_treating_null_as_absence(self):
+        base = snapshot()
+        path = "/stateData/properties/description"
+        base["stateData"]["properties"]["description"] = typed("Never existed")
+        candidate = correction(
+            base, fields=[path], previous={path: typed("Never existed")},
+            corrected={path: deepcopy(jci.ABSENT_VALUE)}, kind="REMOVAL",
+            profile=jci.CORRECTION_PROFILE)
+        view = jci.validate_correction(
+            base, [], candidate, pih="history", expected_hash=candidate.base_hash)
+        self.assertNotIn("description", view["stateData"]["properties"])
+
+        null_base = snapshot()
+        null_base["stateData"]["properties"]["description"] = deepcopy(jci.NULL_VALUE)
+        invalid = correction(
+            null_base, fields=[path], previous={path: deepcopy(jci.ABSENT_VALUE)},
+            corrected={path: typed("Text")}, kind="ADDITION",
+            profile=jci.CORRECTION_PROFILE)
+        with self.assertRaisesRegex(jci.RuleViolation, "absence"):
+            jci.validate_correction(
+                null_base, [], invalid, pih="history", expected_hash=invalid.base_hash)
+
+    def test_profile_2_1_removes_and_can_explicitly_restore_a_relationship(self):
+        base = member_snapshot()
+        edge = deepcopy(base["relationshipData"][0])
+        path = f"/relationshipData/INCOMING:HAS_MEMBER:{TEAM}"
+        removal = correction(
+            base, fields=[path], previous={path: typed(edge, "OBJECT")},
+            corrected={path: deepcopy(jci.ABSENT_VALUE)}, kind="REMOVAL",
+            profile=jci.CORRECTION_PROFILE)
+        removed = jci.validate_correction(
+            base, [], removal, pih="history", expected_hash=removal.base_hash)
+        self.assertEqual(removed["relationshipData"], [])
+
+        restoration = correction(
+            removed, identity="c2", fields=[path],
+            previous={path: deepcopy(jci.ABSENT_VALUE)},
+            corrected={path: typed(edge, "OBJECT")}, kind="ADDITION",
+            supersedes="c1", time="2026-09-06T12:00:01Z",
+            profile=jci.CORRECTION_PROFILE)
+        restored = jci.validate_correction(
+            base, [removal], restoration, pih="history",
+            expected_hash=restoration.base_hash)
+        self.assertEqual(restored["relationshipData"], [edge])
+
     def test_added_relationship_cannot_change_identity_when_superseded(self):
         base = {"stateData": {"entityType": "CiV", "revision": 1,
                               "properties": {"name": typed("Clarity"),
@@ -503,7 +612,18 @@ class CorrectionRegressionTests(unittest.TestCase):
         base = snapshot()
         base["stateData"] = {"entityType": "RaN", "revision": 1,
                              "properties": {"name": typed("Rule"),
+                                            "status": typed("ACTIVE"),
+                                            "ruleType": typed("RULE"),
+                                            "effect": typed("REQUIRE"),
+                                            "statement": typed("Work is reviewed"),
+                                            "decisionKey": typed("Task.status.COMPLETED"),
+                                            "scopeType": typed("ENTITY"),
                                             "governedTypes": typed(["Task"], "ARRAY")}}
+        base["stateData"]["properties"].update({
+            "condition": typed({"profileVersion": "2.0"}, "OBJECT"),
+            "priority": typed(1, "INTEGER"),
+            "validFrom": typed("2026-01-01T00:00:00Z", "DATETIME"),
+        })
         path = "/stateData/properties/governedTypes"
         candidate = correction(base, fields=[path], previous={path: typed(["Task"], "ARRAY")},
                                corrected={path: typed(["Task", "Result"], "ARRAY")})
@@ -560,9 +680,13 @@ class CorrectionRegressionTests(unittest.TestCase):
             with self.subTest(vector=vector["name"]):
                 expected = vector["canonicalUtf8"].encode("utf-8")
                 self.assertEqual(hashlib.sha256(expected).hexdigest(), vector["sha256"])
-                output = jci.build_history_view(vector["payload"], [], pih="fixture")
+                output = jci.build_history_view(
+                    vector["payload"], [], pih="fixture",
+                    snapshot_profile=vectors["profile"])
                 self.assertEqual(jci.canonical_json(output), expected)
-                self.assertEqual(jci.history_hash(vector["payload"]), vector["sha256"])
+                self.assertEqual(
+                    jci.history_hash(vector["payload"], profile=vectors["profile"]),
+                    vector["sha256"])
 
 
 class WriteGateSimulationTests(unittest.TestCase):
@@ -640,6 +764,7 @@ class ExchangeProfileRegressionTests(unittest.TestCase):
         folder = ROOT / "docs" / "schemas"
         self.request_schema = json.loads((folder / "jci-change-request.schema.json").read_text(encoding="utf-8"))
         self.validator = Draft202012Validator(self.request_schema, format_checker=FormatChecker())
+        self.snapshot_schema = json.loads((folder / "jci-history-snapshot.schema.json").read_text(encoding="utf-8"))
 
     def test_schema_is_valid_and_legacy_stays_separate(self):
         for path in (ROOT / "docs" / "schemas").rglob("*.schema.json"):
@@ -660,6 +785,59 @@ class ExchangeProfileRegressionTests(unittest.TestCase):
                 validator.validate(bad)
         validator.validate(typed(9007199254740993, "INTEGER"))
         validator.validate(typed([typed("0.1", "DECIMAL")], "ARRAY"))
+
+    def test_snapshot_schema_and_reference_reject_incomplete_civ(self):
+        incomplete = {"stateData": {"entityType": "CiV", "revision": 1,
+                                     "properties": {}}, "relationshipData": []}
+        with self.assertRaises(ValidationError):
+            Draft202012Validator(
+                self.snapshot_schema, format_checker=FormatChecker()).validate(incomplete)
+        with self.assertRaises(jci.RuleViolation):
+            jci.validate_snapshot(incomplete)
+
+    def test_snapshot_schema_requires_every_entity_types_mandatory_properties(self):
+        validator = Draft202012Validator(
+            self.snapshot_schema, format_checker=FormatChecker())
+        for entity_type, required in jci.REQUIRED_SNAPSHOT_PROPERTIES.items():
+            incomplete = {
+                "stateData": {
+                    "entityType": entity_type,
+                    "revision": 1,
+                    "properties": {name: typed(None, "NULL") for name in required},
+                },
+                "relationshipData": [],
+            }
+            removed = next(iter(required))
+            del incomplete["stateData"]["properties"][removed]
+            with self.subTest(entityType=entity_type, missing=removed):
+                with self.assertRaises(ValidationError):
+                    validator.validate(incomplete)
+                with self.assertRaises(jci.RuleViolation):
+                    jci.validate_snapshot(incomplete)
+
+    def test_snapshot_schema_requires_temporal_relationship_properties(self):
+        snapshot = {
+            "stateData": {
+                "entityType": "RoFTeam",
+                "revision": 1,
+                "properties": {
+                    name: typed(None, "NULL")
+                    for name in jci.REQUIRED_SNAPSHOT_PROPERTIES["RoFTeam"]
+                },
+            },
+            "relationshipData": [{
+                "relationshipType": "HAS_MEMBER",
+                "direction": "OUTGOING",
+                "otherEntityId": OTHER,
+                "otherEntityType": "RoFTeamMember",
+                "properties": {},
+            }],
+        }
+        with self.assertRaises(ValidationError):
+            Draft202012Validator(
+                self.snapshot_schema, format_checker=FormatChecker()).validate(snapshot)
+        with self.assertRaises(jci.RuleViolation):
+            jci.validate_snapshot(snapshot)
 
     def test_transport_rejects_unknown_entity_relationship_and_old_correction_paths(self):
         validator = Draft202012Validator(

@@ -530,22 +530,24 @@ def _chain_requirements(graph, candidate, proposal, at):
             raise ApprovalConflict("release requires an active typed future path")
         member_id = _one(_out(graph, identity, "ACCOUNTABLE_MEMBER"), "accountable member").target
         member = _entity(graph, member_id, "RoFTeamMember")
-        if member.get("memberType") != "HUMAN":
-            raise ApprovalRequired("accountable approval anchor must be human")
+        member_type = member.get("memberType")
+        if member_type not in {"HUMAN", "TECHNICAL"}:
+            raise ApprovalConflict("unknown accountable member identity type")
         permitted, denied = [], False
-        for edge in sorted(_out(graph, member_id, "HAS_ASSIGNMENT"), key=lambda e: e.target):
-            try:
-                actor = _actor(graph, edge.target, at)
-            except ApprovalRequired:
-                continue
-            if actor["organizationId"] != task_org:
-                continue
-            try:
-                if _permission(graph, proposal, actor, mode="ACCOUNTABLE_CHAIN", level=kind,
-                               at=at, target_id=task_id, target=target, decision_key=RELEASE):
-                    permitted.append(edge.target)
-            except ApprovalDenied:
-                denied = True
+        if member_type == "HUMAN":
+            for edge in sorted(_out(graph, member_id, "HAS_ASSIGNMENT"), key=lambda e: e.target):
+                try:
+                    actor = _actor(graph, edge.target, at)
+                except ApprovalRequired:
+                    continue
+                if actor["organizationId"] != task_org:
+                    continue
+                try:
+                    if _permission(graph, proposal, actor, mode="ACCOUNTABLE_CHAIN", level=kind,
+                                   at=at, target_id=task_id, target=target, decision_key=RELEASE):
+                        permitted.append(edge.target)
+                except ApprovalDenied:
+                    denied = True
         if denied:
             raise ApprovalDenied("accountable approver was denied; escalation is not an override")
         if permitted:

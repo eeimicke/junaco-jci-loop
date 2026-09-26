@@ -142,7 +142,7 @@ Valid changes to relationship properties remain possible. The view still overlay
 
 Setting up technical runtime structures is neither a domain bootstrap nor an automatic data migration. For an existing store, profiles, valid states, revision ownership, Task and criterion scopes, mixed completion cycles, and historical correction chains must be checked before activation. Ambiguous cases require traceable domain decisions.
 
-Old PiH, corrections, and stored hashes remain unchanged. Every legacy profile actually present requires an explicitly reviewed resolver; preserved legacy schemas alone do not implement that resolver. The coordinator invents neither historical approvals nor new identities and does not automatically rewrite old snapshots to profile 2.0. Pre-/post-validation, backup, and a concrete migration remain a separate introduction step when legacy data exists.
+Old PiH, corrections, and stored hashes remain unchanged. Every legacy profile actually present requires an explicitly reviewed resolver; preserved legacy schemas alone do not implement that resolver. The coordinator invents neither historical approvals nor new identities and does not automatically rewrite old snapshots to profile 2.1. Pre-/post-validation, backup, and a concrete migration remain a separate introduction step when legacy data exists.
 
 ## 6. Effects on the loop and remaining integration
 
