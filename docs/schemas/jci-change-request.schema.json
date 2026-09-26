@@ -326,6 +326,35 @@
         "$ref": "#/$defs/correctionPath"
       }
     },
+    "correctionValue": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/typedValue"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "valueType"
+          ],
+          "properties": {
+            "valueType": {
+              "const": "ABSENT"
+            }
+          }
+        }
+      ]
+    },
+    "correctionValueMap": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/correctionValue"
+      },
+      "propertyNames": {
+        "$ref": "#/$defs/correctionPath"
+      }
+    },
     "historicalCorrection": {
       "type": "object",
       "additionalProperties": false,
@@ -343,7 +372,8 @@
           "enum": [
             "ADDITION",
             "CORRECTION",
-            "CLARIFICATION"
+            "CLARIFICATION",
+            "REMOVAL"
           ]
         },
         "reason": {
@@ -351,7 +381,10 @@
           "minLength": 1
         },
         "valueSchemaVersion": {
-          "const": "2.0"
+          "enum": [
+            "2.0",
+            "2.1"
+          ]
         },
         "expectedHistoryViewHash": {
           "type": "string",
@@ -366,12 +399,43 @@
           }
         },
         "previousValue": {
-          "$ref": "#/$defs/typedValueMap"
+          "$ref": "#/$defs/correctionValueMap"
         },
         "correctedValue": {
-          "$ref": "#/$defs/typedValueMap"
+          "$ref": "#/$defs/correctionValueMap"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "valueSchemaVersion": {
+                "const": "2.0"
+              }
+            },
+            "required": [
+              "valueSchemaVersion"
+            ]
+          },
+          "then": {
+            "properties": {
+              "correctionType": {
+                "enum": [
+                  "ADDITION",
+                  "CORRECTION",
+                  "CLARIFICATION"
+                ]
+              },
+              "previousValue": {
+                "$ref": "#/$defs/typedValueMap"
+              },
+              "correctedValue": {
+                "$ref": "#/$defs/typedValueMap"
+              }
+            }
+          }
+        }
+      ]
     },
     "operation": {
       "type": "object",

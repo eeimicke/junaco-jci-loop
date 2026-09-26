@@ -1,7 +1,7 @@
 # JUNACO Continuous Integration for Organizations
 ## 1. JUNACO Continuous Integration for Organizations
 
-**Rule package 2.0:** Ontology, graph rules, SYNC, new snapshots, correction values, and the exchange format use version `2.0`. JSON-LD remains `1.1`; existing namespace IRIs ending in `/1.0#` remain stable vocabulary identities and are not the rule version. Earlier records are interpreted only through their explicit version profiles.
+**Rule package 2.0:** Ontology, graph rules, SYNC, and the exchange format use version `2.0`; new snapshots use additive completeness profile `2.1`, and historical corrections support correction-value profiles `2.0` and `2.1`. JSON-LD remains `1.1`; existing namespace IRIs ending in `/1.0#` remain stable vocabulary identities and are not the rule version. Earlier records are interpreted only through their explicit version profiles.
 
 **Mandatory approval extension:** New approval-gated changes additionally use `approvalProfileVersion = "1.0"` under section 12.9. The base format and canonical hash profile remain `2.0`; an older handler without explicit approval-profile support must not execute these changes. Existing events and hashes are not reinterpreted retroactively.
 
@@ -266,6 +266,10 @@ For `CiV`, `RaN`, `SYNC`, `RoFOrg`, `RoFOrgRelationship`, `RoFTeam`, `RoFTeamMem
 
 The bootstrap row is a one-time technical trust root and not a `ChangeEvent`. Apart from this explicitly bounded exception, direct shortcuts are permitted only where the table provides for creation into an immutable target state. In particular, active domain entities must not become drafts again as a result of a change. A domain continuation of a terminal state is created as a new entity and connected through the intended successor relationship.
 
+`DRAFT` relaxes only the minimum cardinalities of domain relationships at the respective draft endpoint to `0`; every maximum, identity, common mandatory field, type-specific mandatory field, relationship type, and cycle prohibition already applies at storage time. Thus, for example, a `PiF1o` may initially exist without a Task and a Task without a direct `PiF1o` assignment or `RESPONSIBLE_TEAM`. Entities and edges are assembled through separate protected single-target requests. Every actual change to an existing draft is revisioned and historized normally.
+
+Before every transition out of `DRAFT`, `SYNC` atomically validates the complete candidate graph against the unchanged relationship-table minima. For a Task, this includes exactly one direct assignment through `PiF1o ── DECOMPOSES_INTO ──► Task` and exactly one `RESPONSIBLE_TEAM`; for a `PiF1o`, at least one Task, at least one success criterion, exactly one `ACCOUNTABLE_MEMBER`, and the complete future path. `DRAFT → BLOCKED` uses the same activation minima and differs only by the established blocking condition. Immutable entities, immediate terminal creations, and bootstrap have no DRAFT exception and must be complete at their atomic creation.
+
 Process artifacts do not create a recursive event chain: `ChangeEvent`, `SyncEvent`, `PiH`, `HistoricalCorrection` and an open `RaNConflict` recognized by SYNC are generated within the change process that is already in progress and do not trigger another `ChangeEvent` for their own creation. However, a later permitted change of a `RaNConflict` from `OPEN` to `RESOLVED` is a new technical change process.
 
 The status transitions do not replace approval validation: in particular, the first Task release from `DRAFT` additionally requires complete human approval under section 12.9. Resuming an already released `BLOCKED` Task when dependencies are met is not another initial release; all current model and RaN conditions still apply.
@@ -312,10 +316,14 @@ JCIEntity.entityType       = PiH | CiV | RaN | SYNC | PiF2 | PiF1s | PiF1t | PiF
 RaN.ruleType              = RULE | NORM | POLICY | CONSTRAINT | LAW
 RaN.effect                = REQUIRE | PROHIBIT | PERMIT
 RaN.scopeType             = GLOBAL | ORGANIZATION | TEAM | ENTITY
+RaN.condition.profileVersion = 2.0 (general) | selected by approvalPolicy 1.0 (approval)
 RaN.condition.combiner    = ALL | ANY
 RaN.condition.clause.operator = EXISTS | NOT_EXISTS | EQUALS | NOT_EQUALS |
                                 LESS_THAN | LESS_OR_EQUAL | GREATER_THAN |
                                 GREATER_OR_EQUAL | IN | NOT_IN | CONTAINS | MATCHES
+RaN.condition.clause.quantifier = EXACTLY_ONE | ANY | ALL
+RaN.condition.clause.missingResult = TRUE | FALSE | UNEVALUABLE
+RaN.condition.clause.path.step.direction = OUTGOING | INCOMING
 RaNConflict.conflictType  = PRIORITY_TIE | UNEVALUABLE
 RoFOrgRelationship.type  = SUBSIDIARY | PARTNERSHIP
 RoFOrg.orgType           = COMPANY | PUBLIC_ORGANIZATION | NONPROFIT |
@@ -338,7 +346,7 @@ Task.taskKind           = ATOMIC | COMPOSITE
 ChangeEvent.changeType  = CREATED | CHANGED | ACHIEVED | COMPLETED |
                           REPLACED | REVOKED | RESOLVED | HISTORICAL_CORRECTION
 SyncEvent.outcome        = SUCCESS | CONFLICT | FAILED
-HistoricalCorrection.correctionType = ADDITION | CORRECTION | CLARIFICATION
+HistoricalCorrection.correctionType = ADDITION | CORRECTION | CLARIFICATION | REMOVAL
 ```
 
 `allocation`, if specified, is between `0` and `1`. `bootstrapKey` is permitted exclusively on exactly one root `RoleAssignment` and has the immutable value `ROOT` there. The bound revisions of a `Verification` are positive integers. `ChangeEvent.id` equals the `requestId` of the accepted change request; `idempotencyKey` is unique per domain change request. `SyncEvent.runId` is unique per technical attempt. Counts of a `SyncEvent` are not negative, `completedAt` is not before `startedAt`, and `validUntil` is not before `validFrom`. For new success criteria, `requirementLevel = REQUIRED` and `evaluationMode = ALL` apply by default. Parent future elements default to `contributionMode = ALL`. For `RaN.priority`, a larger integer means higher priority. The `ruleType` does not generate automatic priority.
@@ -416,15 +424,49 @@ otherEntityType
 properties = Map<String, TypedValue>
 ```
 
-For each relationship owned by the entity under section 2.2.8 at the end of the domain state, exactly one `RelationshipSnapshot` is stored. Profile `2.0` sorts the list by `relationshipType`, `direction`, and `otherEntityId`; duplicate stable keys are invalid. `contentHash` is the hexadecimal SHA-256 of the canonical `{stateData, relationshipData}` object under section 2.2.9. Foreign documentary references are not an owned state change. Earlier snapshots keep their original contents, profile, and hash.
+For each relationship owned by the entity under section 2.2.8 at the end of the domain state, exactly one `RelationshipSnapshot` is stored. Profile `2.1` retains from `2.0` the sorting of the list by `relationshipType`, `direction`, and `otherEntityId`; duplicate stable keys are invalid. `contentHash` is the hexadecimal SHA-256 of the canonical `{stateData, relationshipData}` object under section 2.2.9. Foreign documentary references are not an owned state change. Earlier snapshots keep their original contents, profile, and hash.
 
-A `TypedValueMap` assigns exactly one typed old and corrected value to each path in `correctedFields`. Canonicalization, allowed path depth, stable relationship keys, overlap, and missing-value semantics follow section 2.2.9. A correction changes only its declared paths.
+A `TypedValueMap` assigns exactly one old or corrected value to each path in `correctedFields`. In profile `2.0`, it contains only `TypedValue`; profile `2.1` additionally permits the exact correction marker `{ "valueType": "ABSENT" }` under section 2.2.9. The marker is not itself a `TypedValue`, but the sole versioned exception within this correction map. Canonicalization, allowed path depth, stable relationship keys, overlap, and missing-value semantics follow section 2.2.9. A correction changes only its declared paths.
+
+A general `RuleExpression` under condition profile `2.0` is closed and structured:
+
+```text
+RuleExpression = {
+  profileVersion: "2.0",
+  combiner: ALL | ANY,
+  clauses: non-empty list of RuleClause
+}
+RuleClause = {
+  path: {
+    origin: TARGET,
+    steps: list of at most 8 RuleStep,
+    property: cataloged property of the terminal type
+  },
+  operator: EXISTS | NOT_EXISTS | EQUALS | NOT_EQUALS |
+            LESS_THAN | LESS_OR_EQUAL | GREATER_THAN | GREATER_OR_EQUAL |
+            IN | NOT_IN | CONTAINS | MATCHES,
+  quantifier: EXACTLY_ONE | ANY | ALL,
+  missingResult: TRUE | FALSE | UNEVALUABLE,
+  value: TypedValue except for EXISTS and NOT_EXISTS
+}
+RuleStep = {
+  relationshipType: cataloged relationship,
+  direction: OUTGOING | INCOMING,
+  entityType: expected concrete target type of this step
+}
+```
+
+Evaluation starts only at the concrete `TARGET` governed through `GOVERNS`. Every step explicitly names direction, relationship, and expected endpoint type; free-form string paths, implicit inverses, and unbounded traversal are prohibited. Every matching edge creates one branch. Identical parallel edges, missing entities, incorrect endpoint types, and uncataloged relationship contexts produce `UNEVALUABLE` and must not be hidden through `DISTINCT`.
+
+A missing relationship step or terminal property produces the MISSING marker, evaluated only through `missingResult`. For `EXISTS`, canonical `missingResult = FALSE`; for `NOT_EXISTS`, `TRUE`; for every other operator, the field explicitly determines `TRUE`, `FALSE`, or `UNEVALUABLE`. `EXACTLY_ONE` requires exactly one path result, `ANY` at least one true result, and `ALL` only true results. There is no implicit vacuous truth for an empty set. Every clause is evaluated; `ANY` must not hide `UNEVALUABLE`. Comparisons are type-strict without conversion; `MATCHES` uses a full regular-expression match.
+
+Approval profile `1.0` retains its deliberately narrower direct two-segment contract from section 12.9 and is selected by `approvalPolicy.profileVersion = "1.0"`. It is not an alias for general profile `2.0`. An active RaN without `approvalPolicy` uses the general profile; a RaN with `approvalPolicy` uses only the approval profile for its approval decision.
 
 The effective `HistoryView` is reconstructed from the immutable `PiH` and absolute `correctedValue` overlays of its non-superseded corrections. Snapshot and effective-view hashes use the same canonical content object under section 2.2.9; `baseHistoryViewHash` binds the effective view immediately before the accepted correction.
 
 **Short example:** If Anna's team relationship is historicized, `relationshipData` contains an outgoing or incoming edge with type `HAS_MEMBER`, the team ID, and `validFrom` and `validUntil`. A later correction names exactly this relationship path and does not replace the entire snapshot.
 
-#### 2.2.8 Revision ownership and snapshot profile 2.0
+#### 2.2.8 Revision ownership and snapshot profile 2.1
 
 `revision` denotes the entity's domain state. Every property change and every change to its owned relationship state increments an existing mutable node's revision exactly once within a successful request and creates exactly one `PiH`. A reference from a new verification or event object does not change the referenced state. Ownership applies to creating, adding, removing, and changing an edge; it never permits rewriting the owned content of an immutable object.
 
@@ -441,19 +483,20 @@ The effective `HistoryView` is reconstructed from the immutable `PiH` and absolu
 | `HELD_BY`, `INFORMED_BY`, `INSCRIBES_PURPOSE_IN`, `CONTRIBUTES_TO`                                                                               | both existing mutable endpoints                                                                                                |
 | `HAS_SUCCESS_CRITERIA`, `ACCOUNTABLE_MEMBER`, `DECOMPOSES_INTO`, `DEPENDS_ON`, `RESPONSIBLE_TEAM`, `EXECUTED_BY`, `USES`, `OWNED_BY`, `PRODUCES` | both existing mutable endpoints                                                                                                |
 | `HAS_TEAM`, `HAS_MEMBER`, `HAS_ROLE`, `HAS_ASSIGNMENT`, `IN_TEAM`, `ACTIVATES_ROLE`, `SOURCE_ORG`, `TARGET_ORG`, `REPRESENTED_BY`                | both existing mutable endpoints                                                                                                |
-| `PROTECTS`, `GOVERNS`, `APPLIES_IN`, `REPLACED_BY`                                                                                               | both existing mutable endpoints                                                                                                |
+| `PROTECTS`, `APPLIES_IN`, `REPLACED_BY`                                                                                                          | both existing mutable endpoints                                                                                                |
+| `GOVERNS`                                                                                                                                        | the `RaN` source and a mutable target; only the `RaN` source when the target is terminal or immutable                          |
 
-Concrete source and target types must still match the complete relationship catalogue. Unknown relationship contexts are rejected. New entities start at `revision = 1` without predecessor history of their own. Multiple changes to one existing entity in the same request are combined into one domain delta before historization. No actual state change means no new revision and no `PiH`.
+Concrete source and target types must still match the complete relationship catalogue. Unknown relationship contexts are rejected. A new or removed `GOVERNS` edge must neither reopen nor revise a terminal Task, terminal Result, or already completed Verification; the edge remains fully traceable through the revisioned and historized source state of the `RaN`. New entities start at `revision = 1` without predecessor history of their own. Multiple changes to one existing entity in the same request are combined into one domain delta before historization. No actual state change means no new revision and no `PiH`.
 
-New historization uses `snapshotSchemaVersion = "2.0"`: `relationshipData` contains only relationships owned by the historized entity according to this table. References from other verification and event objects remain accessible on their independent immutable documentation objects. Later evidence therefore does not become part of an earlier domain state retroactively. Immutability protects properties and owned relationship state; permitted external references do not rewrite that state. Existing `PiH`, their older profiles, and their hashes remain unchanged.
+New historization uses `snapshotSchemaVersion = "2.1"`: `stateData.properties` contains every domain property required at capture time, and `relationshipData` contains only relationships owned by the historized entity according to this table, including their required properties. References from other verification and event objects remain accessible on their independent immutable documentation objects. Later evidence therefore does not become part of an earlier domain state retroactively. Immutability protects properties and owned relationship state; permitted external references do not rewrite that state. Existing profile `2.0` `PiH`, their contents, and their hashes remain unchanged and are read only through the `2.0` resolver.
 
 **Short example:** A new `Verification` binds criterion revision `2` and creates `CHECKS`. The criterion remains at revision `2`; the verification is applicable. Only a later domain change to the criterion creates revision `3` and makes the old verification inapplicable to the new state. New audit relationships change the technical `graphEpoch` under section 12 even when no domain target revision increases.
 
 **Creation example:** A new Task starts at revision `1` without its own `PiH`. Explicitly assigning it to an existing active `PiF1o` changes that goal’s owned `DECOMPOSES_INTO` state, so the goal receives one revision increment and one `PiH` in the same request. The referenced creation role remains unchanged.
 
-#### 2.2.9 Correction paths and canonical hash profile 2.0
+#### 2.2.9 Correction paths and canonical hash and correction-value profiles
 
-New snapshots and their correction values use `snapshotSchemaVersion = "2.0"` and `valueSchemaVersion = "2.0"`, respectively. These versions select the resolver and hash algorithm. Unknown or incompatible profiles cause `CONFLICT`; there is no silent reinterpretation. Earlier `PiH` retain their contents and hashes. A legacy resolver must establish the earlier profile actually used; the preserved exchange schemas alone do not define such a resolver.
+New snapshots use `snapshotSchemaVersion = "2.1"`. Historical corrections use either the unchanged correction-value profile `valueSchemaVersion = "2.0"` or, for explicit addition and removal, the additive profile `valueSchemaVersion = "2.1"`. These versions select the resolver and hash algorithm. Snapshot profile `2.1` retains canonical sorting and hashing from `2.0` but adds complete required-field validation. Unknown or incompatible profiles cause `CONFLICT`; there is no silent reinterpretation. Earlier `PiH`, corrections, and hashes remain unchanged. A legacy resolver must establish the earlier profile actually used; the preserved exchange schemas alone do not define such a resolver.
 
 Stored `relationshipData` remains a list. Only for path resolution is it projected as a map, using the stable key `direction + ":" + relationshipType + ":" + otherEntityId`. `otherEntityId` is the canonical lowercase UUID with hyphens. Duplicate keys are invalid. Only these three address forms are permitted:
 
@@ -469,7 +512,9 @@ After JSON string decoding, the pointer is split at `/`. Within each segment, `~
 
 All paths must already be pairwise non-overlapping within one request. Against active corrections: no overlap means no `SUPERSEDES`; exactly one overlapping active correction must be fully superseded; more than one means `CONFLICT`. The new field set contains every previous canonical field path unchanged and repeats its intended effective value; additional paths remain non-overlapping internally and against every other active correction. An ancestor path does not replace this complete field carry-forward. The existing `SUPERSEDES` cardinality `0..1` remains unchanged.
 
-At correction acceptance, `previousValue` is checked against the immediately preceding effective view. `ADDITION` requires an actually missing path and a typed old value of `NULL`; an existing `NULL` value is not missing. `CORRECTION` and `CLARIFICATION` require an existing path. `NULL` is a value, not a deletion command. Reconstruction of `HistoryView` applies active corrections’ `correctedValue` values as absolute overlays on the immutable origin. It does not replay superseded operations or recheck `previousValue` against the origin. An original addition therefore remains visible when a later correction supersedes it. Missing relationship parents are not invented from a single property; a complete relationship entry must be added instead.
+At correction acceptance, `previousValue` is checked against the immediately preceding effective view. In profile `2.0`, `ADDITION` requires an actually missing path and a typed old value of `NULL`; that profile has no removal. In profile `2.1`, only the exact correction-value object `{ "valueType": "ABSENT" }` denotes a missing path: `ADDITION` requires `ABSENT` as the previous value and a regular `TypedValue` as the corrected value; `REMOVAL` requires an existing regular `TypedValue` as the previous value and `ABSENT` as the corrected value. `CORRECTION` and `CLARIFICATION` require regular `TypedValue` values in both maps and an existing path. `ABSENT` is not a domain value and is invalid outside correction-value maps of profile `2.1`. `NULL` remains a present value and is not a deletion command.
+
+Reconstruction of `HistoryView` applies regular active `correctedValue` values as absolute overlays on the immutable origin and, for `ABSENT`, removes exactly the addressed property or complete relationship entry. It does not replay superseded operations or recheck `previousValue` against the origin. An original addition therefore remains visible when a later correction supersedes it. Missing relationship parents are not invented from a single property; a complete relationship entry must be added instead. A relationship property may be removed only if the remaining `RelationshipSnapshot` still conforms to the snapshot profile.
 
 Exactly the same content object is hashed for `contentHash`, `baseHistoryViewHash`, and `expectedHistoryViewHash`:
 
@@ -512,11 +557,11 @@ The representation describes an orientation and not a single linear process. `Ra
 
 ### 2.4 Relationships between JCI entities
 
-The following tables show the stored relationships along the JCI chain and the uniquely derived ERoF mappings. Derived relationships are explicitly marked and are not stored as additional edges.
+The following tables show the stored relationships along the JCI chain and the uniquely derived ERoF mappings. Derived relationships are explicitly marked and are not stored as additional edges. The stated maxima apply in every status. A minimum greater than `0` is the binding activation and completeness cardinality; only at the respective `DRAFT` endpoint is it temporarily relaxed to `0` under section 2.2.4.
 
 #### 2.4.1 Purpose, values ​​and future
 
-Reading example for `PiF1s ── CONTRIBUTES_TO ──► PiF2`: **Targets per source `1..n`** means that a `PiF1s` must contribute to at least one or more `PiF2`. **Sources per target `0..n`** means that none, one or more `PiF1s` can temporarily contribute to a `PiF2`.
+Reading example for `PiF1s ── CONTRIBUTES_TO ──► PiF2`: **Targets per source `1..n`** means that a complete `PiF1s` must contribute to at least one or more `PiF2`; its `DRAFT` may temporarily have no target. **Sources per target `0..n`** means that none, one, or more `PiF1s` can contribute to a `PiF2`.
 
 | Source  | relationship           | Target                                           | Goals depending on<br>Source | Sources per<br>Target |
 | ------- | ---------------------- | ------------------------------------------------ | ---------------------------: | --------------------: |
@@ -788,9 +833,9 @@ A `SyncEvent` is not a `PiH`. However, it can generate several `PiH` if a synchr
 11. Non-superseded corrections of one `PiH` have canonical paths that do not overlap with each other or internally under section 2.2.9. Equality and ancestor/descendant relationships count as overlap.
 12. No overlap permits no `SUPERSEDES`. Exactly one overlapping active correction must be fully superseded. More than one overlapping active correction causes `CONFLICT` because `SUPERSEDES = 0..1`.
 13. A superseding correction belongs to the same `PiH` and contains every canonical field path of its active predecessor unchanged, with its effective value restated. Additional paths do not overlap internally or with any other active correction. `SUPERSEDES` remains temporally forward and acyclic.
-14. At acceptance, `previousValue` exactly matches the preceding effective `HistoryView`. `ADDITION` requires a missing path with a typed old `NULL`; existing `NULL` is not missing. `CORRECTION` and `CLARIFICATION` require existing paths. `baseHistoryViewHash` binds this base view under profile 2.0.
+14. At acceptance, `previousValue` exactly matches the preceding effective `HistoryView`. Profile `2.0` retains the previous representation of `ADDITION` with a typed old `NULL` and has no removal. Profile `2.1` uses `ABSENT` only in correction-value maps: `ADDITION` moves from `ABSENT` to a regular value, and `REMOVAL` from a regular value to `ABSENT`. `CORRECTION` and `CLARIFICATION` require existing regular values. `NULL` remains present. `baseHistoryViewHash` binds this base view under hash profile 2.0.
 15. `SYNC` serializes all JCI write paths under section 12.8 and recomputes the current `HistoryView` under the gate. A mismatching `expectedHistoryViewHash`, profile error, or path overlap outside the supersession rule causes `CONFLICT` without a correction.
-16. The valid `HistoryView` applies only active `correctedValue` as absolute overlays on the immutable origin. Superseded operations are not replayed; their earlier `previousValue` is not checked against the origin during reconstruction. This preserves an addition that was subsequently corrected.
+16. The valid `HistoryView` applies only active regular `correctedValue` as absolute overlays on the immutable origin and, for `ABSENT`, removes exactly the addressed entry. Superseded operations are not replayed; their earlier `previousValue` is not checked against the origin during reconstruction. This preserves a subsequently corrected addition and makes a confirmed removal explicit and traceable.
 17. The effective historical view results deterministically from the immutable `PiH` and all active, non-superseded corrections. The current model state remains separate.
 18. The `ChangeEvent` connected via `CAUSED_BY` must be the same `ChangeEvent` that triggered the synchronization run connected via `CREATES_CORRECTION`.
 
@@ -840,6 +885,7 @@ Permissible correction types are:
 ADDITION      = add missing historical information
 CORRECTION    = correct incorrect historical information
 CLARIFICATION = explain ambiguous historical information
+REMOVAL       = remove falsely documented historical information
 ```
 
 The properties of a `HistoricalCorrection` describe the discrepancy and its correction, not a replacement `PiH`. `expectedHistoryViewHash` must match the effective view at the protected commit. Path overlap, full supersession, and absolute replay follow section 2.2.9, so a second correction cannot silently commit against a stale base.
@@ -1047,15 +1093,7 @@ Each `RaN` is explicitly given an integer priority. A larger number means higher
 
 `decisionKey` stably denotes the settled decision, for example `Task.status.COMPLETED` or `ERoFObject.action.MODIFY`. Only rules with the same `decisionKey`, overlapping scope and at least one common target can conflict with each other for this decision.
 
-The machine-readable `condition` has exactly one `combiner = ALL | ANY` and at least one clause. Each clause contains:
-
-| field      | Meaning                                                            |
-| ---------- | ------------------------------------------------------------------ |
-| `path`     | unique property or relationship path from the governed target      |
-| `operator` | mandatory comparison operator                                      |
-| `value`    | comparative value; only not required for `EXISTS` and `NOT_EXISTS` |
-
-Paths are allowed to traverse properties directly or explicitly named relationships from the canonical relationship catalog. Unlimited or uncataloged traversals are not permitted. If a path cannot be evaluated clearly, the rule is `UNEVALUABLE`.
+The machine-readable `condition` follows either general condition profile `2.0` from section 2.2.7 or, for an approval policy, only bounded approval profile `1.0` from section 12.9. Direction, multiple relationships, quantifier, missing values, endpoint type, and operator are therefore fully specified. An unknown profile, a different shape, or a path that cannot be evaluated unambiguously yields `UNEVALUABLE` and never implicit permission.
 
 Approvals use the narrower executable condition contract in section 12.9. An optional `RaN.approvalPolicy: ApprovalPolicy` explicitly identifies permitted roles and approval levels. Neither `ACCOUNTABLE_MEMBER` nor `CONTRIBUTES_TO`, role names, or a higher future level grants authority by itself.
 
@@ -1136,7 +1174,7 @@ A `RaNConflict` documents the rules involved, affected entities and the recogniz
 6. A RaN need not protect every CiV of a protected PiF2.
 7. `PROTECTS` targets only `CiV` or `PiF2`. `GOVERNS` targets only the defined implementation elements.
 8. A `RaN` may govern multiple implementation elements from different areas. A target may simultaneously be governed by zero, one, or more rules.
-9. When a `RaN` changes, `SYNC` checks all directly protected and governed targets and their relevant dependencies.
+9. When a `RaN` changes, `SYNC` checks all directly protected and governed targets and their relevant dependencies. A terminal or immutable `GOVERNS` target remains revision-neutral; the change belongs to the state of the `RaN`.
 10. `PROTECTS` is created or changed only through an explicit domain decision traceable to a valid `RoleAssignment`. `SYNC` does not infer it from names, scope, or existing paths.
 11. Protection targets and area of application satisfy the defined organizational scope compatibility; unconnected external organizations are prohibited.
 12. Before comparison, only active, temporally valid `RaN` applicable to the affected entity or decision are considered.
@@ -2008,7 +2046,7 @@ For `changeType = HISTORICAL_CORRECTION`, `target` denotes exactly the immutable
 
 ```text
 historicalCorrection = {
-  correctionType = ADDITION | CORRECTION | CLARIFICATION,
+  correctionType = ADDITION | CORRECTION | CLARIFICATION | REMOVAL,
   reason,
   valueSchemaVersion,
   expectedHistoryViewHash,
@@ -2018,7 +2056,7 @@ historicalCorrection = {
 }
 ```
 
-`correctedFields`, `previousValue`, and `correctedValue` follow the canonical path, overlap, value, and hash contract in section 2.2.9 with exactly matching key sets. `expectedHistoryViewHash` binds the view rechecked under the gate. Historical correction contains no generic operations because the `PiH` is never rewritten.
+`correctedFields`, `previousValue`, and `correctedValue` follow the canonical path, overlap, value, and hash contract in section 2.2.9 with exactly matching key sets. Profile `2.0` remains readable; profile `2.1` additionally permits the exact correction marker `ABSENT` for `ADDITION` and `REMOVAL`. `expectedHistoryViewHash` binds the view rechecked under the gate. Historical correction contains no generic operations because the `PiH` is never rewritten.
 
 When stored, `requestId` becomes `ChangeEvent.id`, while `idempotencyKey`, target ID, target type and `requestedRevision` are copied unchanged to the `ChangeEvent`. This keeps even a failed or not-yet-completed request uniquely addressable.
 
@@ -2133,7 +2171,7 @@ The approval route is derived from the complete current graph, not selected by t
 A role that merely lacks authority is represented by absence of a matching `PERMIT`. `PROHIBIT` and an unsatisfied `REQUIRE` are actual restrictions, not a technical “please forward” signal.
 
 1. From the Task, the inverse reading of its direct `DECOMPOSES_INTO` assignment identifies exactly one `PiF1o`. Subtasks also use their direct PiF1o assignment.
-2. The accountable member of this `PiF1o` is checked first. If it has a suitable active human role activation with explicit authority, this level is responsible.
+2. The accountable member of this `PiF1o` is checked first. If it has a suitable active human role activation with explicit authority, this level is responsible. A technical accountable member remains a valid intermediate anchor but cannot give human approval; this missing authority continues through the normal route to the next level. An unknown member type remains a model error.
 3. Only lack of authority permits checking all current direct `CONTRIBUTES_TO` targets at the next level: `PiF1t`, then `PiF1s`, finally `PiF2`. Each branch stops at its first authorized accountability. Missing or ambiguous model assignments are errors, not permission to skip a level.
 4. Every required anchor derived this way must be approved. A shared ancestor or approver may cover several branches; duplicate edges and contradictory receipts are invalid. `contributionMode = ANY` concerns achievement and does not reduce this approval set.
 5. Escalation ends at `PiF2`. Without authority there is no approval. An explicit human rejection, effective `DENY`, or `UNEVALUABLE` must not be bypassed through a higher level or an alternative role.
@@ -2146,7 +2184,7 @@ A `VALUE_SCOPE` policy grants authority only for the holders of its protected Ci
 
 Approval profile 1.0 uses only paths with exactly two segments: `target.<property>`, `actor.<property>`, or `request.<property>`. `target` identifies the governed decision subject: the candidate Task for `Task.action.RELEASE`, or the approving role activation for `Model.action.CONFIRM`. `request` identifies a direct scalar property of the base request. `actor` supplies graph-resolved fields `id`, `entityType`, `memberId`, `memberType`, `roleId`, `roleName`, `teamId`, `organizationId`, and `status`. These are technical validation views, not new graph relationships. Every actor field is grounded through canonical RoF edges.
 
-`EXISTS` and `NOT_EXISTS` distinguish a missing field from a present `null`. `EQUALS`, `NOT_EQUALS`, `IN`, and `NOT_IN` compare without type coercion; Boolean and Integer are distinct. Ordering comparisons permit only integers here, and `CONTAINS` only strings. `MATCHES`, decimal/date ordering, additional path segments, graph traversals, or unresolved types are `UNEVALUABLE` in this profile. Except for existence checks, a missing value is not simply `false`. Every clause is checked: even `ANY` must not hide an invalid clause. General RaN paths outside this bounded profile remain a separate specification task.
+`EXISTS` and `NOT_EXISTS` distinguish a missing field from a present `null`. `EQUALS`, `NOT_EQUALS`, `IN`, and `NOT_IN` compare without type coercion; Boolean and Integer are distinct. Ordering comparisons permit only integers here, and `CONTAINS` only strings. `MATCHES`, decimal/date ordering, additional path segments, graph traversals, or unresolved types are `UNEVALUABLE` in this profile. Except for existence checks, a missing value is not simply `false`. Every clause is checked: even `ANY` must not hide an invalid clause. General RaN use the executable contract in section 6; its graph paths are deliberately not reinterpreted as approval paths.
 
 #### 12.9.4 Receipts, hash binding, and SYNC
 
@@ -2176,7 +2214,7 @@ Jana is accountable for the operational customer-portal goal; Ernst requests rel
 
 If Jana lacks explicit authority, routing asks the accountability of the associated `PiF1t`. Two current tactical branches require both sets of approvals. If Jana rejects as an authorized decision maker, the proposal remains rejected; the tactical level must not treat that refusal as mere lack of authority.
 
-All ten core elements are affected: `CiV` retains human value decisions; `PiF2`, `PiF1s`, `PiF1t`, and `PiF1o` retain their state and contribution logic with traceable accountability; `RaN` defines authority and protection; `RoF` supplies verified actors; `ERoF` retains separate usage rights; `SYNC` validates and applies the decision; `PiH` arises only when an existing state is actually replaced. The WHY chain is preserved. General unresolved questions about RaN path grammar, historical removal corrections, terminal `GOVERNS` targets, DRAFT cardinalities, and complete technical model validation are not declared solved by this extension.
+All ten core elements are affected: `CiV` retains human value decisions; `PiF2`, `PiF1s`, `PiF1t`, and `PiF1o` retain their state and contribution logic with traceable accountability; `RaN` defines authority and protection; `RoF` supplies verified actors; `ERoF` retains separate usage rights; `SYNC` validates and applies the decision; `PiH` arises only when an existing state is actually replaced. The WHY chain is preserved. The general RaN path grammar, historical removal corrections, terminal `GOVERNS` targets, DRAFT cardinalities, and complete required-field projection of new snapshots are now explicitly defined. The executable reference state still does not replace production identity, messaging, or database integration.
 
 ## 13. Conclusion
 

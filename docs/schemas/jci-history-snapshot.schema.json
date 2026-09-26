@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/eeimicke/junaco-jci-loop/main/docs/schemas/jci-history-snapshot.schema.json",
-  "title": "JCI history snapshot payload 2.0",
-  "description": "Payload only; the owning PiH selects snapshotSchemaVersion 2.0. Endpoint ownership and unique stable relationship keys require semantic validation.",
+  "title": "JCI history snapshot payload 2.1",
+  "description": "Payload only; the owning PiH selects snapshotSchemaVersion 2.1. This profile requires the complete mandatory property set. Endpoint ownership and unique stable relationship keys require semantic validation. Stored profile 2.0 payloads retain their original resolver and hash.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -49,6 +49,10 @@
         },
         "properties": {
           "type": "object",
+          "required": [
+            "name",
+            "status"
+          ],
           "additionalProperties": {
             "$ref": "#/$defs/typedValue"
           }
@@ -66,6 +70,13 @@
           "then": {
             "properties": {
               "properties": {
+                "required": [
+                  "name",
+                  "status",
+                  "notCiV",
+                  "selfCiV",
+                  "toServeCiV"
+                ],
                 "propertyNames": {
                   "enum": [
                     "description",
@@ -591,6 +602,130 @@
               }
             }
           }
+        },
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "entityType": { "const": "CiV" },
+                "properties": { "required": ["name", "status", "notCiV", "selfCiV", "toServeCiV"] }
+              }
+            },
+            {
+              "properties": {
+                "entityType": { "const": "ERoFObject" },
+                "properties": { "required": ["name", "status", "objectType", "validFrom"] }
+              }
+            },
+            {
+              "properties": {
+                "entityType": { "const": "Evidence" },
+                "properties": { "required": ["name", "status", "evidenceType", "reference", "capturedAt"] }
+              }
+            },
+            {
+              "properties": {
+                "entityType": { "const": "PiF1o" },
+                "properties": { "required": ["name", "status", "targetState", "horizonStart"] }
+              }
+            },
+            {
+              "properties": {
+                "entityType": { "const": "PiF1s" },
+                "properties": { "required": ["name", "status", "targetState", "horizonStart", "contributionMode"] }
+              }
+            },
+            {
+              "properties": {
+                "entityType": { "const": "PiF1t" },
+                "properties": { "required": ["name", "status", "targetState", "horizonStart", "contributionMode"] }
+              }
+            },
+            {
+              "properties": {
+                "entityType": { "const": "PiF2" },
+                "properties": { "required": ["name", "status", "targetState", "horizonStart", "contributionMode"] }
+              }
+            },
+            {
+              "properties": {
+                "entityType": { "const": "RaN" },
+                "properties": { "required": ["name", "status", "ruleType", "effect", "statement", "decisionKey", "scopeType", "governedTypes", "condition", "priority", "validFrom"] }
+              }
+            },
+            {
+              "properties": {
+                "entityType": { "const": "RaNConflict" },
+                "properties": { "required": ["name", "status", "conflictKey", "conflictType", "detectedAt", "reason"] }
+              }
+            },
+            {
+              "properties": {
+                "entityType": { "const": "Result" },
+                "properties": { "required": ["name", "status", "resultType", "value", "producedAt"] }
+              }
+            },
+            {
+              "properties": {
+                "entityType": { "const": "RoFOrg" },
+                "properties": { "required": ["name", "status", "legalName", "orgType"] }
+              }
+            },
+            {
+              "properties": {
+                "entityType": { "const": "RoFOrgRelationship" },
+                "properties": { "required": ["name", "status", "type", "validFrom"] }
+              }
+            },
+            {
+              "properties": {
+                "entityType": { "const": "RoFRole" },
+                "properties": { "required": ["name", "status", "roleName", "responsibility"] }
+              }
+            },
+            {
+              "properties": {
+                "entityType": { "const": "RoFTeam" },
+                "properties": { "required": ["name", "status", "teamType", "validFrom"] }
+              }
+            },
+            {
+              "properties": {
+                "entityType": { "const": "RoFTeamMember" },
+                "properties": { "required": ["name", "status", "memberType", "displayName"] }
+              }
+            },
+            {
+              "properties": {
+                "entityType": { "const": "RoleAssignment" },
+                "properties": { "required": ["name", "status", "validFrom"] }
+              }
+            },
+            {
+              "properties": {
+                "entityType": { "const": "SYNC" },
+                "properties": { "required": ["name", "status", "version", "definition", "validFrom"] }
+              }
+            },
+            {
+              "properties": {
+                "entityType": { "const": "SuccessCriterion" },
+                "properties": { "required": ["name", "status", "criterion", "measurementType", "requirementLevel", "evaluationMode", "operator", "targetValue"] }
+              }
+            },
+            {
+              "properties": {
+                "entityType": { "const": "Task" },
+                "properties": { "required": ["name", "status", "taskKind"] }
+              }
+            },
+            {
+              "properties": {
+                "entityType": { "const": "Verification" },
+                "properties": { "required": ["name", "status", "method", "outcome", "verifiedAt", "evaluatedResultRevision", "checkedCriterionRevision"] }
+              }
+            }
+          ]
         }
       ]
     },
@@ -710,7 +845,22 @@
               "$ref": "#/$defs/typedValue"
             }
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "relationshipType": { "enum": ["HAS_MEMBER", "HAS_ROLE"] }
+              },
+              "required": ["relationshipType"]
+            },
+            "then": {
+              "properties": {
+                "properties": { "required": ["validFrom"] }
+              }
+            }
+          }
+        ]
       }
     }
   },

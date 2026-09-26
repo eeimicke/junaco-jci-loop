@@ -142,7 +142,7 @@ Zulässige Änderungen von Beziehungseigenschaften bleiben möglich. Die Sicht �
 
 Die Einrichtung technischer Laufzeitstrukturen ist weder ein fachlicher Bootstrap noch eine automatische Datenmigration. Bei einem vorhandenen Bestand müssen vor der Aktivierung Profile, gültige Zustände, Revisionseigentum, Task-/Kriterienumfänge, gemischte Abschlusszyklen und historische Korrekturketten geprüft werden. Unklare Fälle benötigen nachvollziehbare fachliche Entscheidungen.
 
-Alte PiH, Korrekturen und gespeicherte Hashes bleiben unverändert. Für jedes tatsächlich vorhandene Altprofil ist ein ausdrücklich geprüfter Resolver erforderlich; erhaltene Legacy-Schemas allein implementieren diesen Resolver nicht. Der Koordinator erfindet weder historische Freigaben noch neue Identitäten und schreibt alte Snapshots nicht automatisch auf Profil 2.0 um. Vor-/Nachvalidierung, Sicherung und eine konkrete Migration bleiben ein eigener Einführungsschritt, sofern Altdaten vorhanden sind.
+Alte PiH, Korrekturen und gespeicherte Hashes bleiben unverändert. Für jedes tatsächlich vorhandene Altprofil ist ein ausdrücklich geprüfter Resolver erforderlich; erhaltene Legacy-Schemas allein implementieren diesen Resolver nicht. Der Koordinator erfindet weder historische Freigaben noch neue Identitäten und schreibt alte Snapshots nicht automatisch auf Profil 2.1 um. Vor-/Nachvalidierung, Sicherung und eine konkrete Migration bleiben ein eigener Einführungsschritt, sofern Altdaten vorhanden sind.
 
 ## 6. Auswirkungen auf den Loop und verbleibende Integration
 

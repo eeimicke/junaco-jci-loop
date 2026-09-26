@@ -1,7 +1,7 @@
 # JUNACO Continuous Integration for Organisations
 ## 1. JUNACO Continuous Integration for Organisations
 
-**Regelpaket 2.0:** Ontologie, Graphregeln, SYNC, neue Snapshots, Korrekturwerte und das Austauschformat verwenden Version `2.0`. JSON-LD bleibt `1.1`; bestehende Namespace-IRIs mit `/1.0#` bleiben stabile Vokabularidentitäten und bezeichnen nicht die Regelversion. Frühere Datensätze werden ausschließlich nach ihren ausdrücklich angegebenen Versionsprofilen gelesen.
+**Regelpaket 2.0:** Ontologie, Graphregeln, SYNC und das Austauschformat verwenden Version `2.0`; neue Snapshots verwenden das additive Vollständigkeitsprofil `2.1`, historische Korrekturen unterstützen die Korrekturwertprofile `2.0` und `2.1`. JSON-LD bleibt `1.1`; bestehende Namespace-IRIs mit `/1.0#` bleiben stabile Vokabularidentitäten und bezeichnen nicht die Regelversion. Frühere Datensätze werden ausschließlich nach ihren ausdrücklich angegebenen Versionsprofilen gelesen.
 
 **Verbindliche Freigabeergänzung:** Neue freigabepflichtige Vorgänge verwenden zusätzlich `approvalProfileVersion = "1.0"` nach Abschnitt 12.9. Das Basisformat und das kanonische Hashprofil bleiben `2.0`; ein älterer Handler ohne ausdrücklich unterstütztes Freigabeprofil darf solche Vorgänge nicht ausführen. Bestehende Ereignisse und Hashes werden nicht nachträglich umgedeutet.
 
@@ -266,6 +266,10 @@ Für `CiV`, `RaN`, `SYNC`, `RoFOrg`, `RoFOrgRelationship`, `RoFTeam`, `RoFTeamMe
 
 Die Bootstrap-Zeile ist eine einmalige technische Vertrauenswurzel und kein `ChangeEvent`. Außer dieser ausdrücklich begrenzten Ausnahme sind direkte Abkürzungen nur dort erlaubt, wo die Tabelle eine Erzeugung in einen unveränderlichen Zielstatus vorsieht. Insbesondere dürfen aktive Fachentitäten nicht durch eine Änderung wieder zu Entwürfen werden. Eine inhaltliche Fortsetzung eines terminalen Zustands wird als neue Entität angelegt und über die dafür vorgesehene Nachfolgebeziehung verbunden.
 
+`DRAFT` lockert ausschließlich die Mindestkardinalitäten fachlicher Beziehungen am jeweiligen Entwurfsendpunkt auf `0`; alle Höchstgrenzen, Identitäten, gemeinsamen Pflichtfelder, typspezifischen Pflichtfelder, Beziehungstypen und Zyklusverbote gelten bereits beim Speichern. Dadurch dürfen beispielsweise ein `PiF1o` zunächst ohne Task und ein Task zunächst ohne direkte `PiF1o`-Zuordnung oder `RESPONSIBLE_TEAM` entstehen. Die Entitäten und Kanten werden in getrennten, jeweils geschützten Ein-Ziel-Aufträgen aufgebaut. Jede tatsächliche Änderung eines bereits vorhandenen Entwurfs wird regulär revisioniert und historisiert.
+
+Vor jedem Übergang aus `DRAFT` prüft `SYNC` den vollständigen Kandidatengraphen atomar gegen die unveränderten Mindestkardinalitäten der Beziehungstabellen. Für einen Task bedeutet das insbesondere genau eine direkte Zuordnung durch `PiF1o ── DECOMPOSES_INTO ──► Task` und genau ein `RESPONSIBLE_TEAM`; für einen `PiF1o` mindestens einen Task, mindestens ein Erfolgskriterium, genau ein `ACCOUNTABLE_MEMBER` und den vollständigen Zukunftspfad. `DRAFT → BLOCKED` verwendet dieselben Aktivierungsminima und unterscheidet sich nur durch die nachgewiesene Blockade. Unveränderliche Entitäten, unmittelbare terminale Erzeugungen und der Bootstrap besitzen keine DRAFT-Ausnahme und müssen bei ihrer atomaren Erzeugung vollständig sein.
+
 Prozessartefakte erzeugen keine rekursive Ereigniskette: `ChangeEvent`, `SyncEvent`, `PiH`, `HistoricalCorrection` und ein durch SYNC erkannter offener `RaNConflict` werden innerhalb des bereits laufenden Veränderungsvorgangs erzeugt und lösen für ihre eigene Erzeugung kein weiteres `ChangeEvent` aus. Eine spätere zulässige Änderung eines `RaNConflict` von `OPEN` zu `RESOLVED` ist dagegen ein neuer fachlicher Veränderungsvorgang.
 
 Die Statusübergänge ersetzen keine Freigabeprüfung: Insbesondere benötigt die erste Task-Freigabe aus `DRAFT` zusätzlich die vollständige menschliche Genehmigung nach Abschnitt 12.9. Die abhängige Wiederaufnahme eines bereits freigegebenen `BLOCKED`-Tasks ist keine neue Erstfreigabe; alle aktuellen Modell- und RaN-Bedingungen gelten weiterhin.
@@ -312,10 +316,14 @@ JCIEntity.entityType       = PiH | CiV | RaN | SYNC | PiF2 | PiF1s | PiF1t | PiF
 RaN.ruleType              = RULE | NORM | POLICY | CONSTRAINT | LAW
 RaN.effect                = REQUIRE | PROHIBIT | PERMIT
 RaN.scopeType             = GLOBAL | ORGANIZATION | TEAM | ENTITY
+RaN.condition.profileVersion = 2.0 (allgemein) | durch approvalPolicy 1.0 (Freigabe)
 RaN.condition.combiner    = ALL | ANY
 RaN.condition.clause.operator = EXISTS | NOT_EXISTS | EQUALS | NOT_EQUALS |
                                 LESS_THAN | LESS_OR_EQUAL | GREATER_THAN |
                                 GREATER_OR_EQUAL | IN | NOT_IN | CONTAINS | MATCHES
+RaN.condition.clause.quantifier = EXACTLY_ONE | ANY | ALL
+RaN.condition.clause.missingResult = TRUE | FALSE | UNEVALUABLE
+RaN.condition.clause.path.step.direction = OUTGOING | INCOMING
 RaNConflict.conflictType  = PRIORITY_TIE | UNEVALUABLE
 RoFOrgRelationship.type  = SUBSIDIARY | PARTNERSHIP
 RoFOrg.orgType           = COMPANY | PUBLIC_ORGANIZATION | NONPROFIT |
@@ -338,7 +346,7 @@ Task.taskKind           = ATOMIC | COMPOSITE
 ChangeEvent.changeType  = CREATED | CHANGED | ACHIEVED | COMPLETED |
                           REPLACED | REVOKED | RESOLVED | HISTORICAL_CORRECTION
 SyncEvent.outcome        = SUCCESS | CONFLICT | FAILED
-HistoricalCorrection.correctionType = ADDITION | CORRECTION | CLARIFICATION
+HistoricalCorrection.correctionType = ADDITION | CORRECTION | CLARIFICATION | REMOVAL
 ```
 
 `allocation` liegt, sofern angegeben, zwischen `0` und `1`. `bootstrapKey` ist ausschließlich für genau ein Root-`RoleAssignment` zulässig und besitzt dort den unveränderlichen Wert `ROOT`. Die gebundenen Revisionen einer `Verification` sind positive Ganzzahlen. `ChangeEvent.id` entspricht der `requestId` des angenommenen Änderungsauftrags; `idempotencyKey` ist je fachlichem Veränderungsauftrag eindeutig. `SyncEvent.runId` ist je technischem Versuch eindeutig. Zählwerte eines `SyncEvent` sind nicht negativ, `completedAt` liegt nicht vor `startedAt`, und `validUntil` liegt nicht vor `validFrom`. Für neue Erfolgskriterien gelten standardmäßig `requirementLevel = REQUIRED` und `evaluationMode = ALL`. Für übergeordnete Zukunftselemente gilt standardmäßig `contributionMode = ALL`. Für `RaN.priority` gilt: Eine größere Ganzzahl bedeutet höhere Priorität. Der `ruleType` erzeugt keinen automatischen Vorrang.
@@ -416,15 +424,49 @@ otherEntityType
 properties = Map<String, TypedValue>
 ```
 
-Für jede der Entität nach Abschnitt 2.2.8 zugeordnete Beziehung am Ende des fachlichen Zustands wird genau ein `RelationshipSnapshot` gespeichert. Profil `2.0` sortiert die Liste nach `relationshipType`, `direction` und `otherEntityId`; doppelte stabile Schlüssel sind ungültig. `contentHash` ist der hexadezimale SHA-256-Wert des kanonischen Objekts `{stateData, relationshipData}` nach Abschnitt 2.2.9. Fremde Dokumentationsbezüge sind keine eigene Zustandsänderung. Ältere Snapshots behalten ihre ursprünglichen Inhalte, ihr Profil und ihren Hash.
+Für jede der Entität nach Abschnitt 2.2.8 zugeordnete Beziehung am Ende des fachlichen Zustands wird genau ein `RelationshipSnapshot` gespeichert. Profil `2.1` übernimmt aus `2.0` die Sortierung der Liste nach `relationshipType`, `direction` und `otherEntityId`; doppelte stabile Schlüssel sind ungültig. `contentHash` ist der hexadezimale SHA-256-Wert des kanonischen Objekts `{stateData, relationshipData}` nach Abschnitt 2.2.9. Fremde Dokumentationsbezüge sind keine eigene Zustandsänderung. Ältere Snapshots behalten ihre ursprünglichen Inhalte, ihr Profil und ihren Hash.
 
-Ein `TypedValueMap` ordnet jedem Pfad in `correctedFields` genau einen typisierten alten und korrigierten Wert zu. Kanonisierung, zulässige Pfadtiefe, stabile Beziehungsschlüssel, Überlappung und Fehlwertsemantik folgen Abschnitt 2.2.9. Eine Korrektur verändert nur ihre angegebenen Pfade.
+Eine `TypedValueMap` ordnet jedem Pfad in `correctedFields` genau einen alten beziehungsweise korrigierten Wert zu. Im Profil `2.0` enthält sie ausschließlich `TypedValue`; im Profil `2.1` zusätzlich den exakten Korrekturmarker `{ "valueType": "ABSENT" }` nach Abschnitt 2.2.9. Der Marker ist selbst kein `TypedValue`, sondern die einzige versionierte Ausnahme innerhalb dieser Korrektur-Map. Kanonisierung, zulässige Pfadtiefe, stabile Beziehungsschlüssel, Überlappung und Fehlwertsemantik folgen Abschnitt 2.2.9. Eine Korrektur verändert nur ihre angegebenen Pfade.
+
+Ein allgemeiner `RuleExpression` des Bedingungsprofils `2.0` ist geschlossen strukturiert:
+
+```text
+RuleExpression = {
+  profileVersion: "2.0",
+  combiner: ALL | ANY,
+  clauses: nicht leere Liste von RuleClause
+}
+RuleClause = {
+  path: {
+    origin: TARGET,
+    steps: Liste mit höchstens 8 RuleStep,
+    property: katalogisierte Eigenschaft des Endtyps
+  },
+  operator: EXISTS | NOT_EXISTS | EQUALS | NOT_EQUALS |
+            LESS_THAN | LESS_OR_EQUAL | GREATER_THAN | GREATER_OR_EQUAL |
+            IN | NOT_IN | CONTAINS | MATCHES,
+  quantifier: EXACTLY_ONE | ANY | ALL,
+  missingResult: TRUE | FALSE | UNEVALUABLE,
+  value: TypedValue außer bei EXISTS und NOT_EXISTS
+}
+RuleStep = {
+  relationshipType: katalogisierte Beziehung,
+  direction: OUTGOING | INCOMING,
+  entityType: erwarteter konkreter Zieltyp dieses Schritts
+}
+```
+
+Die Auswertung beginnt ausschließlich am konkret über `GOVERNS` geregelten `TARGET`. Jeder Schritt benennt Richtung, Beziehung und erwarteten Endpunkttyp ausdrücklich; freie Zeichenkettenpfade, implizite Inversen und unbeschränkte Traversierung sind unzulässig. Jede passende Kante erzeugt einen Zweig. Identische parallele Kanten, fehlende Entitäten, falsche Endpunkttypen und nicht katalogisierte Beziehungskontexte ergeben `UNEVALUABLE` und dürfen nicht durch `DISTINCT` verborgen werden.
+
+Ein fehlender Beziehungsschritt oder eine fehlende Endeigenschaft erzeugt den Marker MISSING, der ausschließlich nach `missingResult` ausgewertet wird. Für `EXISTS` ist kanonisch `missingResult = FALSE`, für `NOT_EXISTS` `TRUE`; bei allen anderen Operatoren bestimmt das Feld ausdrücklich `TRUE`, `FALSE` oder `UNEVALUABLE`. `EXACTLY_ONE` verlangt genau ein Pfadergebnis, `ANY` mindestens ein wahres und `ALL` ausschließlich wahre Ergebnisse. Es gibt keine implizite wahrheitswertige Auswertung einer leeren Menge. Alle Klauseln werden ausgewertet; `UNEVALUABLE` darf auch durch `ANY` nicht verdeckt werden. Vergleiche sind typstreng ohne Konvertierung; `MATCHES` verwendet einen vollständigen regulären Ausdruckstreffer.
+
+Das Freigabeprofil `1.0` behält seinen bewusst engeren direkten Zwei-Segment-Vertrag aus Abschnitt 12.9 und wird durch `approvalPolicy.profileVersion = "1.0"` gewählt. Es ist kein Alias für das allgemeine Profil `2.0`. Ein aktives RaN ohne `approvalPolicy` verwendet das allgemeine Profil; ein RaN mit `approvalPolicy` verwendet für seine Freigabeentscheidung ausschließlich das Freigabeprofil.
 
 Die wirksame `HistoryView` wird aus dem unveränderten `PiH` und absoluten `correctedValue`-Überlagerungen seiner nicht abgelösten Korrekturen rekonstruiert. Snapshot- und Sicht-Hashes verwenden dasselbe kanonische Inhaltsobjekt nach Abschnitt 2.2.9; `baseHistoryViewHash` bindet die wirksame Sicht unmittelbar vor der angenommenen Korrektur.
 
 **Kurzes Beispiel:** Wird Annas Teambeziehung historisiert, enthält `relationshipData` eine ausgehende oder eingehende Kante mit Typ `HAS_MEMBER`, der Team-ID sowie `validFrom` und `validUntil`. Eine spätere Korrektur benennt genau diesen Beziehungspfad und ersetzt nicht den gesamten Snapshot.
 
-#### 2.2.8 Revisionszuordnung und Snapshotprofil 2.0
+#### 2.2.8 Revisionszuordnung und Snapshotprofil 2.1
 
 `revision` bezeichnet den fachlichen Zustand der Entität. Jede Eigenschaftsänderung und jede Änderung ihres zugeordneten Beziehungszustands erhöht die Revision eines vorhandenen veränderlichen Knotens innerhalb eines erfolgreichen Auftrags genau einmal und erzeugt genau ein `PiH`. Eine bloße Bezugnahme durch ein neues Prüf- oder Ereignisobjekt verändert den referenzierten Zustand nicht. Die Zuordnung gilt für Erzeugung, Ergänzung, Entfernung und Änderung einer Kante; sie erlaubt niemals das nachträgliche Umschreiben eigener Inhalte unveränderlicher Objekte.
 
@@ -441,19 +483,20 @@ Die wirksame `HistoryView` wird aus dem unveränderten `PiH` und absoluten `corr
 | `HELD_BY`, `INFORMED_BY`, `INSCRIBES_PURPOSE_IN`, `CONTRIBUTES_TO`                                                                               | beide vorhandenen veränderlichen Endpunkte                                                                                 |
 | `HAS_SUCCESS_CRITERIA`, `ACCOUNTABLE_MEMBER`, `DECOMPOSES_INTO`, `DEPENDS_ON`, `RESPONSIBLE_TEAM`, `EXECUTED_BY`, `USES`, `OWNED_BY`, `PRODUCES` | beide vorhandenen veränderlichen Endpunkte                                                                                 |
 | `HAS_TEAM`, `HAS_MEMBER`, `HAS_ROLE`, `HAS_ASSIGNMENT`, `IN_TEAM`, `ACTIVATES_ROLE`, `SOURCE_ORG`, `TARGET_ORG`, `REPRESENTED_BY`                | beide vorhandenen veränderlichen Endpunkte                                                                                 |
-| `PROTECTS`, `GOVERNS`, `APPLIES_IN`, `REPLACED_BY`                                                                                               | beide vorhandenen veränderlichen Endpunkte                                                                                 |
+| `PROTECTS`, `APPLIES_IN`, `REPLACED_BY`                                                                                                          | beide vorhandenen veränderlichen Endpunkte                                                                                 |
+| `GOVERNS`                                                                                                                                        | `RaN`-Quelle und veränderliches Ziel; bei terminalem oder unveränderlichem Ziel nur die `RaN`-Quelle                       |
 
-Die konkreten Quell- und Zieltypen müssen weiterhin zum vollständigen Beziehungskatalog passen. Unbekannte Beziehungskontexte werden abgewiesen. Neue Entitäten beginnen mit `revision = 1` ohne eigene Vorgängerhistorie. Mehrere Änderungen derselben bestehenden Entität im selben Auftrag werden vor der Historisierung zu einem fachlichen Delta zusammengefasst. Keine tatsächliche Zustandsänderung bedeutet keine neue Revision und kein `PiH`.
+Die konkreten Quell- und Zieltypen müssen weiterhin zum vollständigen Beziehungskatalog passen. Unbekannte Beziehungskontexte werden abgewiesen. Eine neue oder entfernte `GOVERNS`-Kante darf einen terminalen Task, ein terminales Result oder eine bereits abgeschlossene Verification weder wieder öffnen noch revisionieren; die Kante bleibt vollständig über den revisionierten und historisierten `RaN`-Quellzustand nachvollziehbar. Neue Entitäten beginnen mit `revision = 1` ohne eigene Vorgängerhistorie. Mehrere Änderungen derselben bestehenden Entität im selben Auftrag werden vor der Historisierung zu einem fachlichen Delta zusammengefasst. Keine tatsächliche Zustandsänderung bedeutet keine neue Revision und kein `PiH`.
 
-Für neue Historisierung gilt `snapshotSchemaVersion = "2.0"`: `relationshipData` enthält nur die nach dieser Tabelle der historisierten Entität zugeordneten Beziehungen. Fremde Prüf- und Ereignisbezüge bleiben an ihren eigenständigen unveränderlichen Dokumentationsobjekten erreichbar. Ein später hinzugekommener Nachweis wird dadurch nicht rückwirkend Bestandteil eines früheren fachlichen Zustands. Die Unveränderlichkeit schützt Eigenschaften und den eigenen zugeordneten Beziehungszustand; zulässige fremde Bezugnahmen sind keine Umschreibung dieses Zustands. Bestehende `PiH`, ihre älteren Profile und ihre Hashes werden nicht verändert.
+Für neue Historisierung gilt `snapshotSchemaVersion = "2.1"`: `stateData.properties` enthält sämtliche zum Aufnahmezeitpunkt fachlich erforderlichen Eigenschaften, und `relationshipData` enthält nur die nach dieser Tabelle der historisierten Entität zugeordneten Beziehungen einschließlich ihrer erforderlichen Eigenschaften. Fremde Prüf- und Ereignisbezüge bleiben an ihren eigenständigen unveränderlichen Dokumentationsobjekten erreichbar. Ein später hinzugekommener Nachweis wird dadurch nicht rückwirkend Bestandteil eines früheren fachlichen Zustands. Die Unveränderlichkeit schützt Eigenschaften und den eigenen zugeordneten Beziehungszustand; zulässige fremde Bezugnahmen sind keine Umschreibung dieses Zustands. Bestehende `PiH` des Profils `2.0`, ihre Inhalte und ihre Hashes werden nicht verändert und ausschließlich mit dem Resolver `2.0` gelesen.
 
 **Kurzes Beispiel:** Eine neue `Verification` bindet Kriterienrevision `2` und legt `CHECKS` an. Das Kriterium bleibt auf Revision `2`; die Prüfung ist anwendbar. Erst eine spätere fachliche Änderung des Kriteriums erzeugt dessen Revision `3` und macht die alte Prüfung für den neuen Stand unanwendbar. Neue Auditbeziehungen verändern die technische `graphEpoch` nach Abschnitt 12, auch wenn keine fachliche Zielrevision steigt.
 
 **Erstellungsbeispiel:** Ein neuer Task beginnt mit Revision `1` ohne eigenes `PiH`. Seine ausdrückliche Zuordnung zu einem vorhandenen aktiven `PiF1o` verändert dessen eigenen `DECOMPOSES_INTO`-Zustand; das Ziel erhält deshalb im selben Auftrag genau eine Revisionserhöhung und ein `PiH`. Die referenzierte Erstellungsrolle bleibt unverändert.
 
-#### 2.2.9 Korrekturpfade und kanonisches Hashprofil 2.0
+#### 2.2.9 Korrekturpfade sowie kanonische Hash- und Korrekturwertprofile
 
-Neue Snapshots und ihre Korrekturwerte verwenden `snapshotSchemaVersion = "2.0"` beziehungsweise `valueSchemaVersion = "2.0"`. Resolver und Hashalgorithmus werden anhand dieser Versionen gewählt. Unbekannte oder nicht zusammenpassende Profile erzeugen `CONFLICT`; es gibt keine stillschweigende Umdeutung. Ältere `PiH` behalten Inhalte und Hashes. Ein Altdatenresolver muss das tatsächlich verwendete frühere Profil nachweisen; die erhaltenen Austauschschemas allein definieren noch keinen solchen Resolver.
+Neue Snapshots verwenden `snapshotSchemaVersion = "2.1"`. Historische Korrekturen verwenden entweder das unveränderte Korrekturwertprofil `valueSchemaVersion = "2.0"` oder für ausdrückliches Ergänzen und Entfernen das additive Profil `valueSchemaVersion = "2.1"`. Resolver und Hashalgorithmus werden anhand dieser Versionen gewählt. Snapshotprofil `2.1` verwendet weiterhin die kanonische Sortierung und Hashbildung aus `2.0`, ergänzt aber die vollständige Pflichtfeldprüfung. Unbekannte oder nicht zusammenpassende Profile erzeugen `CONFLICT`; es gibt keine stillschweigende Umdeutung. Ältere `PiH`, Korrekturen und Hashes bleiben unverändert. Ein Altdatenresolver muss das tatsächlich verwendete frühere Profil nachweisen; die erhaltenen Austauschschemas allein definieren noch keinen solchen Resolver.
 
 Die gespeicherte `relationshipData` bleibt eine Liste. Nur zur Pfadauflösung wird sie als Map projiziert, mit dem stabilen Schlüssel `direction + ":" + relationshipType + ":" + otherEntityId`. `otherEntityId` ist die kanonische UUID mit Kleinbuchstaben und Bindestrichen. Doppelte Schlüssel sind ungültig. Zulässig sind ausschließlich diese drei Adressformen:
 
@@ -469,7 +512,9 @@ Nach dem JSON-String-Decoding wird der Pointer an `/` segmentiert. Innerhalb ein
 
 Schon innerhalb eines einzelnen Auftrags müssen alle Pfade paarweise überlappungsfrei sein. Gegenüber aktiven Korrekturen gilt: keine Überlappung bedeutet kein `SUPERSEDES`; genau eine überlappte aktive Korrektur muss vollständig abgelöst werden; mehr als eine bedeutet `CONFLICT`. Die neue Feldmenge enthält dabei jeden bisherigen kanonischen Feldpfad unverändert und erneut dessen gewünschten wirksamen Wert; zusätzliche Pfade bleiben intern und gegenüber allen übrigen aktiven Korrekturen überlappungsfrei. Ein Vorfahrpfad ersetzt diese vollständige Feldübernahme nicht. Die bestehende `SUPERSEDES`-Kardinalität `0..1` bleibt bestehen.
 
-Bei Annahme der Korrektur wird `previousValue` gegen die unmittelbar vorherige wirksame Sicht geprüft. `ADDITION` verlangt einen tatsächlich fehlenden Pfad und einen typisierten alten Wert `NULL`; ein bereits vorhandener `NULL`-Wert ist nicht fehlend. `CORRECTION` und `CLARIFICATION` verlangen einen vorhandenen Pfad. `NULL` ist ein Wert und kein Löschbefehl. Die Rekonstruktion der `HistoryView` setzt die `correctedValue`-Werte der aktiven Korrekturen als absolute Überlagerung auf den unveränderten Ursprung. Sie spielt keine abgelösten Operationen wieder ab und vergleicht dabei nicht erneut `previousValue` mit dem Ursprung. Dadurch bleibt auch eine ursprüngliche Ergänzung sichtbar, wenn sie später durch eine Berichtigung abgelöst wurde. Fehlende Beziehungseltern werden nicht aus einer einzelnen Property erfunden; dafür muss ein vollständiger Beziehungseintrag ergänzt werden.
+Bei Annahme der Korrektur wird `previousValue` gegen die unmittelbar vorherige wirksame Sicht geprüft. Im Profil `2.0` verlangt `ADDITION` einen tatsächlich fehlenden Pfad und einen typisierten alten Wert `NULL`; dieses Profil kennt keine Entfernung. Im Profil `2.1` bezeichnet ausschließlich das exakte Korrekturwertobjekt `{ "valueType": "ABSENT" }` das Fehlen eines Pfades: `ADDITION` verlangt `ABSENT` als vorherigen und einen regulären `TypedValue` als korrigierten Wert; `REMOVAL` verlangt einen vorhandenen regulären `TypedValue` als vorherigen und `ABSENT` als korrigierten Wert. `CORRECTION` und `CLARIFICATION` verlangen in beiden Maps reguläre `TypedValue`-Werte und einen vorhandenen Pfad. `ABSENT` ist kein Domänenwert und außerhalb von Korrekturwert-Maps des Profils `2.1` unzulässig. `NULL` bleibt ein vorhandener Wert und ist kein Löschbefehl.
+
+Die Rekonstruktion der `HistoryView` setzt reguläre `correctedValue`-Werte der aktiven Korrekturen als absolute Überlagerung auf den unveränderten Ursprung und entfernt bei `ABSENT` genau den adressierten Property- oder vollständigen Beziehungseintrag. Sie spielt keine abgelösten Operationen wieder ab und vergleicht dabei nicht erneut `previousValue` mit dem Ursprung. Dadurch bleibt auch eine ursprüngliche Ergänzung sichtbar, wenn sie später durch eine Berichtigung abgelöst wurde. Fehlende Beziehungseltern werden nicht aus einer einzelnen Property erfunden; dafür muss ein vollständiger Beziehungseintrag ergänzt werden. Eine Beziehungseigenschaft kann nur entfernt werden, wenn der danach verbleibende `RelationshipSnapshot` weiterhin dem Snapshotprofil entspricht.
 
 Für `contentHash`, `baseHistoryViewHash` und `expectedHistoryViewHash` wird exakt dasselbe Inhaltsobjekt gehasht:
 
@@ -512,11 +557,11 @@ Die Darstellung beschreibt eine Orientierung und keinen einzigen linearen Ablauf
 
 ### 2.4 Beziehungen zwischen JCI-Entitäten
 
-Die folgenden Tabellen zeigen die gespeicherten Beziehungen entlang der JCI-Kette und die daraus eindeutig abgeleiteten ERoF-Zuordnungen. Abgeleitete Beziehungen sind ausdrücklich gekennzeichnet und werden nicht als zusätzliche Kanten gespeichert.
+Die folgenden Tabellen zeigen die gespeicherten Beziehungen entlang der JCI-Kette und die daraus eindeutig abgeleiteten ERoF-Zuordnungen. Abgeleitete Beziehungen sind ausdrücklich gekennzeichnet und werden nicht als zusätzliche Kanten gespeichert. Die angegebenen Höchstgrenzen gelten in jedem Status. Eine Mindestgrenze größer `0` ist die verbindliche Aktivierungs- und Vollständigkeitskardinalität; nur am jeweiligen `DRAFT`-Endpunkt wird sie nach Abschnitt 2.2.4 vorübergehend zu `0` gelockert.
 
 #### 2.4.1 Zweck, Werte und Zukunft
 
-Lesebeispiel für `PiF1s ── CONTRIBUTES_TO ──► PiF2`: **Ziele je Quelle `1..n`** bedeutet, dass ein `PiF1s` zu mindestens einem oder mehreren `PiF2` beitragen muss. **Quellen je Ziel `0..n`** bedeutet, dass zu einem `PiF2` vorübergehend noch kein, ein oder mehrere `PiF1s` beitragen können.
+Lesebeispiel für `PiF1s ── CONTRIBUTES_TO ──► PiF2`: **Ziele je Quelle `1..n`** bedeutet, dass ein vollständiges `PiF1s` zu mindestens einem oder mehreren `PiF2` beitragen muss; sein `DRAFT` darf vorübergehend noch kein Ziel besitzen. **Quellen je Ziel `0..n`** bedeutet, dass zu einem `PiF2` kein, ein oder mehrere `PiF1s` beitragen können.
 
 | Quelle  | Beziehung              | Ziel                                                     | Ziele je<br>Quelle | Quellen je<br>Ziel |
 | ------- | ---------------------- | -------------------------------------------------------- | -----------------: | -----------------: |
@@ -790,9 +835,9 @@ Ein `SyncEvent` ist kein `PiH`. Es kann jedoch mehrere `PiH` erzeugen, wenn ein 
 11. Nicht abgelöste Korrekturen eines `PiH` besitzen untereinander und jeweils intern überlappungsfreie kanonische Pfade nach Abschnitt 2.2.9. Gleichheit sowie Vorfahr-/Nachfahrbeziehungen zählen als Überlappung.
 12. Keine Überlappung erlaubt kein `SUPERSEDES`. Genau eine überlappte aktive Korrektur muss vollständig abgelöst werden. Mehr als eine überlappte aktive Korrektur erzeugt wegen `SUPERSEDES = 0..1` einen `CONFLICT`.
 13. Eine ablösende Korrektur gehört zum selben `PiH` und enthält alle kanonischen Feldpfade der aktiven Vorgängerin unverändert mit ihren erneut angegebenen wirksamen Werten. Zusätzliche Pfade sind intern und gegenüber allen anderen aktiven Korrekturen überlappungsfrei. `SUPERSEDES` bleibt zeitlich vorwärts gerichtet und zyklusfrei.
-14. `previousValue` entspricht bei Annahme exakt der vorherigen wirksamen `HistoryView`. `ADDITION` verlangt einen fehlenden Pfad mit typisiertem alten `NULL`; vorhandenes `NULL` ist nicht fehlend. `CORRECTION` und `CLARIFICATION` verlangen vorhandene Pfade. `baseHistoryViewHash` bindet diese Basissicht nach Profil 2.0.
+14. `previousValue` entspricht bei Annahme exakt der vorherigen wirksamen `HistoryView`. Profil `2.0` behält für `ADDITION` die bisherige Darstellung mit typisiertem altem `NULL` und kennt keine Entfernung. Profil `2.1` verwendet ausschließlich in Korrekturwert-Maps `ABSENT`: `ADDITION` führt von `ABSENT` zu einem regulären Wert, `REMOVAL` von einem regulären Wert zu `ABSENT`. `CORRECTION` und `CLARIFICATION` verlangen vorhandene reguläre Werte. `NULL` bleibt vorhanden. `baseHistoryViewHash` bindet diese Basissicht nach Hashprofil 2.0.
 15. `SYNC` serialisiert alle JCI-Schreibwege nach Abschnitt 12.8 und berechnet die aktuelle `HistoryView` unter dem Gate erneut. Ein abweichender `expectedHistoryViewHash`, ein Profilfehler oder eine Pfadüberlappung außerhalb der Ablöseregel erzeugt `CONFLICT` ohne Korrektur.
-16. Die gültige `HistoryView` setzt ausschließlich aktive `correctedValue` als absolute Überlagerung auf den unveränderten Ursprung. Abgelöste Operationen werden nicht wieder abgespielt; ihre früheren `previousValue` werden beim Neuaufbau nicht gegen den Ursprung geprüft. Dadurch bleibt eine später berichtigte Ergänzung erhalten.
+16. Die gültige `HistoryView` setzt ausschließlich aktive reguläre `correctedValue` als absolute Überlagerung auf den unveränderten Ursprung und entfernt bei `ABSENT` genau den adressierten Eintrag. Abgelöste Operationen werden nicht wieder abgespielt; ihre früheren `previousValue` werden beim Neuaufbau nicht gegen den Ursprung geprüft. Dadurch bleibt eine später berichtigte Ergänzung erhalten und eine bestätigte Entfernung ausdrücklich nachvollziehbar.
 17. Eine historische Korrektur verändert nicht automatisch den aktuellen Zustand der ursprünglichen `JCIEntity`. Ein daraus entstehender aktueller Änderungsbedarf wird als eigener Veränderungsvorgang verarbeitet.
 18. Das über `CAUSED_BY` verbundene `ChangeEvent` muss dasselbe `ChangeEvent` sein, das den über `CREATES_CORRECTION` verbundenen Synchronisationslauf ausgelöst hat.
 
@@ -842,6 +887,7 @@ Zulässige Korrekturarten sind:
 ADDITION      = fehlende historische Angabe ergänzen
 CORRECTION    = fehlerhafte historische Angabe berichtigen
 CLARIFICATION = mehrdeutige historische Angabe erläutern
+REMOVAL       = fälschlich dokumentierte historische Angabe entfernen
 ```
 
 Die Eigenschaften einer `HistoricalCorrection` beschreiben Abweichung und Berichtigung, kein Ersatz-`PiH`. `expectedHistoryViewHash` muss zur wirksamen Sicht beim geschützten Commit passen. Pfadüberlappung, vollständige Ablösung und absolute Rekonstruktion folgen Abschnitt 2.2.9; damit kann eine zweite Korrektur nicht unbemerkt auf einer veralteten Basis übernommen werden.
@@ -1049,15 +1095,7 @@ Jedes `RaN` erhält ausdrücklich eine ganzzahlige Priorität. Eine größere Za
 
 `decisionKey` bezeichnet stabil die geregelte Entscheidung, beispielsweise `Task.status.COMPLETED` oder `ERoFObject.action.MODIFY`. Nur Regeln mit demselben `decisionKey`, überlappendem Scope und mindestens einem gemeinsamen Ziel können für diese Entscheidung miteinander kollidieren.
 
-Die maschinenlesbare `condition` besitzt genau einen `combiner = ALL | ANY` und mindestens eine Klausel. Jede Klausel enthält:
-
-| Feld       | Bedeutung                                                            |
-| ---------- | -------------------------------------------------------------------- |
-| `path`     | eindeutiger Eigenschafts- oder Beziehungspfad vom geregelten Ziel    |
-| `operator` | verbindlicher Vergleichsoperator                                     |
-| `value`    | Vergleichswert; nur bei `EXISTS` und `NOT_EXISTS` nicht erforderlich |
-
-Pfade dürfen Eigenschaften direkt oder ausdrücklich benannte Beziehungen aus dem kanonischen Beziehungskatalog traversieren. Unbegrenzte oder nicht katalogisierte Traversierungen sind unzulässig. Kann ein Pfad nicht eindeutig ausgewertet werden, ist die Regel `UNEVALUABLE`.
+Die maschinenlesbare `condition` folgt entweder dem allgemeinen Bedingungsprofil `2.0` aus Abschnitt 2.2.7 oder bei einer Freigabe-Policy ausschließlich dem begrenzten Freigabeprofil `1.0` aus Abschnitt 12.9. Richtung, Mehrfachbeziehungen, Quantor, fehlende Werte, Endpunkttyp und Operator sind damit vollständig festgelegt. Ein unbekanntes Profil, eine abweichende Form oder ein nicht eindeutig auswertbarer Pfad ergibt `UNEVALUABLE` und niemals eine implizite Erlaubnis.
 
 Für Freigaben gilt der engere, ausführbare Bedingungsvertrag aus Abschnitt 12.9. Ein optionales `RaN.approvalPolicy: ApprovalPolicy` benennt ausdrücklich zulässige Rollen und Freigabeebenen. Weder `ACCOUNTABLE_MEMBER` noch `CONTRIBUTES_TO`, Rollennamen oder eine höhere Zukunftsebene verleihen allein eine Befugnis.
 
@@ -1138,7 +1176,7 @@ Ein `RaNConflict` dokumentiert die beteiligten Regeln, betroffenen Entitäten un
 6. Ein RaN muss nicht alle CiV eines geschützten PiF2 schützen.
 7. `PROTECTS` besitzt ausschließlich `CiV` oder `PiF2` als Ziel. `GOVERNS` besitzt ausschließlich die definierten Umsetzungselemente als Ziel.
 8. Ein `RaN` kann mehrere Umsetzungselemente aus unterschiedlichen Bereichen regeln. Ein Ziel kann gleichzeitig durch keine, eine oder mehrere Regeln geregelt werden.
-9. Bei einer Änderung an `RaN` prüft `SYNC` alle direkt geschützten und geregelten Ziele und deren relevante Abhängigkeiten.
+9. Bei einer Änderung an `RaN` prüft `SYNC` alle direkt geschützten und geregelten Ziele und deren relevante Abhängigkeiten. Ein terminales oder unveränderliches `GOVERNS`-Ziel bleibt dabei revisionsneutral; die Änderung gehört zum Zustand des `RaN`.
 10. `PROTECTS` wird nur durch eine ausdrückliche, auf ein gültiges `RoleAssignment` zurückführbare fachliche Entscheidung erzeugt oder geändert. `SYNC` leitet die Beziehung nicht aus Namen, Scope oder vorhandenen Pfaden ab.
 11. Schutzobjekte und Geltungsbereich erfüllen die definierte organisatorische Scope-Kompatibilität; unverbundene fremde Organisationen sind unzulässig.
 12. Vor einem Vergleich werden ausschließlich aktive, zeitlich gültige und für die betroffene Entität beziehungsweise Entscheidung anwendbare `RaN` berücksichtigt.
@@ -2010,7 +2048,7 @@ Für `changeType = HISTORICAL_CORRECTION` bezeichnet `target` genau das unverän
 
 ```text
 historicalCorrection = {
-  correctionType = ADDITION | CORRECTION | CLARIFICATION,
+  correctionType = ADDITION | CORRECTION | CLARIFICATION | REMOVAL,
   reason,
   valueSchemaVersion,
   expectedHistoryViewHash,
@@ -2020,7 +2058,7 @@ historicalCorrection = {
 }
 ```
 
-`correctedFields`, `previousValue` und `correctedValue` folgen dem kanonischen Pfad-, Überlappungs-, Wert- und Hashvertrag in Abschnitt 2.2.9 mit exakt gleichen Schlüsselmengen. `expectedHistoryViewHash` bindet die unter dem Gate erneut geprüfte Sicht. Eine historische Korrektur enthält keine generischen Operationen, da das `PiH` niemals umgeschrieben wird.
+`correctedFields`, `previousValue` und `correctedValue` folgen dem kanonischen Pfad-, Überlappungs-, Wert- und Hashvertrag in Abschnitt 2.2.9 mit exakt gleichen Schlüsselmengen. Profil `2.0` bleibt lesbar; Profil `2.1` erlaubt zusätzlich den exakten Korrekturmarker `ABSENT` für `ADDITION` und `REMOVAL`. `expectedHistoryViewHash` bindet die unter dem Gate erneut geprüfte Sicht. Eine historische Korrektur enthält keine generischen Operationen, da das `PiH` niemals umgeschrieben wird.
 
 Beim Speichern wird `requestId` zur `ChangeEvent.id`, während `idempotencyKey`, Ziel-ID, Zieltyp und `requestedRevision` unverändert in das `ChangeEvent` übernommen werden. Dadurch bleibt auch ein gescheiterter oder noch nicht abgeschlossener Auftrag eindeutig adressierbar.
 
@@ -2135,7 +2173,7 @@ Die Freigaberoute wird aus dem vollständigen aktuellen Graphen berechnet, nicht
 Eine bloß nicht zuständige Rolle wird durch fehlendes passendes `PERMIT` ausgedrückt. `PROHIBIT` und ein nicht erfülltes `REQUIRE` sind dagegen wirkliche Sperren, kein technischer Hinweis „bitte weiterleiten“.
 
 1. Vom Task wird über die umgekehrt gelesene direkte `DECOMPOSES_INTO`-Zuordnung genau ein `PiF1o` bestimmt. Auch Untertasks verwenden ihre direkte PiF1o-Zuordnung.
-2. Das accountable Mitglied dieses `PiF1o` wird als erster Ansprechpartner geprüft. Besitzt es eine passende aktive menschliche Rollenaktivierung mit ausdrücklicher Befugnis, ist diese Ebene zuständig.
+2. Das accountable Mitglied dieses `PiF1o` wird als erster Ansprechpartner geprüft. Besitzt es eine passende aktive menschliche Rollenaktivierung mit ausdrücklicher Befugnis, ist diese Ebene zuständig. Ein technisches accountable Mitglied bleibt ein gültiger Zwischenanker, kann aber nicht menschlich genehmigen; diese fehlende Befugnis führt über die normale Route zur nächsten Ebene. Ein unbekannter Mitgliedstyp bleibt dagegen ein Modellfehler.
 3. Fehlt ausschließlich die Befugnis, werden alle aktuellen direkten `CONTRIBUTES_TO`-Ziele auf der nächsten Ebene geprüft: `PiF1t`, danach `PiF1s`, zuletzt `PiF2`. Jeder Zweig endet an seiner ersten befugten Accountability. Fehlende oder mehrdeutige Modellzuordnungen sind ein Fehler und keine Erlaubnis zum Überspringen.
 4. Alle so ermittelten erforderlichen Anker müssen genehmigt sein. Ein gemeinsamer Vorfahr oder Genehmiger kann mehrere Zweige abdecken; doppelte Kanten und widersprüchliche Belege sind ungültig. `contributionMode = ANY` betrifft Zielerreichung und reduziert diese Freigabemenge nicht.
 5. Am `PiF2` endet die Eskalation. Ohne Befugnis gibt es keine Freigabe. Eine ausdrückliche menschliche Ablehnung, ein wirksames `DENY` oder `UNEVALUABLE` darf durch keine höhere Ebene oder alternative Rolle umgangen werden.
@@ -2148,7 +2186,7 @@ Eine `VALUE_SCOPE`-Policy verleiht Befugnis ausschließlich für die Werteträge
 
 Freigabeprofil 1.0 verwendet ausschließlich Pfade mit genau zwei Segmenten: `target.<Eigenschaft>`, `actor.<Eigenschaft>` oder `request.<Eigenschaft>`. `target` bezeichnet das geregelte Entscheidungsobjekt: den Task im Kandidatenzustand bei `Task.action.RELEASE`, die genehmigende Rollenaktivierung bei `Model.action.CONFIRM`. `request` bezeichnet eine direkte skalare Eigenschaft des Basisauftrags. `actor` stellt die aus dem Graphen aufgelösten Felder `id`, `entityType`, `memberId`, `memberType`, `roleId`, `roleName`, `teamId`, `organizationId` und `status` bereit. Dies sind technische Prüfsichten, keine neuen Graphbeziehungen. Die Herkunft jedes Actor-Feldes wird über die kanonischen RoF-Kanten geprüft.
 
-`EXISTS` und `NOT_EXISTS` unterscheiden ein fehlendes Feld von einem vorhandenen `null`. `EQUALS`, `NOT_EQUALS`, `IN` und `NOT_IN` vergleichen ohne Typumwandlung; Boolean und Integer sind verschieden. Größenvergleiche erlauben hier nur Ganzzahlen, `CONTAINS` nur Zeichenketten. `MATCHES`, Dezimal-/Datumsordnung, weitere Pfadsegmente, Graphtraversierungen oder ungeklärte Typen sind in diesem Profil `UNEVALUABLE`. Außer bei Existenztests ist ein fehlender Wert nicht einfach `false`. Alle Klauseln werden geprüft: Auch `ANY` darf eine ungültige Klausel nicht verbergen. Allgemeine RaN-Pfade außerhalb dieses begrenzten Profils bleiben eine gesonderte Spezifikationsaufgabe.
+`EXISTS` und `NOT_EXISTS` unterscheiden ein fehlendes Feld von einem vorhandenen `null`. `EQUALS`, `NOT_EQUALS`, `IN` und `NOT_IN` vergleichen ohne Typumwandlung; Boolean und Integer sind verschieden. Größenvergleiche erlauben hier nur Ganzzahlen, `CONTAINS` nur Zeichenketten. `MATCHES`, Dezimal-/Datumsordnung, weitere Pfadsegmente, Graphtraversierungen oder ungeklärte Typen sind in diesem Profil `UNEVALUABLE`. Außer bei Existenztests ist ein fehlender Wert nicht einfach `false`. Alle Klauseln werden geprüft: Auch `ANY` darf eine ungültige Klausel nicht verbergen. Allgemeine RaN verwenden den ausführbaren Vertrag aus Abschnitt 6; dessen Graphpfade werden absichtlich nicht als Freigabepfade umgedeutet.
 
 #### 12.9.4 Belege, Hashbindung und SYNC
 
@@ -2178,7 +2216,7 @@ Jana ist accountable für das operative Kundenportal-Ziel; Ernst beantragt die F
 
 Fehlt Jana die ausdrückliche Befugnis, wird nach der beschriebenen Route die Accountability des zugehörigen `PiF1t` gefragt. Bei zwei aktuellen taktischen Zweigen werden beide Anforderungen berücksichtigt. Lehnt Jana als befugte Entscheiderin ab, bleibt der Vorschlag abgelehnt; die taktische Ebene darf dieses Nein nicht als bloß fehlende Befugnis behandeln.
 
-Die Auswirkung betrifft alle zehn Kernelemente: `CiV` behält menschliche Wertentscheidungen; `PiF2`, `PiF1s`, `PiF1t` und `PiF1o` behalten ihre Zustands- und Beitragslogik mit nachvollziehbarer Accountability; `RaN` bestimmt Befugnis und Schutz; `RoF` liefert nachgewiesene Akteure; `ERoF` behält getrennte Nutzungsrechte; `SYNC` prüft und übernimmt die Entscheidung; `PiH` entsteht ausschließlich bei tatsächlicher Ablösung vorhandener Zustände. Die WHY-Kette bleibt erhalten. Die allgemeinen offenen Fragen zu RaN-Pfadgrammatik, historischen Löschkorrekturen, terminalen `GOVERNS`-Zielen, DRAFT-Kardinalitäten und vollständiger technischer Modellvalidierung werden dadurch nicht als gelöst erklärt.
+Die Auswirkung betrifft alle zehn Kernelemente: `CiV` behält menschliche Wertentscheidungen; `PiF2`, `PiF1s`, `PiF1t` und `PiF1o` behalten ihre Zustands- und Beitragslogik mit nachvollziehbarer Accountability; `RaN` bestimmt Befugnis und Schutz; `RoF` liefert nachgewiesene Akteure; `ERoF` behält getrennte Nutzungsrechte; `SYNC` prüft und übernimmt die Entscheidung; `PiH` entsteht ausschließlich bei tatsächlicher Ablösung vorhandener Zustände. Die WHY-Kette bleibt erhalten. Die allgemeine RaN-Pfadgrammatik, historische Löschkorrekturen, terminale `GOVERNS`-Ziele, DRAFT-Kardinalitäten und die vollständige Pflichtfeldprojektion neuer Snapshots sind inzwischen ausdrücklich definiert. Der ausführbare Referenzstand ersetzt weiterhin keine produktive Identitäts-, Nachrichten- oder Datenbankintegration.
 
 ## 13. Abschluss
 

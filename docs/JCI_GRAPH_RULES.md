@@ -4,7 +4,7 @@
 
 Dieses Dokument legt technologieunabhängige Kardinalitäten und Invarianten des JCI-Graphen fest. Die fachliche Bedeutung stammt aus [`JCI_CONTEXT.md`](JCI_CONTEXT.md), der zulässige Typkatalog aus [`JCI_ONTOLOGY.md`](JCI_ONTOLOGY.md). Bei einem Konflikt gilt [`JCI_CONTEXT.md`](JCI_CONTEXT.md).
 
-**Regelpaket 2.0:** Ontologie, Graphregeln, SYNC, neue Snapshots, Korrekturwerte und das Austauschformat verwenden Version `2.0`. JSON-LD bleibt `1.1`; bestehende Namespace-IRIs mit `/1.0#` bleiben stabile Vokabularidentitäten und bezeichnen nicht die Regelversion. Frühere Datensätze werden ausschließlich nach ihren ausdrücklich angegebenen Versionsprofilen gelesen.
+**Regelpaket 2.0:** Ontologie, Graphregeln, SYNC und das Austauschformat verwenden Version `2.0`; neue Snapshots verwenden Vollständigkeitsprofil `2.1`, historische Korrekturen unterstützen die Korrekturwertprofile `2.0` und `2.1`. JSON-LD bleibt `1.1`; bestehende Namespace-IRIs mit `/1.0#` bleiben stabile Vokabularidentitäten und bezeichnen nicht die Regelversion. Frühere Datensätze werden ausschließlich nach ihren ausdrücklich angegebenen Versionsprofilen gelesen.
 
 Freigabegeschützte Operationen verwenden weiterhin dieses Basispaket `2.0`, setzen jedoch die ausdrücklich aktivierte SYNC-Fähigkeit `approvalProfileVersion = "1.0"` und den technischen Freigabeumschlag aus Abschnitt 5.2 voraus.
 
@@ -51,10 +51,11 @@ Verbindliche Übergangsregeln:
 10. Prozessartefakte und ein durch SYNC erzeugter offener `RaNConflict` lösen für ihre eigene Erzeugung kein rekursives `ChangeEvent` aus.
 11. Deterministisch aus einem Veränderungsauftrag abgeleitete Folgeänderungen erzeugen kein eigenes rekursives `ChangeEvent`; sie bleiben über das gemeinsame `SyncEvent`, `AFFECTS`, Revision und `PiH` nachvollziehbar.
 12. Beziehungsänderungen folgen der Endpunktzuordnung aus Abschnitt 2.2.8 von `JCI_CONTEXT`: Nur vorhandene veränderliche Eigentümer mit tatsächlichem Delta erhalten je Auftrag genau eine Revision und ein `PiH`. Prüf- und Auditbezüge revisionieren ihre Ziele nicht; jeder Graphschreibvorgang bleibt durch den technischen Commit-Gate geschützt.
+13. Bei einem Endpunkt mit `status = DRAFT` wird nur die Mindestkardinalität seiner fachlichen Beziehungen vorübergehend auf `0` gelockert. Höchstgrenzen und alle übrigen Invarianten gelten sofort. Jeder Übergang aus `DRAFT`, einschließlich `DRAFT → BLOCKED`, setzt den vollständig geprüften Kandidatengraphen und sämtliche tabellarischen Mindestkardinalitäten voraus. Unveränderliche und unmittelbar terminal erzeugte Entitäten erhalten keine Ausnahme.
 
 ## 4. Kardinalitäten
 
-Die Spalte „Ziele je Quelle“ gilt in Pfeilrichtung; „Quellen je Ziel“ gilt in Gegenrichtung.
+Die Spalte „Ziele je Quelle“ gilt in Pfeilrichtung; „Quellen je Ziel“ gilt in Gegenrichtung. Höchstgrenzen gelten bereits für gespeicherte Entwürfe. Mindestgrenzen größer `0` gelten vollständig ab dem Verlassen von `DRAFT`; nur am jeweiligen Entwurfsendpunkt sind sie vorher `0`. So können `PiF1o`, Task und ihre Kanten über getrennte Ein-Ziel-Aufträge aufgebaut werden, ohne einen unvollständigen aktiven Graphen zu erlauben.
 
 ### 4.1 Zweck und Zukunft
 
@@ -177,7 +178,7 @@ Bedingte Invarianten:
 3. Jedes ausführende `RoleAssignment` ist eindeutig mit genau einem Team, einer aktivierten Rolle und genau einem Teammitglied verbunden; das Team gehört genau zu einer Organisation.
 4. Umweltbeziehungen eines Tasks müssen über seine ausführenden Rollenaktivierungen zu mindestens einer handelnden menschlichen oder technischen Identität zurückverfolgbar sein.
 5. Anwendbare `RaN` werden aus `GOVERNS`, Gültigkeit, Status und Scope bestimmt; ein fehlender Regelpfad ist nur zulässig, wenn tatsächlich keine Regel anwendbar ist.
-6. Ein `DRAFT` darf unvollständige Pfade besitzen. Der Übergang zu `ACTIVE` ist bei einem unvollständigen WHY- oder WHO-Pfad unzulässig.
+6. Ein `DRAFT` darf unvollständige Pfade und noch nicht erfüllte Beziehungsmindestkardinalitäten besitzen. Der Übergang zu `ACTIVE` oder für Tasks zu `BLOCKED` ist bei einem unvollständigen WHY- oder WHO-Pfad oder einer unterschrittenen Mindestkardinalität unzulässig.
 
 ### 5.2 Freigaberegeln
 
@@ -236,7 +237,7 @@ Bedingte Invarianten:
 17. Ein offener Konflikt blockiert automatische Änderungen, deren Zulässigkeit von seiner Auflösung abhängt; unabhängige Prüfungen bleiben möglich.
 18. `governedTypes` ist nicht leer; jedes `GOVERNS`-Ziel besitzt einen aufgeführten konkreten Typ.
 19. `GLOBAL` und `ENTITY` besitzen kein `APPLIES_IN`. `ORGANIZATION` besitzt genau eine Beziehung zu `RoFOrg`; `TEAM` genau eine zu `RoFTeam`.
-20. Jede Condition besitzt `combiner = ALL | ANY` und mindestens eine auswertbare Klausel aus `path`, `operator` und gegebenenfalls `value`.
+20. Ein aktives RaN ohne `approvalPolicy` besitzt eine Condition nach allgemeinem Profil `2.0`: `origin = TARGET`, höchstens acht ausdrücklich gerichtete und typisierte Beziehungsschritte, eine katalogisierte Endeigenschaft, `quantifier = EXACTLY_ONE | ANY | ALL`, `missingResult = TRUE | FALSE | UNEVALUABLE`, einen Operator und außer bei Existenztests einen `TypedValue`. Identische parallele Kanten oder jede nicht auflösbare Typ-, Pfad- oder Schemafrage ergeben `UNEVALUABLE`; `ANY` darf dies nicht verdecken.
 21. `REQUIRE` erlaubt bei wahrer und verweigert bei falscher Bedingung. `PROHIBIT` verweigert bei wahrer Bedingung. `PERMIT` erlaubt bei wahrer Bedingung. Falsches `PROHIBIT` oder `PERMIT` trifft keine eigene Entscheidung.
 22. Eine Regelverletzung blockiert die angeforderte Entscheidung, erzeugt allein aber keinen `RaNConflict`.
 23. Ein Widerspruch liegt nur vor, wenn Regeln mit gleichem `decisionKey`, überlappendem Scope und gemeinsamem Ziel gleichzeitig erlauben und verweigern.
@@ -245,6 +246,8 @@ Bedingte Invarianten:
 26. Im Freigabeprofil hat jeder Bedingungspfad genau zwei Segmente und beginnt mit `target`, `actor` oder `request`; zulässig sind direkte skalare Eigenschaften. `target` ist beim Release der Task im Kandidatenzustand und beim Model-Confirm die genehmigende Rollenaktivierung. `actor` stellt ausschließlich die graphseitig aufgelösten Felder `id`, `entityType`, `memberId`, `memberType`, `roleId`, `roleName`, `teamId`, `organizationId` und `status` bereit; `request` enthält direkte skalare Auftragseigenschaften. `EXISTS` und `NOT_EXISTS` unterscheiden fehlend von `null`; sonst wird streng typisiert ohne Umwandlung verglichen. Größenvergleiche gelten nur für Integer und `CONTAINS` nur für Strings. `MATCHES`, Dezimal-/Datumsordnung, weitere Pfadsegmente, Traversierung oder ungeklärte Typen ergeben `UNEVALUABLE`; auch bei `ANY` werden alle Klauseln geprüft. Die allgemeine RaN-Pfadgrammatik bleibt davon unberührt.
 27. Für `Task.action.RELEASE` wird genau das direkte `PiF1o` des Tasks bestimmt und dort das verantwortliche Mitglied geprüft. Ein technisches `ACCOUNTABLE_MEMBER` ist als Zwischenanker zulässig, kann aber nicht genehmigen. Fehlt ausschließlich eine menschliche ausdrückliche Befugnis, folgt die Route allen aktuellen direkten `CONTRIBUTES_TO`-Zweigen über `PiF1t`, `PiF1s` und `PiF2`; jeder Zweig endet bei seiner ersten befugten, als `HUMAN` nachgewiesenen Accountability. Fehlende oder mehrdeutige Zuordnung scheitert geschlossen. Alle ermittelten Endanker müssen unabhängig genehmigen, auch bei `contributionMode = ANY`; ein gemeinsamer Vorfahr oder Genehmiger darf mehrere Zweige abdecken.
 28. `Model.action.CONFIRM` umfasst Änderungen an CiV-Inhalt und `HELD_BY`, `INFORMED_BY`, `INSCRIBES_PURPOSE_IN`, `PROTECTS`, Freigabe-Policies und Verantwortungsgrundlagen. Alter und neuer Zustand, beide Kantenrichtungen, Entfernen, Ersatz und Widerruf werden geprüft. `VALUE_SCOPE` verlangt Genehmigungen aller betroffenen alten und neuen Werteträger, ohne `GOVERNS` um CiV zu erweitern. Nicht unterstützte Operationskombinationen scheitern geschlossen.
+29. Eine Änderung an `GOVERNS` gehört immer zum revisionspflichtigen Beziehungszustand der `RaN`-Quelle. Ein veränderliches Ziel ist ebenfalls Eigentümer. Ein terminales oder unveränderliches Ziel bleibt revisionsneutral und wird durch die Regelbeziehung weder wieder geöffnet noch historisiert.
+30. Für `EXISTS` ist `missingResult = FALSE`, für `NOT_EXISTS` `TRUE`. Andere Operatoren behandeln MISSING ausschließlich nach dem gespeicherten `missingResult`. `EXACTLY_ONE` verlangt genau ein Ergebnis; `ANY` und `ALL` aggregieren alle durch passende Kanten erzeugten Zweige ohne leere-Mengen-Sonderregel. Vergleiche sind typstreng und `MATCHES` ist ein vollständiger regulärer Ausdruckstreffer.
 
 ## 8. Erfolgskriterien und Erreichung
 
@@ -272,7 +275,7 @@ Bedingte Invarianten:
 
 ## 9. Task-Hierarchie, Abhängigkeiten und Status
 
-1. Jeder Task besitzt genau ein `taskKind = ATOMIC | COMPOSITE`, genau ein `RESPONSIBLE_TEAM` und über `PiF1o ── DECOMPOSES_INTO ──► Task` genau einen gespeicherten operativen Zielkontext; die Zuordnung bleibt für ausgeschiedene Tasks erhalten.
+1. Jeder Task außerhalb von `DRAFT` besitzt genau ein `taskKind = ATOMIC | COMPOSITE`, genau ein `RESPONSIBLE_TEAM` und über `PiF1o ── DECOMPOSES_INTO ──► Task` genau einen gespeicherten operativen Zielkontext; die Zuordnung bleibt für ausgeschiedene Tasks erhalten. Im `DRAFT` dürfen die beiden Beziehungen vorübergehend fehlen, ihre Höchstgrenze `1` gilt jedoch bereits.
 2. Ein `ATOMIC`-Task besitzt keine ausgehende `DECOMPOSES_INTO`-Beziehung zu einem Task.
 3. Ein `COMPOSITE`-Task besitzt mindestens einen direkten Untertask und keine Beziehungen `EXECUTED_BY`, `USES` oder `PRODUCES`. Ein aktueller Composite besitzt mindestens einen aktuellen direkten Untertask.
 4. Ein Task besitzt höchstens einen direkten übergeordneten Task. Parent und Untertask gehören zum selben `PiF1o`; ein aktueller Untertask benötigt einen aktuellen Parent oder eine ausdrückliche gültige Neuzuordnung.
@@ -292,9 +295,9 @@ Bedingte Invarianten:
 
 1. Nur eine tatsächliche Änderung eines vorhandenen Zustands erzeugt ein `PiH`.
 2. `CREATED` erzeugt für die neu angelegte Entität kein `PiH`.
-3. Jedes `PiH` bildet Eigenschaften und nach der Eigentümermatrix zugeordnete Beziehungen genau einer Revision ab; neue Snapshots verwenden Profil `2.0`.
+3. Jedes `PiH` bildet sämtliche erforderlichen Eigenschaften und nach der Eigentümermatrix zugeordnete Beziehungen genau einer Revision ab; neue Snapshots verwenden Profil `2.1`, bestehende Snapshots behalten Profil `2.0` und ihren Hash.
 4. Eine Abweichung in einem `PiH` erzeugt kein `PiH` des `PiH`, sondern eine `HistoricalCorrection`.
-5. Die gültige `HistoryView` setzt ausschließlich aktive `correctedValue` als absolute Überlagerung auf den unveränderten Ursprung. Abgelöste Operationen werden nicht wieder abgespielt; ihre früheren `previousValue` werden beim Neuaufbau nicht gegen den Ursprung geprüft. Dadurch bleibt eine später berichtigte Ergänzung erhalten.
+5. Die gültige `HistoryView` setzt aktive reguläre `correctedValue` als absolute Überlagerung auf den unveränderten Ursprung und entfernt bei `ABSENT` genau den adressierten Eintrag. Abgelöste Operationen werden nicht wieder abgespielt; ihre früheren `previousValue` werden beim Neuaufbau nicht gegen den Ursprung geprüft. Dadurch bleiben Ergänzung, Berichtigung und Entfernung ausdrücklich nachvollziehbar.
 6. `correctedFields` folgt der geschlossenen Pointergrammatik aus Abschnitt 2.2.9 des kanonischen Kontextdokuments. Die Pointer sind eindeutig, kanonisch und nach Unicode-Codepunkten sortiert; beide Wertmaps besitzen exakt dieselben Schlüssel.
 7. Nicht abgelöste Korrekturen eines `PiH` besitzen untereinander und jeweils intern überlappungsfreie kanonische Pfade nach Abschnitt 2.2.9. Gleichheit sowie Vorfahr-/Nachfahrbeziehungen zählen als Überlappung.
 8. Keine Überlappung erlaubt kein `SUPERSEDES`. Genau eine überlappte aktive Korrektur muss vollständig abgelöst werden. Mehr als eine überlappte aktive Korrektur erzeugt wegen `SUPERSEDES = 0..1` einen `CONFLICT`. Eine ablösende Korrektur gehört zum selben `PiH` und enthält alle kanonischen Feldpfade der aktiven Vorgängerin unverändert mit ihren erneut angegebenen wirksamen Werten. Zusätzliche Pfade sind intern und gegenüber allen anderen aktiven Korrekturen überlappungsfrei. `SUPERSEDES` bleibt zeitlich vorwärts gerichtet und zyklusfrei.
@@ -306,6 +309,7 @@ Bedingte Invarianten:
 14. Ein `PiH` enthält genau den eigenen fachlichen Zustand der `originalRevision` gemäß Snapshotprofil und Revisionszuordnung. Fremde revisionsneutrale Dokumentationsbezüge schreiben diesen Zustand nicht rückwirkend um.
 15. `contentHash` verwendet das kanonische Inhaltsobjekt und den exakten Unicode-/Zahlvertrag aus Abschnitt 2.2.9. Frühere Profile und Hashes bleiben unverändert; unbekannte oder inkompatible Profile werden abgewiesen.
 16. Jeder `RelationshipSnapshot` besitzt Typ, Richtung, Gegenentitäts-ID, Gegenentitätstyp und typisierte Properties. Die stabile Schlüsselprojektion ist eindeutig; Korrekturen ändern unter einem vorhandenen Schlüssel keine Beziehungsidentität. Ganzbeziehung und Property überlappen.
+17. Korrekturwertprofil `2.0` bleibt unverändert und kennt keine Entfernung. Profil `2.1` erlaubt den exakten Marker `{ "valueType": "ABSENT" }` ausschließlich in Korrekturwert-Maps: bei `ADDITION` nur als vorherigen und bei `REMOVAL` nur als korrigierten Wert. `NULL` ist in allen Profilen ein vorhandener Domänenwert. Die rekonstruierte Sicht muss das Snapshotprofil vollständig erfüllen.
 
 **Kurzes Beispiel:** `/stateData/properties/name` und `/stateData/properties/description` sind unabhängig. Eine ganze Beziehung und ihre `/properties/validFrom` überlappen. Eine solche Überlappung verlangt die vollständige Ablösung genau einer aktiven Vorgängerin gegen die aktuelle Sicht; Überschneidung mit mehreren Vorgängerinnen wird abgewiesen.
 

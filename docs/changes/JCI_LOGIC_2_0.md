@@ -4,7 +4,7 @@
 
 Die Änderung behebt sechs Lücken in Revisionierung, Zielerreichung, Task-Auswertung, konkurrierenden Änderungen und historischen Korrekturen. Die zehn Kernelemente und vorhandenen Entitäts- und Beziehungstypen bleiben erhalten. Verbindlich sind [Kontext](../JCI_CONTEXT.md), [Graphregeln](../JCI_GRAPH_RULES.md) und [SYNC-Spezifikation](../JCI_SYNC_SPEC.md).
 
-Regel-, Snapshot-, Werte- und Austauschprofile verwenden Version `2.0`. Die JSON-LD-Syntaxversion `1.1` und der Namensraum `https://eeimicke.github.io/junaco-jci-loop/ns/jci/1.0#` bezeichnen andere Identitäten und bleiben unverändert. Das [Snapshot-Payloadschema](../schemas/jci-history-snapshot.schema.json) beschreibt neue historische Nutzdaten; [Legacy-Schemas](../schemas/legacy/1.1/) bleiben für ältere Profile verfügbar.
+Regel-, Werte- und Austauschprofile verwenden Version `2.0`. Neue Snapshots verwenden seit der ergänzenden Modellschließung vom 26.09.2026 das additive Vollständigkeitsprofil `2.1`. Die JSON-LD-Syntaxversion `1.1` und der Namensraum `https://eeimicke.github.io/junaco-jci-loop/ns/jci/1.0#` bezeichnen andere Identitäten und bleiben unverändert. Das [Snapshot-Payloadschema](../schemas/jci-history-snapshot.schema.json) beschreibt neue historische Nutzdaten; [Legacy-Schemas](../schemas/legacy/1.1/) bleiben für ältere Profile verfügbar.
 
 ## 1. Fachlichen Zustand von neuen Nachweisen trennen
 
@@ -117,7 +117,7 @@ Hashing verwendet wirksame `stateData` und die kanonisch sortierte `relationship
 | RoF         | Verantwortung, Rollen und Umfangsentscheidungen bleiben zu prüfen; technische Sperren sind kein Organisationsobjekt.                                 |
 | ERoF        | Nutzungs- und Eigentumsbeziehungen bleiben Bedingungen; relevanter Umweltkontext gehört zur geschützten Entscheidungsgrundlage.                      |
 | SYNC        | Kandidat, Abschlussgraph, Revisionszuordnung und geschützter Commit werden zusammen ausgewertet.                                                     |
-| PiH         | Neue Snapshots/Korrekturen verwenden 2.0; bestehende Daten, Identitäten und Hashes bleiben unverändert.                                              |
+| PiH         | Neue Snapshots verwenden 2.1, Korrekturen 2.0 oder 2.1; bestehende Daten, Identitäten und Hashes bleiben unverändert.                                |
 
 Kardinalitäten bestehender gespeicherter Beziehungen bleiben erhalten. Hinzu kommen Auswertungsregeln für nicht leere aktuelle Mengen, konsistente aktuelle Teilbäume, gemeinsame Zyklen und überschneidungsfreie Korrekturpfade. Es entstehen keine neuen Kanten oder automatischen Ersatzzuordnungen. Zustandsverantwortung ist Katalogmetadatum; Abschlussgraph und Korrekturschlüsselabbildung sind berechnete Sichten.
 
@@ -176,3 +176,9 @@ Die [Integrationstests](../../tests/integration/test_neo4j_transactions.py) verw
 Dies belegt den technischen Transaktionsrahmen. Das vollständige fachliche Regelpaket, vertrauenswürdige Identitäts- und Freigabeprüfung, die Einbindung sämtlicher Schreibwege und die Zustellung der Outbox bleiben Integrationsarbeit. Eine vorhandene Datenbasis benötigt außerdem geprüfte Altprofil-Resolver und eine konkrete Migration; eine solche Migration wurde hier nicht ausgeführt.
 
 Ergänzender Prüfstand vom 12.09.2026: **175 Tests bestanden**, darunter **17 reale Neo4j-Transaktionstests** und 18 Unit-Tests des Koordinators. Der lokale Lauf verwendet Neo4j Community 2026.08.1, den Python-Driver 6.3.0 und ein portables Java 21. Alle 20 deutsch-englischen Sprachpaare bestehen die Strukturprüfung; Bezeichner, Tabellen und lokale Links sind geprüft. Der neue GitHub-Actions-Job ist eingerichtet, wurde in diesem Arbeitsstand jedoch noch nicht auf GitHub ausgeführt. Ein Server- oder Stromausfall wurde nicht getestet.
+
+## Additives Korrekturwertprofil 2.1 vom 26.09.2026
+
+Das Korrekturwertprofil `2.1` ergänzt `REMOVAL` und den exakten Marker `{ "valueType": "ABSENT" }`. Dieser Marker ist kein `TypedValue` und darf ausschließlich in Korrekturwert-Maps stehen: bei `ADDITION` als vorheriger Wert, bei `REMOVAL` als korrigierter Wert. `NULL` bleibt ein vorhandener Domänenwert. Beim Neuaufbau der `HistoryView` entfernt `ABSENT` das adressierte Property oder den vollständigen Beziehungseintrag; anschließend muss die gesamte Sicht erneut das Snapshotprofil erfüllen. Bestehende Korrekturen des Profils `2.0` werden nicht umgeschrieben.
+
+Das neue Snapshotprofil `2.1` verlangt sämtliche Pflichtfelder des historisierten Entitätstyps sowie Pflichtfelder historisierter Beziehungen. Sortierung und Hashbildung bleiben kanonisch kompatibel mit `2.0`. Bereits gespeicherte Snapshots des Profils `2.0` werden weiterhin ausschließlich mit ihrem Resolver gelesen, weder ergänzt noch neu gehasht.

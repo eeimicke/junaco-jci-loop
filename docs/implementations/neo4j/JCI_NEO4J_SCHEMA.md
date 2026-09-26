@@ -4,11 +4,11 @@
 
 Dieses Dokument konkretisiert die technische Abbildung des JCI-Modells in Neo4j. Es implementiert [`JCI_CONTEXT.md`](../../JCI_CONTEXT.md), [`JCI_ONTOLOGY.md`](../../JCI_ONTOLOGY.md), [`JCI_GRAPH_RULES.md`](../../JCI_GRAPH_RULES.md) und [`JCI_SYNC_SPEC.md`](../../JCI_SYNC_SPEC.md). Bei einem Konflikt gilt die fachliche Spezifikation; das Schema darf ihre Semantik nicht verändern.
 
-## Regel- und Snapshotprofil 2.0
+## Regelprofil 2.0 und Snapshotprofil 2.1
 
-Neue SYNC-Vorgänge verwenden Regelpaket, Ontologie, Graphregeln, SYNC-Spezifikation, snapshotSchemaVersion, valueSchemaVersion und AustauschschemaVersion 2.0. Freigabepflichtige Vorgänge benötigen zusätzlich die ausdrückliche Handler-Fähigkeit `approvalProfileVersion = "1.0"`; ein Handler ohne diese Fähigkeit weist sie ab. JSON-LD bleibt 1.1; die bestehenden Namespace-IRIs /1.0# sind Identitäten und keine Regelversion. Alte Profile werden ausdrücklich über ihre Resolver gelesen. Bestehende PiH, HistoricalCorrections, SyncEvents, Freigaben und Hashes werden nicht nachträglich umgeschrieben oder neu berechnet.
+Neue SYNC-Vorgänge verwenden Regelpaket, Ontologie, Graphregeln, SYNC-Spezifikation und Austausch-`schemaVersion` 2.0 sowie `snapshotSchemaVersion = "2.1"`; historische Korrekturen unterstützen `valueSchemaVersion` 2.0 und 2.1. Freigabepflichtige Vorgänge benötigen zusätzlich die ausdrückliche Handler-Fähigkeit `approvalProfileVersion = "1.0"`; ein Handler ohne diese Fähigkeit weist sie ab. JSON-LD bleibt 1.1; die bestehenden Namespace-IRIs /1.0# sind Identitäten und keine Regelversion. Alte Profile werden ausdrücklich über ihre Resolver gelesen. Bestehende PiH, HistoricalCorrections, SyncEvents, Freigaben und Hashes werden nicht nachträglich umgeschrieben oder neu berechnet.
 
-Die Revision gehört zum fachlichen Zustand nach der Endpunkt-Eigentumsmatrix in Abschnitt 2.2.8 von [`JCI_CONTEXT.md`](../../JCI_CONTEXT.md). Neue Prüf-, Ereignis- und Korrekturbezüge revisionieren nicht ihre Referenzziele. `TRIGGERS`, `CHANGED_BY`, `HAS_HISTORICAL_STATE`, `APPROVED_BY` und neue `CREATED_BY`-Bezüge erzeugen keine Historisierungsschleifen. `APPROVED_BY` gehört ausschließlich dem bei Annahme erzeugten unveränderlichen `ChangeEvent`; das referenzierte `RoleAssignment` wird dadurch nicht revisioniert. Ein zulässiges Nachtragen von `CREATED_BY` am Importentwurf ändert dessen Zustand; RaNConflict-Auflösung nur den Konflikt. `PROVIDES_CONTEXT_TO` gehört dem CiV-Kontext. Übrige katalogisierte Strukturbeziehungen ändern beide veränderlichen Eigentümer. Neue PiH projizieren nur den ihnen zugeordneten revisionierten Beziehungszustand. Revisionsneutrale Bezüge unterliegen dennoch vollständig Gate/graphEpoch und ihren eigenen unveränderlichen Provenienzregeln.
+Die Revision gehört zum fachlichen Zustand nach der Endpunkt-Eigentumsmatrix in Abschnitt 2.2.8 von [`JCI_CONTEXT.md`](../../JCI_CONTEXT.md). Neue Prüf-, Ereignis- und Korrekturbezüge revisionieren nicht ihre Referenzziele. `TRIGGERS`, `CHANGED_BY`, `HAS_HISTORICAL_STATE`, `APPROVED_BY` und neue `CREATED_BY`-Bezüge erzeugen keine Historisierungsschleifen. `APPROVED_BY` gehört ausschließlich dem bei Annahme erzeugten unveränderlichen `ChangeEvent`; das referenzierte `RoleAssignment` wird dadurch nicht revisioniert. Ein zulässiges Nachtragen von `CREATED_BY` am Importentwurf ändert dessen Zustand; RaNConflict-Auflösung nur den Konflikt. `PROVIDES_CONTEXT_TO` gehört dem CiV-Kontext. `GOVERNS` gehört der `RaN`-Quelle und zusätzlich einem veränderlichen Ziel; ein terminales oder unveränderliches Ziel bleibt revisionsneutral. Übrige katalogisierte Strukturbeziehungen ändern beide veränderlichen Eigentümer. Neue PiH projizieren nur den ihnen zugeordneten revisionierten Beziehungszustand. Revisionsneutrale Bezüge unterliegen dennoch vollständig Gate/graphEpoch und ihren eigenen unveränderlichen Provenienzregeln.
 
 ## Gemeinsame Label- und Eigenschaftsstrategie
 
@@ -627,6 +627,64 @@ WHERE size(concrete) <> 1 OR size(abstract) <> 1 OR e.entityType <> concrete[0]
 RETURN e.id AS entityId, e.entityType, concrete, abstract;
 ```
 
+### Geschlossener Beziehungskatalog und vollständige Endpunktkardinalitäten
+
+Der paketgebundene Adapter liefert `$canonicalRelationshipContexts` und `$canonicalEndpointCardinalities` aus demselben versionierten Beziehungskatalog, dessen Prüfsumme der `SyncRun` bindet. Die Kontextliste enthält jeden zulässigen konkreten Quelltyp, Beziehungstyp und Zieltyp genau einmal sowie `requiredProperties` und `allowedProperties`. Die Endpunktliste enthält je Tabellenzeile und Endpunkt `entityType`, `relationshipType`, `direction`, `otherEntityTypes`, `minimum`, `draftMinimum` und optional `maximum`. Eine handgeschriebene Teilmenge ist unzulässig.
+
+Die erste Abfrage findet unbekannte oder doppelt definierte Beziehungskontexte sowie fehlende oder fremde Beziehungseigenschaften:
+
+```cypher
+MATCH (source:JCIEntity)-[relationship]->(target:JCIEntity)
+WITH source, relationship, target,
+     [context IN $canonicalRelationshipContexts
+      WHERE context.sourceEntityType = source.entityType
+        AND context.relationshipType = type(relationship)
+        AND context.targetEntityType = target.entityType] AS contexts
+WHERE size(contexts) <> 1
+   OR any(context IN contexts WHERE
+        any(property IN context.requiredProperties
+            WHERE relationship[property] IS NULL)
+        OR any(property IN keys(relationship)
+               WHERE NOT property IN context.allowedProperties))
+RETURN source.id AS sourceId, source.entityType AS sourceType,
+       type(relationship) AS relationshipType,
+       target.id AS targetId, target.entityType AS targetType,
+       keys(relationship) AS relationshipProperties,
+       size(contexts) AS matchingContextCount;
+```
+
+Die zweite Abfrage prüft jede Katalogkardinalität mit der rohen Anzahl gespeicherter Kanten. `draftMinimum` ist nur dort `0`, wo der DRAFT-Vertrag die Mindestgrenze lockert; Höchstgrenzen bleiben unverändert. Dadurch können parallele Kanten zum selben Ziel keine Prüfung über ein `DISTINCT` umgehen:
+
+```cypher
+MATCH (entity:JCIEntity)
+UNWIND $canonicalEndpointCardinalities AS rule
+WITH entity, rule
+WHERE entity.entityType = rule.entityType
+WITH entity, rule,
+     CASE rule.direction
+       WHEN 'OUTGOING' THEN COUNT {
+         MATCH (entity)-[relationship]->(other:JCIEntity)
+         WHERE type(relationship) = rule.relationshipType
+           AND other.entityType IN rule.otherEntityTypes
+       }
+       ELSE COUNT {
+         MATCH (other:JCIEntity)-[relationship]->(entity)
+         WHERE type(relationship) = rule.relationshipType
+           AND other.entityType IN rule.otherEntityTypes
+       }
+     END AS rawRelationshipCount
+WITH entity, rule, rawRelationshipCount,
+     CASE WHEN entity.status = 'DRAFT'
+          THEN rule.draftMinimum ELSE rule.minimum END AS requiredMinimum
+WHERE rawRelationshipCount < requiredMinimum
+   OR (rule.maximum IS NOT NULL AND rawRelationshipCount > rule.maximum)
+RETURN entity.id AS entityId, entity.entityType,
+       rule.relationshipType, rule.direction,
+       rawRelationshipCount, requiredMinimum, rule.maximum;
+```
+
+Beide Abfragen laufen in Vor- und Nachvalidierung. Fehlen die zum aktiven Paket passenden vollständigen Parameter oder stimmt ihre Prüfsumme nicht, darf `SYNC` keinen Commit versuchen.
+
 ### Gemeinsame Pflichtwerte und unveränderliche Dokumente
 
 ```cypher
@@ -843,12 +901,6 @@ Parallele Duplikatkanten dürfen keine Kardinalitätsprüfung durch ein `DISTINC
 
 ```cypher
 MATCH (source:JCIEntity)-[relationship]->(target:JCIEntity)
-WHERE type(relationship) IN [
-  'CREATED_BY','REQUESTED_BY','APPROVED_BY','CORRECTED_BY','CHANGED_BY',
-  'TARGETS_HISTORY','TRIGGERS','EXECUTES','AFFECTS',
-  'HAS_HISTORICAL_STATE','CREATES_HISTORY','CREATES_CORRECTION',
-  'CORRECTS','CAUSED_BY','SUPERSEDES'
-]
 WITH source, type(relationship) AS relationshipType, target,
      count(relationship) AS relationshipCount
 WHERE relationshipCount > 1
@@ -1740,9 +1792,9 @@ Neo4j-Constraints und nachgelagerte Cypher-Abfragen decken den gespeicherten Gra
 
 1. Altprofile und ihre benötigten Resolver inventarisieren. Bestehende unveränderliche Dokumente, Snapshotdaten und Hashes bleiben unverändert; keine Zufalls-Backfills historischer Run-IDs, Revisionen oder Prüfsummen.
 2. Die neuen technischen Gate-/Request-/Run-/Commit-/Outbox-Strukturen kontrolliert initialisieren. Sämtliche Schreibwege einschließlich Import und Nachholung auf denselben Gate verpflichten.
-3. Neue SYNC-Definition mit Regel-, Ontologie-, Graphregel-, SyncSpec-, Snapshot-, Korrektur- und Austauschprofil 2.0 erst aktivieren, wenn alle vorhandenen Typen und Legacy-Leseprofile ausdrücklich unterstützt werden und die Paketprüfsumme stimmt. Namespace-Identitäten und JSON-LD1.1 bleiben unverändert.
+3. Neue SYNC-Definition mit Regel-, Ontologie-, Graphregel-, SyncSpec- und Austauschprofil 2.0, Snapshotprofil 2.1 sowie Korrekturwertprofilen 2.0/2.1 erst aktivieren, wenn alle vorhandenen Typen und Legacy-Leseprofile ausdrücklich unterstützt werden und die Paketprüfsumme stimmt. Namespace-Identitäten und JSON-LD1.1 bleiben unverändert.
 4. Alle bestehenden Task-/Kriterienumfänge, Ersatzzuordnungen, aktuellen Parent-Strukturen, Composite-Status und gemischten Abschlusszyklen vorprüfen. Leere aktive Umfänge oder unklare Teilbäume erfordern begründete fachliche Aufträge; keine automatische Aufhebung, Umleitung oder Wiederöffnung terminaler Tatsachen.
-5. Neue PiH nach Revisionseigentum und Snapshotprofil 2.0 bilden. Alte PiH behalten ihr ursprüngliches Profil; gespeicherte Beziehungssnapshots werden nicht rückwirkend gefiltert oder re-gehasht.
+5. Neue PiH nach Revisionseigentum und Snapshotprofil 2.1 vollständig bilden. Alte PiH behalten ihr ursprüngliches Profil; gespeicherte Zustände und Beziehungssnapshots werden nicht rückwirkend ergänzt, gefiltert oder re-gehasht.
 6. Historische Korrekturen über den expliziten Resolver ihres Profils lesen. Unklare Adressen, kollidierende Beziehungsschlüssel oder überlappende aktive Altkorrekturen stoppen den Übergang für den betroffenen Bestand. Ein neuer 2.0-Vorgang verwendet stabile Adressen und den eindeutig aufgelösten wirksamen View-Hash.
 7. Alte GOVERNS-Kanten zu PiF2 nicht blind in PROTECTS umbenennen. Ein berechtigter Mensch bestätigt geschütztes PiF2, kohärentes CiV und tatsächliche Umsetzungselemente. Erst ein regulärer validierter Auftrag übernimmt die neuen Schutz-/Governancebezüge.
 8. Constraints nur nach bestandener Prüfung ihrer Voraussetzungen anwenden. Alle einschlägigen Bestandsabfragen müssen null Fehler liefern; Transaktions-, Revisions-, Resolver- und Parallelitätstests müssen zusätzlich bestehen. Eine unverträgliche Mischung wird nicht aktiviert.

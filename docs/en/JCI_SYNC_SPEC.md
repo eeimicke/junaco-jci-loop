@@ -4,7 +4,7 @@
 
 This document describes the technology-independent process of `SYNC`. Its domain meaning is defined by [`JCI_CONTEXT.md`](JCI_CONTEXT.md), its types by [`JCI_ONTOLOGY.md`](JCI_ONTOLOGY.md), and its valid graph states by [`JCI_GRAPH_RULES.md`](JCI_GRAPH_RULES.md).
 
-For new operations, the rule package, `ontologyVersion`, `graphRulesVersion`, `syncSpecVersion`, `snapshotSchemaVersion`, `valueSchemaVersion`, and exchange `schemaVersion` use `2.0`. JSON-LD remains `1.1`; namespace IRIs containing `/1.0#` are stable identities, not rule versions. Explicitly versioned resolvers retain readability of old profiles; existing PiH, corrections, and hashes are neither rewritten nor recalculated.
+For new operations, the rule package, `ontologyVersion`, `graphRulesVersion`, `syncSpecVersion`, and exchange `schemaVersion` use `2.0`; new PiH use `snapshotSchemaVersion = "2.1"`. Historical corrections use `valueSchemaVersion = "2.0"` or the additive correction-value profile `2.1`. JSON-LD remains `1.1`; namespace IRIs containing `/1.0#` are stable identities, not rule versions. Explicitly versioned resolvers retain readability of old profiles; existing PiH, corrections, and hashes are neither rewritten nor recalculated.
 
 Approval-protected operations remain base requests `2.0`, but require a SYNC definition with `approvalProfileVersion = "1.0"` and a valid technical approval envelope. A missing or unknown profile fails closed.
 
@@ -143,7 +143,7 @@ The following matrix defines the minimum domain traversal. “Upward” means th
 
 When a relationship changes, `SYNC` starts at both endpoints and uses the matrix row for each. For `REPLACED_BY`, `SUPERSEDES`, `DEPENDS_ON`, `DECOMPOSES_INTO`, `CONTRIBUTES_TO`, and `SUBSIDIARY`, the respective chain is traversed to its end and checked for cycles.
 
-Revision and history follow versioned revision ownership in [`JCI_CONTEXT.md`](JCI_CONTEXT.md). New Verification, HistoricalCorrection, ChangeEvent, and SyncEvent references do not change existing targets merely by referring to them. TRIGGERS, CHANGED_BY, and HAS_HISTORICAL_STATE do not cause history recursion. CREATED_BY belongs to the source creation state; a permitted addition to an existing imported draft changes only that draft. Resolving a RaNConflict revisions the conflict exactly once, not its referenced rules or actors. PiH PROVIDES_CONTEXT_TO CiV belongs to the CiV context state. Both mutable endpoints remain owners for the other explicitly cataloged domain structure relationships.
+Revision and history follow versioned revision ownership in [`JCI_CONTEXT.md`](JCI_CONTEXT.md). New Verification, HistoricalCorrection, ChangeEvent, and SyncEvent references do not change existing targets merely by referring to them. TRIGGERS, CHANGED_BY, and HAS_HISTORICAL_STATE do not cause history recursion. CREATED_BY belongs to the source creation state; a permitted addition to an existing imported draft changes only that draft. Resolving a RaNConflict revisions the conflict exactly once, not its referenced rules or actors. PiH PROVIDES_CONTEXT_TO CiV belongs to the CiV context state. For `GOVERNS`, the `RaN` source and a mutable target are owners; for a terminal or immutable target, only the source is. Both mutable endpoints remain owners for the other explicitly cataloged domain structure relationships.
 
 Each existing owner with an actual change receives exactly one new revision and one PiH per request; new entities start at revision 1. New verification or event references do not authorize changing completed document content. All relationships remain part of impact and concurrency checks, including those without domain revisions. Follow-up changes remain in the same SyncRun without another ChangeEvent.
 
@@ -154,6 +154,8 @@ The traversal maintains a visited set of `entityId`, read `revision`, relationsh
 ### 5.3 Validation
 
 Before any domain evaluation, `SYNC` checks the status transition against section 2.2.4 of [`JCI_CONTEXT.md`](JCI_CONTEXT.md). A transition not listed there ends with `outcome = CONFLICT`; the current state remains unchanged. Terminal states are not reopened. A continuation is created as a new entity.
+
+For stored `DRAFT` endpoints, cardinality validation sets only domain minimum values to `0`; maxima and every other rule remain binding. Nodes and edges can therefore be created through successive single-target requests. As soon as a request moves a draft out of `DRAFT`, `SYNC` validates the complete candidate graph under the common gate against the unchanged catalog minima. This also applies to a Task release into `BLOCKED`; no partial graph becomes active early merely because of request creation order.
 
 Before activating or completing an atomic Task, `SYNC` also checks traceability: the WHY path must lead through `PiF1o`, `PiF1t`, `PiF1s`, and `PiF2` to at least one `CiV`. The WHO path must unambiguously identify the executing `RoleAssignment`, member, role, responsible team, and organization. A missing mandatory path prevents the status transition.
 
@@ -251,7 +253,7 @@ For every decision affected by rules, `SYNC` performs:
 
 1. For each active RaN, validate at least one protected CiV, one protected PiF2, their coherence through `INSCRIBES_PURPOSE_IN`, and organizational compatibility with the scope. Missing or contradictory protection relationships block activation or the decision; `SYNC` does not add them automatically.
 2. Use `governedTypes`, `scopeType`, and, where applicable, `APPLIES_IN` to identify all potentially relevant active and temporally valid `RaN`; compare `GOVERNS` with the current concrete implementation elements and prepare any required target edges.
-3. Evaluate every normalized condition reproducibly. Non-cataloged or ambiguous paths produce `UNEVALUABLE`.
+3. Evaluate every general condition reproducibly only under profile `2.0`: start at the concrete `GOVERNS` target, validate direction, relationship, and endpoint type for every step, preserve every edge match as its own branch, treat MISSING under `missingResult`, and then apply the stored quantifier. Identical parallel edges, unknown types/properties, more than eight steps, or any other profile deviation yield `UNEVALUABLE`; `DISTINCT`, type coercion, and implicit inverses are prohibited.
 4. Derive `ALLOW`, `DENY`, or `NO_DECISION` from `effect` and the condition for each rule.
 5. Treat a single rule violation as `DENY` and block the decision without creating a `RaNConflict` solely for that violation.
 6. Compare only rules with the same `decisionKey`, overlapping scope, and a common target for contradictory results.
@@ -279,8 +281,8 @@ To resolve an existing conflict, a subsequent `SyncRun` rechecks the rules conne
 ### 5.4 Preparing the Change
 
 1. Compare the complete validated candidate with the initial state; deduplicate entities with actual property or owned-relationship changes. Pure new verification, audit, and history references do not change their targets.
-2. For each existing mutable owner, read its previous domain state and the relationships assigned by its snapshot profile. New PiH use `snapshotSchemaVersion = "2.0"`; other objects' later verification references do not retroactively belong to that state.
-3. Form StateSnapshot and sorted RelationshipSnapshot entries under canonical profile 2.0 and calculate SHA-256 contentHash. Prepare exactly one PiH, HAS_HISTORICAL_STATE, and CREATES_HISTORY per existing entity actually changed.
+2. For each existing mutable owner, read its previous domain state and the relationships assigned by its snapshot profile. New PiH use `snapshotSchemaVersion = "2.1"` and contain every property required for the entity type plus every required property of their owned relationships; other objects' later verification references do not retroactively belong to that state.
+3. Form StateSnapshot and sorted RelationshipSnapshot entries under snapshot profile `2.1`, and calculate the SHA-256 `contentHash` with the canonical mapping retained from `2.0`. Prepare exactly one PiH, HAS_HISTORICAL_STATE, and CREATES_HISTORY per existing entity actually changed.
 4. Prepare the current state with exactly revision + 1 and a new updatedAt. Existing PiH and hashes remain unchanged and are read under their own old profile.
 5. A valid request with no actual change may document SUCCESS with changedCount = historyCount = 0. Audit references create no fictitious history; the technical success record nevertheless marks the request processed.
 
@@ -288,14 +290,14 @@ For CREATED, first form only a candidate. Only SUCCESS atomically creates the ta
 
 ### 5.5 Historical Correction
 
-1. Validate the existing target PiH, requestedRevision = 1, exactly one matching TARGETS_HISTORY, and no CHANGED_BY source. Exchange schema and new valueSchemaVersion use 2.0; only the structured historicalCorrection payload is permitted.
+1. Validate the existing target PiH, requestedRevision = 1, exactly one matching TARGETS_HISTORY, and no CHANGED_BY source. The exchange schema uses `2.0`; `valueSchemaVersion` uses `2.0` or `2.1` for explicit addition/removal. Only the structured `historicalCorrection` payload is permitted.
 2. Validate valid CORRECTED_BY, reason, and optional Evidence. Use explicitly registered resolvers for older snapshot/correction profiles. Ambiguous legacy paths produce CONFLICT; no automatic reinterpretation or recalculation of stored hashes.
 3. relationshipData remains a list. For addressing only, build a map keyed by direction + ":" + relationshipType + ":" + canonicalUUID(otherEntityId). Duplicate keys are invalid.
 4. Allow only the path forms below. Property corrections replace a complete TypedValue property; descent into value, array indices, wildcards, root replacement, and array appends are prohibited. The referenced snapshot profile defines permitted properties. Identity, original revision, and relationship identity components are not reinterpreted at the same address.
 5. Split JSON Pointers into segments, decode ~1 and ~0 under RFC 6901, and require canonical re-encoding. correctedFields is unique, lexicographically sorted, and free of equal or nested paths within the request. previousValue and correctedValue have exactly the same key set.
-6. Build HistoryView from the immutable PiH and absolute correctedValue overlays of non-superseded corrections. Earlier previousValue entries are not checked again against the original PiH on each rebuild.
+6. Build `HistoryView` from the immutable PiH and absolute `correctedValue` overlays of non-superseded corrections. Regular values set the addressed entry; `ABSENT` removes it. The reconstructed view must then fully conform to the snapshot profile again. Earlier `previousValue` entries are not checked again against the original PiH on each rebuild.
 7. Calculate SHA-256 uniformly over effective {stateData, relationshipData} under canonical profile 2.0. relationshipData is sorted by relationshipType, direction, and otherEntityId. The technical address map, PiH ID, and correction IDs are excluded from the hash input. Compare with expectedHistoryViewHash.
-8. Validate existence and previous effective value for each new path. ADDITION requires actual absence and typed NULL as previousValue; existing NULL is not absent. CORRECTION and CLARIFICATION require existence. NULL is not a deletion command.
+8. Validate existence and the previous effective value for each new path. Profile `2.0` retains `ADDITION` with actual absence and typed `NULL` as `previousValue`; it has no removal. Profile `2.1` uses `{ "valueType": "ABSENT" }` only in correction-value maps: `ADDITION` requires `ABSENT` only before, and `REMOVAL` only after. `CORRECTION` and `CLARIFICATION` require regular `TypedValue` on both sides. Existing `NULL` is not absent and is not a deletion command.
 9. Paths overlap when either decoded segment sequence is a prefix of the other, including equality. Without overlap a correction may coexist. If exactly one active correction is affected, completely supersede exactly it through SUPERSEDES: retain all previous canonical paths and still-valid values. Additional paths must overlap neither each other nor another active correction. Multiple overlaps or silent granularity changes produce CONFLICT.
 10. Validate correction chains for the same PiH, forward time, and freedom from cycles. Under the common write gate immediately before commit, recheck view, hash, previous values, existence, paths, and supersession. A stale hash creates no correction.
 11. Create a new immutable HistoricalCorrection with baseHistoryViewHash = expectedHistoryViewHash and matching CORRECTS, CAUSED_BY, and CREATES_CORRECTION. PiH remains unchanged; current-model changes remain a separate request.
@@ -464,7 +466,7 @@ historicalCorrection = {
 }
 ```
 
-`valueSchemaVersion = "2.0"`; correctedFields is unique, lexicographically sorted, and free of segment-prefix overlaps under section 5.5. `previousValue` and `correctedValue` have exactly the same key set. Through `target`, the request addresses the same `PiH` that is connected through `TARGETS_HISTORY` in the graph.
+`valueSchemaVersion` is `2.0` or `2.1`; `correctedFields` is unique, lexicographically sorted, and free of segment-prefix overlaps under section 5.5. `previousValue` and `correctedValue` have exactly the same key set. Profile `2.1` permits the exact `ABSENT` marker only in the map matching `ADDITION` or `REMOVAL`. Through `target`, the request addresses the same `PiH` that is connected through `TARGETS_HISTORY` in the graph.
 
 In addition to `requestId` and `syncEventId`, a `JCISyncResult` requires `runId`, `outcome`, `completedAt`, all five counters, and lists of affected entities, conflicts, and errors. For `SUCCESS` or `CONFLICT`, `affectedCount >= 1`; only an early `FAILED` before target resolution permits a value of `0`.
 

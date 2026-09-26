@@ -4,7 +4,7 @@
 
 This change closes six gaps in revision handling, goal achievement, Task evaluation, concurrent changes and historical corrections. The ten core elements and existing entity and relationship types remain. The [context](../JCI_CONTEXT.md), [graph rules](../JCI_GRAPH_RULES.md) and [SYNC specification](../JCI_SYNC_SPEC.md) are authoritative.
 
-The rule, snapshot, value and exchange profiles use version `2.0`. JSON-LD syntax version `1.1` and namespace `https://eeimicke.github.io/junaco-jci-loop/ns/jci/1.0#` identify different things and remain unchanged. The [snapshot payload schema](../../schemas/jci-history-snapshot.schema.json) describes new historical payloads; [legacy schemas](../../schemas/legacy/1.1/) remain available for older profiles.
+The rule, value, and exchange profiles use version `2.0`. New snapshots have used additive completeness profile `2.1` since the supplementary model closure on 2026-09-26. JSON-LD syntax version `1.1` and namespace `https://eeimicke.github.io/junaco-jci-loop/ns/jci/1.0#` identify different things and remain unchanged. The [snapshot payload schema](../../schemas/jci-history-snapshot.schema.json) describes new historical payloads; [legacy schemas](../../schemas/legacy/1.1/) remain available for older profiles.
 
 ## 1. Separate domain state from new proof records
 
@@ -117,7 +117,7 @@ Hashing uses effective `stateData` and the canonically sorted `relationshipData`
 | RoF          | Responsibility, roles and scope decisions remain subject to checks; technical locks are not organisation objects.              |
 | ERoF         | Usage and ownership relationships remain conditions; relevant environmental context belongs to the protected decision basis.   |
 | SYNC         | The candidate, completion graph, revision assignment and protected commit are evaluated together.                              |
-| PiH          | New snapshots/corrections use 2.0; existing data, identities and hashes remain unchanged.                                      |
+| PiH          | New snapshots use 2.1 and corrections use 2.0 or 2.1; existing data, identities, and hashes remain unchanged.                  |
 
 Cardinalities of existing stored relationships remain. Additional evaluation rules cover nonempty current sets, consistent current subtrees, combined cycles and correction paths without overlap. No new edges or automatic successor assignments are created. State ownership is catalogue metadata; the completion graph and correction key map are computed views.
 
@@ -176,3 +176,9 @@ The [integration tests](../../../tests/integration/test_neo4j_transactions.py) u
 This establishes the technical transaction framework. The complete domain rules package, trusted identity and approval checks, integration of all write paths, and outbox delivery remain integration work. Existing data additionally require verified legacy-profile resolvers and a concrete migration; no such migration was performed here.
 
 Additional validation recorded on 2026-09-12: **175 tests passed**, including **17 real Neo4j transaction tests** and 18 coordinator unit tests. The local run uses Neo4j Community 2026.08.1, Python driver 6.3.0, and portable Java 21. All 20 German/English pairs pass structural checks; identifiers, tables, and local links are checked. The new GitHub Actions job is configured but has not yet run on GitHub for this working state. Server or power failure was not tested.
+
+## Additive correction-value profile 2.1 on 2026-09-26
+
+Correction-value profile `2.1` adds `REMOVAL` and the exact `{ "valueType": "ABSENT" }` marker. This marker is not a `TypedValue` and may appear only in correction-value maps: as the previous value for `ADDITION`, and as the corrected value for `REMOVAL`. `NULL` remains a present domain value. When rebuilding `HistoryView`, `ABSENT` removes the addressed property or complete relationship entry; the complete view must then satisfy the snapshot profile again. Existing profile `2.0` corrections are not rewritten.
+
+New snapshot profile `2.1` requires every mandatory property of the historized entity type and every mandatory property of historized relationships. Sorting and hashing remain canonically compatible with `2.0`. Already stored profile `2.0` snapshots continue to be read only through their resolver and are neither completed nor rehashed.

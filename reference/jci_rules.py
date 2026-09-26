@@ -10,6 +10,7 @@ locking remain caller responsibilities. A RuleViolation is never success.
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 import hashlib
 import json
 import re
@@ -17,6 +18,9 @@ from typing import Any, Callable, Mapping
 from uuid import UUID
 
 PROFILE = "2.0"
+CORRECTION_PROFILE = "2.1"
+SNAPSHOT_PROFILE = "2.1"
+ABSENT_VALUE = {"valueType": "ABSENT"}
 RETIRED = frozenset({"REPLACED", "REVOKED"})
 ENTITY_TYPES = frozenset({
     "PiH", "CiV", "RaN", "SYNC", "PiF2", "PiF1s", "PiF1t", "PiF1o",
@@ -36,6 +40,10 @@ class RuleViolation(ValueError):
 
 class LegacyProfileRequired(RuleViolation):
     """An old profile needs an explicit, independently reviewed resolver."""
+
+
+class UnevaluableRule(RuleViolation):
+    """A general RaN expression cannot be evaluated unambiguously."""
 
 
 # (source entityType, relationshipType, target entityType) -> owner endpoint(s).
@@ -160,6 +168,14 @@ def revision_plan(entities: Mapping[str, Mapping], edges=(), changed_properties=
             raise RuleViolation("unresolved relationship endpoint") from None
         for side in revision_owners(source["entityType"], edge.relationship,
                                     target["entityType"]):
+            # A rule may be connected to an already terminal implementation
+            # fact without reopening or revising that fact. The RaN still owns
+            # and historizes its outgoing GOVERNS state. While a target remains
+            # mutable, both endpoints continue to own the structural edge.
+            if (edge.relationship == "GOVERNS" and side == "target"
+                    and (target["entityType"] in IMMUTABLE
+                         or target.get("status") in TERMINAL)):
+                continue
             if (edge.relationship == "CHANGED_BY" and edge.target not in new_ids
                     and side == "target"):
                 if (edge.operation != "CONNECT" or edge.source not in new_ids
@@ -192,6 +208,23 @@ def revision_plan(entities: Mapping[str, Mapping], edges=(), changed_properties=
 
 
 TERMINAL = {"ACHIEVED", "COMPLETED", "REPLACED", "REVOKED", "RECORDED", "RESOLVED"}
+
+
+def valid_relationship_cardinality(*, status: str, count: int,
+                                   minimum: int = 0,
+                                   maximum: int | None = None) -> bool:
+    """Apply stored-graph maxima and status-dependent relationship minima.
+
+    DRAFT relaxes only the minimum to zero so entities can be assembled across
+    single-target requests. All maxima remain binding. Leaving DRAFT requires
+    the published minimum; immutable entities never receive this relaxation.
+    """
+    if (type(count) is not int or count < 0 or type(minimum) is not int
+            or minimum < 0 or (maximum is not None
+                               and (type(maximum) is not int or maximum < minimum))):
+        raise RuleViolation("invalid cardinality input")
+    required = 0 if status == "DRAFT" else minimum
+    return count >= required and (maximum is None or count <= maximum)
 
 
 def may_transition(entity_type: str, source: str | None, target: str) -> bool:
@@ -419,17 +452,30 @@ def valid_correction_value_maps(
     corrected_fields: list[str],
     previous_values: dict[str, dict[str, object]],
     corrected_values: dict[str, dict[str, object]],
+    value_profile: str = PROFILE,
 ) -> bool:
-    """Check exact field binding and TypedValues; actual path absence for ADDITION requires snapshot resolution."""
+    """Check exact field binding; profile 2.1 represents absence explicitly."""
     try:
         for field_path in corrected_fields:
             parse_pointer(field_path)
         for value in list(previous_values.values()) + list(corrected_values.values()):
-            validate_typed_value(value)
+            validate_correction_value(value, profile=value_profile)
     except RuleViolation:
         return False
     field_set = set(corrected_fields)
     if set(previous_values) != field_set or set(corrected_values) != field_set:
+        return False
+    if value_profile == CORRECTION_PROFILE:
+        if correction_type == "ADDITION":
+            return all(is_absent(value) for value in previous_values.values()) and all(
+                not is_absent(value) for value in corrected_values.values())
+        if correction_type == "REMOVAL":
+            return all(not is_absent(value) for value in previous_values.values()) and all(
+                is_absent(value) for value in corrected_values.values())
+        return correction_type in {"CORRECTION", "CLARIFICATION"} and all(
+            not is_absent(value)
+            for value in list(previous_values.values()) + list(corrected_values.values()))
+    if value_profile != PROFILE:
         return False
     if correction_type == "ADDITION":
         return all(
@@ -461,6 +507,196 @@ def valid_civ_model(
     if value_id in (informed_by_ids or []):
         return False
     return all(set(holders) == {holder_id} for holders in (pif2_holder_sets or []))
+
+
+RULE_CONDITION_PROFILE = "2.0"
+RULE_IDENTITY_PROPERTIES = frozenset({"id", "entityType", "createdAt", "updatedAt", "revision"})
+_MISSING = object()
+
+
+def _rule_value(typed):
+    validate_typed_value(typed)
+    return typed["valueType"], typed["value"]
+
+
+def _strict_equal(actual, kind, expected):
+    checks = {
+        "NULL": actual is None,
+        "BOOLEAN": type(actual) is bool,
+        "INTEGER": type(actual) is int,
+        "DECIMAL": isinstance(actual, str) and bool(DECIMAL_PATTERN.fullmatch(actual)),
+        "STRING": isinstance(actual, str),
+        "DATE": isinstance(actual, str),
+        "DATETIME": isinstance(actual, str),
+        "OBJECT": isinstance(actual, dict),
+        "ARRAY": isinstance(actual, list),
+    }
+    return checks.get(kind, False) and actual == expected
+
+
+def _rule_predicate(actual, operator, typed):
+    if operator == "EXISTS":
+        return actual is not _MISSING
+    if operator == "NOT_EXISTS":
+        return actual is _MISSING
+    if actual is _MISSING:
+        return None
+    kind, expected = _rule_value(typed)
+    if operator in {"EQUALS", "NOT_EQUALS"}:
+        equal = _strict_equal(actual, kind, expected)
+        return equal if operator == "EQUALS" else not equal
+    if operator in {"IN", "NOT_IN"}:
+        if kind != "ARRAY" or not all(type(item) in {type(None), bool, int, str}
+                                      for item in expected):
+            raise UnevaluableRule("IN requires a scalar ARRAY")
+        contained = any(type(actual) is type(item) and actual == item for item in expected)
+        return contained if operator == "IN" else not contained
+    if operator == "CONTAINS":
+        if kind != "STRING" or not isinstance(actual, str):
+            raise UnevaluableRule("CONTAINS requires strings")
+        return expected in actual
+    if operator == "MATCHES":
+        if kind != "STRING" or not isinstance(actual, str):
+            raise UnevaluableRule("MATCHES requires strings")
+        try:
+            return re.fullmatch(expected, actual) is not None
+        except re.error as error:
+            raise UnevaluableRule("invalid MATCHES expression") from error
+    if operator in {"LESS_THAN", "LESS_OR_EQUAL", "GREATER_THAN", "GREATER_OR_EQUAL"}:
+        if kind == "INTEGER" and type(actual) is int:
+            left, right = actual, expected
+        elif kind == "DECIMAL" and isinstance(actual, str):
+            try:
+                if not DECIMAL_PATTERN.fullmatch(actual):
+                    raise InvalidOperation
+                left, right = Decimal(actual), Decimal(expected)
+            except InvalidOperation as error:
+                raise UnevaluableRule("invalid DECIMAL comparison") from error
+        elif kind in {"DATE", "DATETIME"} and isinstance(actual, str):
+            try:
+                left = datetime.fromisoformat(actual.replace("Z", "+00:00"))
+                right = datetime.fromisoformat(expected.replace("Z", "+00:00"))
+            except ValueError as error:
+                raise UnevaluableRule("invalid temporal comparison") from error
+        else:
+            raise UnevaluableRule("ordering requires identical ordered types")
+        return {"LESS_THAN": left < right, "LESS_OR_EQUAL": left <= right,
+                "GREATER_THAN": left > right, "GREATER_OR_EQUAL": left >= right}[operator]
+    raise UnevaluableRule("unknown rule operator")
+
+
+def evaluate_rule_expression(expression: Mapping, *, target_id: str,
+                             entities: Mapping[str, Mapping], edges) -> bool:
+    """Evaluate deterministic general RaN condition profile 2.0.
+
+    Each path step states relationship, direction, and reached entity type.
+    Parallel duplicate edges, missing entities, invalid contexts, schema-unknown
+    properties, unsupported types, or hidden ambiguity fail as UNEVALUABLE.
+    """
+    if not isinstance(expression, Mapping) or set(expression) != {
+            "profileVersion", "combiner", "clauses"}:
+        raise UnevaluableRule("invalid RuleExpression envelope")
+    if expression["profileVersion"] != RULE_CONDITION_PROFILE:
+        raise UnevaluableRule("unsupported general condition profile")
+    if expression["combiner"] not in {"ALL", "ANY"}:
+        raise UnevaluableRule("invalid condition combiner")
+    clauses = expression["clauses"]
+    if not isinstance(clauses, list) or not clauses:
+        raise UnevaluableRule("condition requires clauses")
+    if target_id not in entities:
+        raise UnevaluableRule("missing governed target")
+    edge_rows, seen_edges = [], set()
+    for edge in edges:
+        if isinstance(edge, RelationshipChange):
+            source, relation, target = edge.source, edge.relationship, edge.target
+        elif isinstance(edge, Mapping) and set(edge) >= {"source", "relationship", "target"}:
+            source, relation, target = edge["source"], edge["relationship"], edge["target"]
+        else:
+            raise UnevaluableRule("invalid graph edge")
+        identity = source, relation, target
+        if identity in seen_edges:
+            raise UnevaluableRule("parallel duplicate relationship")
+        seen_edges.add(identity)
+        edge_rows.append(identity)
+
+    results = []
+    for clause in clauses:
+        required = {"path", "operator", "quantifier", "missingResult"}
+        operator = clause.get("operator") if isinstance(clause, Mapping) else None
+        if operator not in {"EXISTS", "NOT_EXISTS"}:
+            required.add("value")
+        if not isinstance(clause, Mapping) or set(clause) != required:
+            raise UnevaluableRule("invalid rule clause")
+        quantifier, missing_result = clause["quantifier"], clause["missingResult"]
+        if quantifier not in {"EXACTLY_ONE", "ANY", "ALL"}:
+            raise UnevaluableRule("invalid path quantifier")
+        if missing_result not in {"TRUE", "FALSE", "UNEVALUABLE"}:
+            raise UnevaluableRule("invalid missingResult")
+        if ((operator == "EXISTS" and missing_result != "FALSE")
+                or (operator == "NOT_EXISTS" and missing_result != "TRUE")):
+            raise UnevaluableRule("existence operator has non-canonical missingResult")
+        path = clause["path"]
+        if not isinstance(path, Mapping) or set(path) != {"origin", "steps", "property"}:
+            raise UnevaluableRule("invalid rule path")
+        if path["origin"] != "TARGET" or not isinstance(path["steps"], list) or len(path["steps"]) > 8:
+            raise UnevaluableRule("invalid path origin or length")
+        branches = [target_id]
+        terminal_type = entities[target_id].get("entityType")
+        for step in path["steps"]:
+            if (not isinstance(step, Mapping)
+                    or set(step) != {"relationshipType", "direction", "entityType"}
+                    or step["direction"] not in {"OUTGOING", "INCOMING"}
+                    or step["entityType"] not in ENTITY_TYPES):
+                raise UnevaluableRule("invalid path step")
+            next_branches = []
+            for branch in branches:
+                if branch is _MISSING:
+                    next_branches.append(_MISSING)
+                    continue
+                matches = []
+                for source, relation, target in edge_rows:
+                    if relation != step["relationshipType"]:
+                        continue
+                    if step["direction"] == "OUTGOING" and source == branch:
+                        matches.append(target)
+                    elif step["direction"] == "INCOMING" and target == branch:
+                        matches.append(source)
+                if not matches:
+                    next_branches.append(_MISSING)
+                    continue
+                for reached in matches:
+                    entity = entities.get(reached)
+                    if entity is None or entity.get("entityType") != step["entityType"]:
+                        raise UnevaluableRule("path endpoint type mismatch")
+                    current_type = entities[branch].get("entityType")
+                    context = ((current_type, step["relationshipType"], step["entityType"])
+                               if step["direction"] == "OUTGOING"
+                               else (step["entityType"], step["relationshipType"], current_type))
+                    try:
+                        revision_owners(*context)
+                    except RuleViolation as error:
+                        raise UnevaluableRule("uncataloged path relationship") from error
+                    next_branches.append(reached)
+            branches, terminal_type = next_branches, step["entityType"]
+        property_name = path["property"]
+        allowed_properties = SNAPSHOT_PROPERTIES.get(terminal_type, frozenset()) | RULE_IDENTITY_PROPERTIES
+        if property_name not in allowed_properties:
+            raise UnevaluableRule("property is not cataloged for terminal type")
+        outcomes = [(_MISSING if branch is _MISSING
+                     else entities[branch].get(property_name, _MISSING)) for branch in branches]
+        if quantifier == "EXACTLY_ONE" and len(outcomes) != 1:
+            raise UnevaluableRule("EXACTLY_ONE path has multiple outcomes")
+        predicates = []
+        for actual in outcomes:
+            predicate = _rule_predicate(actual, operator, clause.get("value"))
+            if predicate is None:
+                if missing_result == "UNEVALUABLE":
+                    raise UnevaluableRule("missing path value")
+                predicate = missing_result == "TRUE"
+            predicates.append(predicate)
+        results.append(predicates[0] if quantifier == "EXACTLY_ONE"
+                       else any(predicates) if quantifier == "ANY" else all(predicates))
+    return all(results) if expression["combiner"] == "ALL" else any(results)
 
 
 RAN_GOVERNED_TYPES = {
@@ -805,9 +1041,38 @@ SNAPSHOT_PROPERTIES = {
     kind: COMMON_SNAPSHOT_PROPERTIES | frozenset(fields.split())
     for kind, fields in TYPE_PROPERTIES.items()
 }
+REQUIRED_SNAPSHOT_PROPERTIES = {
+    "CiV": "name status notCiV selfCiV toServeCiV",
+    "RaN": "name status ruleType effect statement decisionKey scopeType governedTypes condition priority validFrom",
+    "SYNC": "name status version definition validFrom",
+    "PiF2": "name status targetState horizonStart contributionMode",
+    "PiF1s": "name status targetState horizonStart contributionMode",
+    "PiF1t": "name status targetState horizonStart contributionMode",
+    "PiF1o": "name status targetState horizonStart",
+    "RoFOrg": "name status legalName orgType",
+    "RoFOrgRelationship": "name status type validFrom",
+    "RoFTeam": "name status teamType validFrom",
+    "RoFTeamMember": "name status memberType displayName",
+    "RoFRole": "name status roleName responsibility",
+    "RoleAssignment": "name status validFrom",
+    "Task": "name status taskKind",
+    "SuccessCriterion": "name status criterion measurementType requirementLevel evaluationMode operator targetValue",
+    "Result": "name status resultType value producedAt",
+    "Verification": "name status method outcome verifiedAt evaluatedResultRevision checkedCriterionRevision",
+    "Evidence": "name status evidenceType reference capturedAt",
+    "ERoFObject": "name status objectType validFrom",
+    "RaNConflict": "name status conflictKey conflictType detectedAt reason",
+}
+REQUIRED_SNAPSHOT_PROPERTIES = {
+    kind: frozenset(fields.split()) for kind, fields in REQUIRED_SNAPSHOT_PROPERTIES.items()
+}
 RELATIONSHIP_PROPERTIES = {"HAS_MEMBER": frozenset({"validFrom", "validUntil"}),
                            "HAS_ROLE": frozenset({"validFrom", "validUntil"}),
                            "APPROVED_BY": frozenset({"receiptId", "decidedAt", "requestHash", "approvalHash"})}
+REQUIRED_RELATIONSHIP_PROPERTIES = {
+    "HAS_MEMBER": frozenset({"validFrom"}),
+    "HAS_ROLE": frozenset({"validFrom"}),
+}
 DECIMAL_PATTERN = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]*[1-9])?\Z")
 NULL_VALUE = {"valueType": "NULL", "value": None}
 
@@ -920,6 +1185,18 @@ def validate_typed_value(typed: Mapping) -> None:
         nested(value)
 
 
+def is_absent(value: Mapping) -> bool:
+    return isinstance(value, dict) and value == ABSENT_VALUE
+
+
+def validate_correction_value(value: Mapping, *, profile: str) -> None:
+    if profile == CORRECTION_PROFILE and is_absent(value):
+        return
+    if profile not in {PROFILE, CORRECTION_PROFILE}:
+        raise LegacyProfileRequired("explicit resolver required for correction " + profile)
+    validate_typed_value(value)
+
+
 def parse_pointer(pointer: str) -> tuple[str, ...]:
     """RFC 6901 JSON-string form; decode segments, never percent-decode."""
     if not isinstance(pointer, str) or not pointer.startswith("/"):
@@ -957,8 +1234,8 @@ def relationship_key(snapshot: Mapping) -> str:
     return f"{direction}:{relation}:{identity}"
 
 
-def parse_correction_path(pointer: str, entity_type: str, *, profile=PROFILE):
-    if profile != PROFILE:
+def parse_correction_path(pointer: str, entity_type: str, *, profile=SNAPSHOT_PROFILE):
+    if profile not in {PROFILE, SNAPSHOT_PROFILE}:
         raise LegacyProfileRequired("explicit resolver required for snapshot " + profile)
     parts = parse_pointer(pointer)
     if encode_pointer(parts) != pointer:
@@ -985,8 +1262,8 @@ def parse_correction_path(pointer: str, entity_type: str, *, profile=PROFILE):
     return parts
 
 
-def validate_snapshot(snapshot: Mapping, *, profile=PROFILE) -> None:
-    if profile != PROFILE:
+def validate_snapshot(snapshot: Mapping, *, profile=SNAPSHOT_PROFILE) -> None:
+    if profile not in {PROFILE, SNAPSHOT_PROFILE}:
         raise LegacyProfileRequired("legacy snapshot requires its own resolver")
     if set(snapshot) != {"stateData", "relationshipData"}:
         raise RuleViolation("snapshot payload must have exactly stateData/relationshipData")
@@ -998,6 +1275,9 @@ def validate_snapshot(snapshot: Mapping, *, profile=PROFILE) -> None:
         raise RuleViolation("invalid snapshot type/revision")
     if not isinstance(state["properties"], dict):
         raise RuleViolation("invalid snapshot properties")
+    if (profile == SNAPSHOT_PROFILE
+            and not REQUIRED_SNAPSHOT_PROPERTIES[kind] <= state["properties"].keys()):
+        raise RuleViolation("missing required snapshot property")
     for name, value in state["properties"].items():
         if name not in SNAPSHOT_PROPERTIES[kind]:
             raise RuleViolation("unknown snapshot property")
@@ -1019,9 +1299,12 @@ def validate_snapshot(snapshot: Mapping, *, profile=PROFILE) -> None:
                    else (edge["otherEntityType"], edge["relationshipType"], kind))
         owned_side = "source" if edge["direction"] == "OUTGOING" else "target"
         if owned_side not in revision_owners(*context):
-            raise RuleViolation("reference-only edge is not part of snapshot profile 2.0")
+            raise RuleViolation("reference-only edge is not part of the selected snapshot profile")
         if not isinstance(edge["properties"], dict):
             raise RuleViolation("invalid relationship properties")
+        if (profile == SNAPSHOT_PROFILE and not REQUIRED_RELATIONSHIP_PROPERTIES.get(
+                edge["relationshipType"], frozenset()) <= edge["properties"].keys()):
+            raise RuleViolation("missing required relationship property")
         for name, value in edge["properties"].items():
             if name not in RELATIONSHIP_PROPERTIES.get(edge["relationshipType"], ()):
                 raise RuleViolation("unknown relationship property")
@@ -1037,7 +1320,7 @@ def _sorted_snapshot(snapshot):
     return output
 
 
-def history_hash(snapshot: Mapping, *, profile=PROFILE) -> str:
+def history_hash(snapshot: Mapping, *, profile=SNAPSHOT_PROFILE) -> str:
     validate_snapshot(snapshot, profile=profile)
     return hashlib.sha256(canonical_json(_sorted_snapshot(snapshot))).hexdigest()
 
@@ -1088,10 +1371,13 @@ def _active_corrections(corrections, pih, entity_type):
         raise RuleViolation("duplicate correction ID")
     superseded = set()
     for record in records:
-        if record.pih != pih or record.value_profile != PROFILE:
+        if record.pih != pih or record.value_profile not in {PROFILE, CORRECTION_PROFILE}:
             raise LegacyProfileRequired("mixed history/legacy correction profiles")
         validate_typed_value({"valueType": "DATETIME", "value": record.corrected_at})
-        if record.correction_type not in {"ADDITION", "CORRECTION", "CLARIFICATION"}:
+        allowed_types = ({"ADDITION", "CORRECTION", "CLARIFICATION", "REMOVAL"}
+                         if record.value_profile == CORRECTION_PROFILE
+                         else {"ADDITION", "CORRECTION", "CLARIFICATION"})
+        if record.correction_type not in allowed_types:
             raise RuleViolation("unknown stored correction type")
         if not re.fullmatch("[0-9a-f]{64}", record.base_hash):
             raise RuleViolation("invalid stored baseHistoryViewHash")
@@ -1099,7 +1385,14 @@ def _active_corrections(corrections, pih, entity_type):
         if set(record.previous) != set(record.fields) or set(record.corrected) != set(record.fields):
             raise RuleViolation("correction map keys differ from correctedFields")
         for value in list(record.previous.values()) + list(record.corrected.values()):
-            validate_typed_value(value)
+            validate_correction_value(value, profile=record.value_profile)
+        if not valid_correction_value_maps(
+                correction_type=record.correction_type,
+                corrected_fields=list(record.fields),
+                previous_values=dict(record.previous),
+                corrected_values=dict(record.corrected),
+                value_profile=record.value_profile):
+            raise RuleViolation("stored correction values do not match correction type/profile")
         if record.supersedes is not None:
             predecessor = by_id.get(record.supersedes)
             if predecessor is None or predecessor.id in superseded:
@@ -1111,6 +1404,8 @@ def _active_corrections(corrections, pih, entity_type):
             for pointer in predecessor.fields:
                 parts = parse_correction_path(pointer, entity_type)
                 if (len(parts) == 2
+                        and not is_absent(record.corrected.get(pointer))
+                        and not is_absent(predecessor.corrected.get(pointer))
                         and _relationship_correction_identity(parts, record.corrected.get(pointer))
                         != _relationship_correction_identity(parts, predecessor.corrected.get(pointer))):
                     raise RuleViolation("relationship identity cannot change across supersession")
@@ -1158,7 +1453,11 @@ def _overlay(view, parts, typed):
         if part not in parent or not isinstance(parent[part], dict):
             raise RuleViolation("missing correction parent")
         parent = parent[part]
-    if len(parts) == 2:
+    if is_absent(typed):
+        if parts[-1] not in parent:
+            raise RuleViolation("cannot remove an absent historical value")
+        del parent[parts[-1]]
+    elif len(parts) == 2:
         identity = _relationship_correction_identity(parts, typed)
         if (parts[-1] in parent
                 and identity != _relationship_correction_identity(
@@ -1169,7 +1468,7 @@ def _overlay(view, parts, typed):
         parent[parts[-1]] = deepcopy(typed)
 
 
-def build_history_view(snapshot, corrections=(), *, pih, snapshot_profile=PROFILE,
+def build_history_view(snapshot, corrections=(), *, pih, snapshot_profile=SNAPSHOT_PROFILE,
                        legacy_resolvers: Mapping[str, Callable] | None = None):
     """Absolute overlay, never reapply old previousValue to the original PiH.
 
@@ -1177,12 +1476,12 @@ def build_history_view(snapshot, corrections=(), *, pih, snapshot_profile=PROFIL
     No default handler, alias rewrite or hash reinterpretation is supplied.
     """
     corrections = list(corrections)
-    if snapshot_profile != PROFILE:
+    if snapshot_profile not in {PROFILE, SNAPSHOT_PROFILE}:
         resolver = (legacy_resolvers or {}).get(snapshot_profile)
         if resolver is None:
             raise LegacyProfileRequired("explicit legacy resolver required")
         return resolver(deepcopy(snapshot), deepcopy(corrections), pih=pih)
-    validate_snapshot(snapshot)
+    validate_snapshot(snapshot, profile=snapshot_profile)
     entity_type = snapshot["stateData"]["entityType"]
     active = _active_corrections(corrections, pih, entity_type)
     view = _projection(snapshot)
@@ -1191,18 +1490,18 @@ def build_history_view(snapshot, corrections=(), *, pih, snapshot_profile=PROFIL
             _overlay(view, parse_correction_path(pointer, entity_type), record.corrected[pointer])
     output = {"stateData": view["stateData"],
               "relationshipData": list(view["relationshipData"].values())}
-    validate_snapshot(output)
+    validate_snapshot(output, profile=snapshot_profile)
     return _sorted_snapshot(output)
 
 
 def validate_correction(snapshot, existing, candidate: HistoricalCorrectionRecord,
-                        *, pih, expected_hash: str, snapshot_profile=PROFILE):
+                        *, pih, expected_hash: str, snapshot_profile=SNAPSHOT_PROFILE):
     """Return proposed effective view; callers must gate validation and commit."""
-    if snapshot_profile != PROFILE or candidate.value_profile != PROFILE:
+    if snapshot_profile not in {PROFILE, SNAPSHOT_PROFILE} or candidate.value_profile not in {PROFILE, CORRECTION_PROFILE}:
         raise LegacyProfileRequired("new correction requires matching reviewed profile")
     existing = list(existing)
-    before = build_history_view(snapshot, existing, pih=pih)
-    actual_hash = history_hash(before)
+    before = build_history_view(snapshot, existing, pih=pih, snapshot_profile=snapshot_profile)
+    actual_hash = history_hash(before, profile=snapshot_profile)
     if actual_hash != expected_hash or candidate.base_hash != actual_hash:
         raise RuleViolation("stale HistoryView hash")
     if candidate.pih != pih or candidate.id in {record.id for record in existing}:
@@ -1211,8 +1510,18 @@ def validate_correction(snapshot, existing, candidate: HistoricalCorrectionRecor
     _field_set(candidate.fields, entity_type)
     if set(candidate.previous) != set(candidate.fields) or set(candidate.corrected) != set(candidate.fields):
         raise RuleViolation("correction map keys differ from fields")
-    if candidate.correction_type not in {"ADDITION", "CORRECTION", "CLARIFICATION"}:
+    allowed_types = ({"ADDITION", "CORRECTION", "CLARIFICATION", "REMOVAL"}
+                     if candidate.value_profile == CORRECTION_PROFILE
+                     else {"ADDITION", "CORRECTION", "CLARIFICATION"})
+    if candidate.correction_type not in allowed_types:
         raise RuleViolation("unknown correction type")
+    if not valid_correction_value_maps(
+            correction_type=candidate.correction_type,
+            corrected_fields=list(candidate.fields),
+            previous_values=dict(candidate.previous),
+            corrected_values=dict(candidate.corrected),
+            value_profile=candidate.value_profile):
+        raise RuleViolation("correction values do not match correction type/profile")
     active = _active_corrections(existing, pih, entity_type)
     overlaps = [record for record in active if any(
         paths_overlap(p, q) for p in candidate.fields for q in record.fields)]
@@ -1226,12 +1535,14 @@ def validate_correction(snapshot, existing, candidate: HistoricalCorrectionRecor
     view = _projection(before)
     for pointer in candidate.fields:
         previous, corrected = candidate.previous[pointer], candidate.corrected[pointer]
-        validate_typed_value(previous)
-        validate_typed_value(corrected)
+        validate_correction_value(previous, profile=candidate.value_profile)
+        validate_correction_value(corrected, profile=candidate.value_profile)
         parts = parse_correction_path(pointer, entity_type)
         exists, old = _lookup(view, parts)
         if candidate.correction_type == "ADDITION":
-            if exists or previous != NULL_VALUE:
+            absence_marker = (ABSENT_VALUE if candidate.value_profile == CORRECTION_PROFILE
+                              else NULL_VALUE)
+            if exists or previous != absence_marker:
                 raise RuleViolation("ADDITION requires absence, not an existing NULL")
         else:
             if not exists:
@@ -1239,7 +1550,7 @@ def validate_correction(snapshot, existing, candidate: HistoricalCorrectionRecor
             old_typed = {"valueType": "OBJECT", "value": old} if len(parts) == 2 else old
             if canonical_json(previous) != canonical_json(old_typed):
                 raise RuleViolation("previousValue differs from effective history")
-            if (len(parts) == 2
+            if (len(parts) == 2 and not is_absent(corrected)
                     and _relationship_correction_identity(parts, corrected)
                     != _relationship_correction_identity(parts, old_typed)):
                 raise RuleViolation("relationship identity differs from effective history")

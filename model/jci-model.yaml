@@ -25,6 +25,68 @@ conventions:
     - ERoF
   technicalNonEntity:
     - SyncRun
+  historicalCorrectionProfiles:
+    "2.0":
+      correctionTypes: [ADDITION, CORRECTION, CLARIFICATION]
+      absenceRepresentation: "TypedValue NULL only for the previous value of ADDITION"
+      removalSupported: false
+    "2.1":
+      correctionTypes: [ADDITION, CORRECTION, CLARIFICATION, REMOVAL]
+      absenceMarker: {valueType: ABSENT}
+      absenceMarkerScope: TypedValueMap
+      removalSupported: true
+      nullRemainsPresentValue: true
+  snapshotProfiles:
+    "2.0":
+      mode: legacyReadOnly
+      hashCompatibility: preserved
+    "2.1":
+      mode: currentWrite
+      requiresCompleteEntityProperties: true
+      requiresOwnedRelationshipProperties: true
+      canonicalHashAlgorithm: "2.0"
+  conditionalRelationshipOwnership:
+    GOVERNS:
+      source: always
+      target: mutableOnly
+      terminalTarget: revisionNeutral
+  relationshipCardinalityPhases:
+    storedDraft:
+      minimumOverride: 0
+      maximaRemainBinding: true
+      scope: domainRelationshipsAtDraftEndpoint
+    activation:
+      useCatalogMinima: true
+      validateCompleteCandidateAtomically: true
+    excludedFromDraftRelaxation:
+      - immutableEntities
+      - immediateTerminalCreation
+      - bootstrap
+  ruleConditionProfiles:
+    general:
+      profileVersion: "2.0"
+      origin: TARGET
+      maximumSteps: 8
+      explicitDirection: true
+      explicitEndpointType: true
+      quantifiers: [EXACTLY_ONE, ANY, ALL]
+      missingResults: [TRUE, FALSE, UNEVALUABLE]
+      duplicateParallelEdges: UNEVALUABLE
+    approval:
+      profileVersion: "1.0"
+      selectedBy: approvalPolicy
+      pathShape: directTwoSegmentScalar
+  projectionValidation:
+    relationshipContexts:
+      source: canonicalRelationshipCatalog
+      completenessRequired: true
+      packageChecksumBound: true
+      validatesRelationshipProperties: true
+    endpointCardinalities:
+      source: canonicalRelationshipCatalog
+      completenessRequired: true
+      countMode: rawEdges
+      draftMinimumExplicit: true
 
 commonProperties:
   - name: id
@@ -503,6 +565,10 @@ coreElements:
     storage: GraphObject
     immutable: true
     requiredProperties: [correctionType, reason, correctedAt, valueSchemaVersion, baseHistoryViewHash, correctedFields, previousValue, correctedValue]
+    propertyConstraints:
+      valueSchemaVersion: ["2.0", "2.1"]
+      previousValue: TypedValueMap
+      correctedValue: TypedValueMap
     requiredRelationships:
       - relationship: CORRECTS
         target: PiH
@@ -706,6 +772,8 @@ lifecycle:
   historicalCorrection:
     - "Do not modify PiH."
     - "Create HistoricalCorrection with CORRECTS to the target PiH."
+    - "Profile 2.1 uses ABSENT only for ADDITION.previousValue or REMOVAL.correctedValue."
+    - "Revalidate the reconstructed HistoryView against the snapshot profile."
 
 references:
   canonicalSpecification: "docs/JCI_CONTEXT.md"
