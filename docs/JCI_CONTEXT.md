@@ -494,6 +494,10 @@ Für neue Historisierung gilt `snapshotSchemaVersion = "2.1"`: `stateData.proper
 
 **Erstellungsbeispiel:** Ein neuer Task beginnt mit Revision `1` ohne eigenes `PiH`. Seine ausdrückliche Zuordnung zu einem vorhandenen aktiven `PiF1o` verändert dessen eigenen `DECOMPOSES_INTO`-Zustand; das Ziel erhält deshalb im selben Auftrag genau eine Revisionserhöhung und ein `PiH`. Die referenzierte Erstellungsrolle bleibt unverändert.
 
+**Beispiel für ein terminales `GOVERNS`-Ziel:** Ein `COMPLETED`-Task besitzt Revision `4`. Wird ein bestehendes `RaN` in Revision `7` durch eine neue `GOVERNS`-Kante mit diesem Task verbunden, entsteht bei erfolgreichem Commit Revision `8` des `RaN` samt `PiH` seiner Revision `7`. Der Task bleibt unverändert in Revision `4` und erhält kein neues `PiH`; insbesondere wird er nicht wieder geöffnet. Die neue Kante bleibt über den revisionierten Beziehungszustand des `RaN` und die erhöhte `graphEpoch` nachvollziehbar.
+
+**Beispiel für Snapshot-Vollständigkeit:** Soll der Zustand eines Tasks historisiert werden, ist ein Snapshot des Profils `2.1`, dem etwa das gemeinsame Pflichtfeld `status` oder das typspezifische Pflichtfeld `taskKind` fehlt, ungültig. `SYNC` weist den gesamten Commit ab und speichert weder ein unvollständiges `PiH` noch dessen Hash. Erst ein Snapshot mit allen für den abgelösten Task erforderlichen Eigenschaften und seinem vollständig zugeordneten Beziehungszustand darf übernommen werden.
+
 #### 2.2.9 Korrekturpfade sowie kanonische Hash- und Korrekturwertprofile
 
 Neue Snapshots verwenden `snapshotSchemaVersion = "2.1"`. Historische Korrekturen verwenden entweder das unveränderte Korrekturwertprofil `valueSchemaVersion = "2.0"` oder für ausdrückliches Ergänzen und Entfernen das additive Profil `valueSchemaVersion = "2.1"`. Resolver und Hashalgorithmus werden anhand dieser Versionen gewählt. Snapshotprofil `2.1` verwendet weiterhin die kanonische Sortierung und Hashbildung aus `2.0`, ergänzt aber die vollständige Pflichtfeldprüfung. Unbekannte oder nicht zusammenpassende Profile erzeugen `CONFLICT`; es gibt keine stillschweigende Umdeutung. Ältere `PiH`, Korrekturen und Hashes bleiben unverändert. Ein Altdatenresolver muss das tatsächlich verwendete frühere Profil nachweisen; die erhaltenen Austauschschemas allein definieren noch keinen solchen Resolver.
@@ -936,6 +940,19 @@ HistoricalCorrection
 
 Das ursprüngliche `PiH` zeigt weiterhin die zuerst gespeicherte historische Dokumentation. Für die fachliche Auswertung wird es gemeinsam mit der nicht abgelösten `HistoricalCorrection` gelesen. Eine weitere wirksame Korrektur darf dasselbe Beziehungsfeld nicht parallel mit einem anderen Wert belegen; sie muss die bestehende Korrektur ausdrücklich ablösen und gegen die inzwischen neue `HistoryView` geprüft werden. Ergibt sich daraus eine notwendige Änderung an Annas aktuellem Zustand, wird diese unabhängig davon durch ein neues `ChangeEvent` und `SyncEvent` verarbeitet.
 
+Enthält ein `PiH` dagegen fälschlich die optionale Beschreibung „vorläufiger Datensatz“, wird die Angabe mit Korrekturwertprofil `2.1` ausdrücklich entfernt:
+
+```text
+HistoricalCorrection
+  ├── correctionType: REMOVAL
+  ├── valueSchemaVersion: 2.1
+  ├── correctedFields: /stateData/properties/description
+  ├── previousValue: { valueType: STRING, value: "vorläufiger Datensatz" }
+  └── correctedValue: { valueType: ABSENT }
+```
+
+Nach `SUCCESS` fehlt `description` in der wirksamen `HistoryView`, während das ursprüngliche `PiH` unverändert bleibt. Ein vorhandener `{ valueType: NULL }`-Wert würde die Eigenschaft nicht entfernen. Das Beispiel verwendet bewusst ein optionales Feld, damit die rekonstruierte Sicht weiterhin das Snapshotprofil erfüllt.
+
 ---
 
 ## 4. Core Influential Values – CiV
@@ -1195,34 +1212,48 @@ Ein `RaNConflict` dokumentiert die beteiligten Regeln, betroffenen Entitäten un
 
 ### 6.5 Beispiel
 
-Eine Regel begrenzt, welche Rollen ein bestimmtes System verändern dürfen:
+Eine allgemeine Regel verlangt für die Aktivierung eines Service-Tasks genau ein verantwortliches Team mit dem Namen „Kundenservice“:
 
 ```text
-RaN = Nur autorisierte Rollen dürfen das Produktivsystem verändern.
-  effect = PROHIBIT
-  decisionKey = ERoFObject.action.MODIFY
+RaN = Service-Tasks benötigen das verantwortliche Team Kundenservice.
+  effect = REQUIRE
+  decisionKey = Task.status.ACTIVE
   scopeType = ORGANIZATION
-  governedTypes = [RoFRole, RoleAssignment, ERoFObject]
-  condition = ALL(
-    path = executingRole.roleName,
-    operator = NOT_IN,
-    value = [Security, Administrator]
-  )
+  governedTypes = [Task]
+  condition = {
+    profileVersion: "2.0",
+    combiner: ALL,
+    clauses: [{
+      path: {
+        origin: TARGET,
+        steps: [{
+          relationshipType: RESPONSIBLE_TEAM,
+          direction: OUTGOING,
+          entityType: RoFTeam
+        }],
+        property: name
+      },
+      operator: EQUALS,
+      quantifier: EXACTLY_ONE,
+      missingResult: FALSE,
+      value: { valueType: STRING, value: "Kundenservice" }
+    }]
+  }
   │
-  ├── PROTECTS ──► CiV: Sicherheit
-  ├── PROTECTS ──► PiF2: vertrauenswürdige und resiliente Organisation
-  ├── GOVERNS ──► RoFRole
-  ├── GOVERNS ──► RoleAssignment
-  └── GOVERNS ──► ERoFObject: Produktivsystem
+  ├── PROTECTS ──► CiV: Verbindlichkeit
+  ├── PROTECTS ──► PiF2: verlässliche Serviceorganisation
+  └── GOVERNS ──► Task: Anfrage beantworten
 ```
 
-Wird die Regel geändert, prüft `SYNC` die betroffenen Rollenaktivierungen und Umweltinteraktionen. Nur tatsächlich geänderte Zustände werden als eigene `PiH` festgehalten.
+Die Auswertung startet am über `GOVERNS` verbundenen Task, folgt `RESPONSIBLE_TEAM` ausdrücklich ausgehend zu `RoFTeam` und liest dort `name`. Fehlt die Beziehung oder die Endeigenschaft, ergibt `missingResult = FALSE` für die `REQUIRE`-Regel eine Verweigerung. Genau ein Pfadergebnis mit dem Wert „Kundenservice“ erfüllt `EXACTLY_ONE`. Eine doppelte parallele Kante wird roh erkannt, ergibt `UNEVALUABLE` und darf nicht durch Deduplizierung wie ein einzelner Treffer erscheinen.
 
-Treffen zusätzlich zwei Regeln auf dasselbe Produktivsystem, gilt beispielsweise:
+Wird die Regel geändert, prüft `SYNC` die betroffenen Tasks, verantwortlichen Teams und Aktivierungsentscheidungen. Nur tatsächlich geänderte Zustände werden als eigene `PiH` festgehalten.
+
+Treffen zusätzlich zwei Regeln auf dieselbe Task-Aktivierung, gilt beispielsweise für einen Task des Teams „Vertrieb“:
 
 ```text
-RaN A: Änderungen nur durch Security-Rolle, priority = 80
-RaN B: Änderungen durch alle Developer,      priority = 50
+RaN A: Aktivierung verlangt Team Kundenservice, priority = 80, Ergebnis = DENY
+RaN B: Aktivierung mit jedem aktiven Team,      priority = 50, Ergebnis = ALLOW
 ```
 
 Im Widerspruch hat `RaN A` Vorrang; `RaN B` bleibt außerhalb dieses Widerspruchs anwendbar. Besitzen beide Regeln `priority = 80`, erzeugt `SYNC` einen offenen `RaNConflict` und nimmt keine automatisch auf diesem Konflikt beruhende Änderung vor.
@@ -2215,6 +2246,8 @@ Bestehende terminale Daten und Ereignisse erhalten keine erfundenen Genehmigunge
 Jana ist accountable für das operative Kundenportal-Ziel; Ernst beantragt die Freigabe des Tasks „Portal veröffentlichen“. Eine passende RaN erlaubt Janas aktiver Rolle die Freigabe auf `PiF1o`-Ebene. Jana bestätigt den konkreten Auftrag. Das neue `ChangeEvent` behält Ernst über `REQUESTED_BY` und Jana über `APPROVED_BY`. Ist der vorausgesetzte Portaltest noch nicht abgeschlossen, ergibt ein erfolgreicher `SYNC` die Freigabe mit Status `BLOCKED`, nicht die Veröffentlichung und nicht die Zielerreichung.
 
 Fehlt Jana die ausdrückliche Befugnis, wird nach der beschriebenen Route die Accountability des zugehörigen `PiF1t` gefragt. Bei zwei aktuellen taktischen Zweigen werden beide Anforderungen berücksichtigt. Lehnt Jana als befugte Entscheiderin ab, bleibt der Vorschlag abgelehnt; die taktische Ebene darf dieses Nein nicht als bloß fehlende Befugnis behandeln.
+
+**Sonderfall technischer Ansprechpartner:** Ist statt Jana das technische Mitglied „Release Bot“ über `ACCOUNTABLE_MEMBER` mit dem `PiF1o` verbunden, bleibt diese Zuordnung fachlich gültig, erzeugt aber keine menschliche Genehmigung. `SYNC` überspringt den Bot nicht als fehlerhaften Knoten, sondern stellt auf dieser Ebene fehlende menschliche Befugnis fest und folgt dem aktuellen `CONTRIBUTES_TO`-Pfad zum `PiF1t`. Ist dort Jana als menschliches accountable Mitglied eindeutig zugeordnet und durch eine passende `PERMIT`-RaN befugt, kann ausschließlich ihr nachgewiesener Beleg die Anforderung erfüllen. Ein unbekannter `memberType`, eine fehlende nächste Accountability oder ein nicht eindeutig auflösbarer Zweig führt dagegen zu einem Modellfehler beziehungsweise `CONFLICT`, nicht zu einer automatischen Freigabe.
 
 Die Auswirkung betrifft alle zehn Kernelemente: `CiV` behält menschliche Wertentscheidungen; `PiF2`, `PiF1s`, `PiF1t` und `PiF1o` behalten ihre Zustands- und Beitragslogik mit nachvollziehbarer Accountability; `RaN` bestimmt Befugnis und Schutz; `RoF` liefert nachgewiesene Akteure; `ERoF` behält getrennte Nutzungsrechte; `SYNC` prüft und übernimmt die Entscheidung; `PiH` entsteht ausschließlich bei tatsächlicher Ablösung vorhandener Zustände. Die WHY-Kette bleibt erhalten. Die allgemeine RaN-Pfadgrammatik, historische Löschkorrekturen, terminale `GOVERNS`-Ziele, DRAFT-Kardinalitäten und die vollständige Pflichtfeldprojektion neuer Snapshots sind inzwischen ausdrücklich definiert. Der ausführbare Referenzstand ersetzt weiterhin keine produktive Identitäts-, Nachrichten- oder Datenbankintegration.
 

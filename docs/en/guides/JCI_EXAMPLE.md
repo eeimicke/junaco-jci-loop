@@ -161,6 +161,21 @@ When only Anna's authority is missing, the request may proceed to the explicitly
 
 A later change to the CiV or selected `PROTECTS` relationships instead uses `Model.action.CONFIRM` with `approvalPolicy.mode = VALUE_SCOPE`. The policy governs the human `RoleAssignment` and explicitly covers the affected value holder through its protected CiV/PiF2. Moving an organisational value to a team requires confirmation for both old and new holders; a global organisational policy does not automatically authorize team-value decisions. Previously valid policies authorize the change, not authority newly introduced in the candidate. See the [implementation guide](JCI_IMPLEMENTATION_GUIDE.md) for details and limits.
 
+### 4.3 Special case: technical accountable member
+
+Assume that the technical member `Release Bot`, rather than Anna, is accountable for the `PiF1o`. This assignment is valid, but the bot cannot provide a human approval receipt:
+
+```text
+PiF1o: response within 24 hours
+  ├── ACCOUNTABLE_MEMBER ──► RoFTeamMember: Release Bot
+  │                              └── memberType = TECHNICAL
+  └── CONTRIBUTES_TO ──► PiF1t: shared service process
+                              └── ACCOUNTABLE_MEMBER ──► RoFTeamMember: Anna
+                                                               └── memberType = HUMAN
+```
+
+`SYNC` treats the bot as a valid intermediate anchor and finds missing human authority at `PiF1o` level. Routing therefore follows the current `CONTRIBUTES_TO` path to `PiF1t`. A suitable `PERMIT` RaN lists `PiF1t` among its approval levels and authorizes Anna's active role. Only her verified `APPROVED_BY` receipt satisfies the requirement. An unknown `memberType`, missing accountability at the required next level, or an ambiguous branch produces a model error or `CONFLICT`; it never creates automatic approval.
+
 ## 5. Environment
 
 Anna and the Task use internal and external environmental objects:
@@ -269,6 +284,52 @@ Condition clauses exclusively use `EXISTS`, `NOT_EXISTS`, `EQUALS`, `NOT_EQUALS`
 | `PERMIT`   | `ALLOW`        | `NO_DECISION`   |
 
 One `DENY` blocks the decision but is not yet a `RaNConflict`.
+
+### 7.1 General profile 2.0 `RuleExpression`
+
+Activation of a service Task is to require exactly one responsible team named “Customer Service.” The Task connected through `GOVERNS` is the `TARGET` origin:
+
+```text
+RaN: Service Tasks require the responsible Customer Service team
+├── effect = REQUIRE
+├── decisionKey = Task.status.ACTIVE
+├── governedTypes = [Task]
+├── condition = {
+│     profileVersion: "2.0",
+│     combiner: ALL,
+│     clauses: [{
+│       path: {
+│         origin: TARGET,
+│         steps: [{
+│           relationshipType: RESPONSIBLE_TEAM,
+│           direction: OUTGOING,
+│           entityType: RoFTeam
+│         }],
+│         property: name
+│       },
+│       operator: EQUALS,
+│       quantifier: EXACTLY_ONE,
+│       missingResult: FALSE,
+│       value: { valueType: STRING, value: "Customer Service" }
+│     }]
+│   }
+└── GOVERNS ──► Task: Analyse enquiry
+```
+
+`SYNC` follows the edge explicitly in the `OUTGOING` direction and checks the expected endpoint type `RoFTeam`. If the relationship or property is missing, `missingResult = FALSE` makes the clause false and `REQUIRE` denies activation. Exactly one true path satisfies `EXACTLY_ONE`. Two identical parallel edges are detected by their raw count and produce `UNEVALUABLE`; `DISTINCT` must not collapse them into one match.
+
+### 7.2 `GOVERNS` on a terminal target
+
+Assume that the Task `Send response` is already `COMPLETED` at revision `4`, while the access rule is at revision `7`. Adding a new `GOVERNS` edge between them assigns that delta exclusively to the relationship state of the `RaN` because the target is terminal:
+
+```text
+before: RaN revision 7                 Task revision 4, COMPLETED
+                         new GOVERNS edge
+after:  RaN revision 8 ── GOVERNS ──► Task revision 4, COMPLETED
+        └── PiH of RaN revision 7      └── no new PiH
+```
+
+The Task is neither revisioned nor reopened. The `RaN` is revisioned and historized exactly once; the stored edge and increased `graphEpoch` still make the change fully traceable. The same ownership rule applies to terminal Results and completed Verifications.
 
 ## 8. RaNConflict and resolution
 
@@ -386,7 +447,41 @@ Before commit, `SYNC` calculates the effective `HistoryView` from the immutable 
 
 Two active `HistoricalCorrections` for the same `PiH` may coexist when their `correctedFields` are disjoint, for example `/stateData/properties/name` and `/relationshipData/INCOMING:HAS_MEMBER:00000000-0000-0000-0000-000000000007/properties/validUntil`. If fields overlap, the new correction must fully replace exactly one active predecessor through `SUPERSEDES` and repeat every value that remains valid. Ambiguous or multiple overlaps produce `CONFLICT`. The original `PiH` and every correction remain immutable.
 
-Correction profile 2.0 checks overlap on decoded JSON-Pointer segments: a whole relationship and one of its properties overlap; `name` and `nameLong` do not. Array indices and paths inside a TypedValue are prohibited. `ADDITION` requires an absent path; an existing `NULL` value is not absent. `previousValue` is checked against the effective view at that time. Later, the absolute `correctedValue` values of non-superseded corrections overlay the original. Older profiles receive their own resolvers; existing PiH and hashes remain unchanged.
+Correction profile 2.0 checks overlap on decoded JSON-Pointer segments: a whole relationship and one of its properties overlap; `name` and `nameLong` do not. Array indices and paths inside a TypedValue are prohibited. `ADDITION` requires an absent path; an existing `NULL` value is not absent. `previousValue` is checked against the effective view at that time. Later, the absolute `correctedValue` values of non-superseded corrections overlay the original. Older profiles receive their own resolvers; existing PiH and hashes remain unchanged. Additive correction-value profile `2.1` additionally represents a missing path through the `ABSENT` marker permitted only in correction-value maps, allowing `ADDITION` and `REMOVAL` without reinterpreting `NULL` as a deletion command.
+
+### 11.1 Special case: remove historical information
+
+A `PiH` falsely contains the optional description “provisional record.” The original document is not overwritten. Instead, the following profile `2.1` correction is validated:
+
+```text
+HistoricalCorrection
+├── correctionType = REMOVAL
+├── valueSchemaVersion = "2.1"
+├── correctedFields = ["/stateData/properties/description"]
+├── previousValue = {
+│     "/stateData/properties/description":
+│       { valueType: STRING, value: "provisional record" }
+│   }
+└── correctedValue = {
+      "/stateData/properties/description":
+        { valueType: ABSENT }
+    }
+```
+
+On `SUCCESS`, `description` is absent from the effective `HistoryView`; the immutable `PiH` still contains the originally stored statement. `{ valueType: NULL }` would instead be a present value and remove nothing. Because `description` is optional, the reconstructed view remains fully valid.
+
+### 11.2 Special case: incomplete snapshot
+
+Superseding a Task is to create a new `PiH` with `snapshotSchemaVersion = "2.1"`. If its `stateData.properties` contains `name` and `status` but omits the required Task property `taskKind`, the candidate is incomplete:
+
+```text
+Task snapshot 2.1
+├── name = "Send response"
+├── status = ACTIVE
+└── taskKind = MISSING  → invalid
+```
+
+`SYNC` rejects the whole commit. It stores neither the incomplete `PiH`, a hash, nor a domain delta. Only a snapshot containing all common and type-specific required properties and the complete assigned relationship state may be committed.
 
 ## 12. Complete traceability
 
