@@ -693,6 +693,36 @@ class SpecificationConsistencyTests(unittest.TestCase):
                 missing = {term for term in required_terms if term not in content}
                 self.assertFalse(missing, f"Begriffe fehlen in {path}: {sorted(missing)}")
 
+    def test_complete_example_demonstrates_clarified_special_cases(self):
+        required_terms = {
+            'profileVersion: "2.0"',
+            "relationshipType: RESPONSIBLE_TEAM",
+            "direction: OUTGOING",
+            "quantifier: EXACTLY_ONE",
+            "missingResult: FALSE",
+            "memberType = TECHNICAL",
+            "correctionType = REMOVAL",
+            "valueType: ABSENT",
+            'snapshotSchemaVersion = "2.1"',
+            "taskKind = MISSING",
+        }
+        examples = (
+            DOCS / "guides" / "JCI_EXAMPLE.md",
+            DOCS / "en" / "guides" / "JCI_EXAMPLE.md",
+        )
+        for path in examples:
+            content = path.read_text(encoding="utf-8")
+            with self.subTest(example=path):
+                missing = {term for term in required_terms if term not in content}
+                self.assertFalse(
+                    missing,
+                    f"Sonderfall-Nachweise fehlen in {path}: {sorted(missing)}",
+                )
+                self.assertNotIn("executingRole.roleName", content)
+
+        for content in (self.context, read("en/JCI_CONTEXT.md")):
+            self.assertNotIn("executingRole.roleName", content)
+
     def test_complete_example_diagram_sources_exist(self):
         expected = {
             "example-complete-entity-map.mmd",

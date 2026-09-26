@@ -161,6 +161,21 @@ Fehlt Anna ausschließlich die Befugnis, kann die Anforderung zur ausdrücklich 
 
 Für eine spätere Änderung des CiV oder der `PROTECTS`-Auswahl gilt dagegen `Model.action.CONFIRM` mit `approvalPolicy.mode = VALUE_SCOPE`. Die Policy regelt die menschliche `RoleAssignment` und deckt über ihre geschützten CiV/PiF2 ausdrücklich den betroffenen Werteträger ab. Bei Wechsel von Organisations- zu Teamwert sind beide alten und neuen Werteträger zu bestätigen; eine globale Organisationspolicy ist keine automatische Teamwert-Befugnis. Bereits gültige Policies autorisieren die Änderung, nicht eine erst im Kandidaten neu erteilte Befugnis. Details und Grenzen stehen im [Implementierungsleitfaden](JCI_IMPLEMENTATION_GUIDE.md).
 
+### 4.3 Sonderfall: technisches accountable Mitglied
+
+Angenommen, nicht Anna, sondern das technische Mitglied `Release Bot` ist für den `PiF1o` accountable. Diese Zuordnung ist gültig, aber der Bot kann keinen menschlichen Freigabebeleg erzeugen:
+
+```text
+PiF1o: Antwort innerhalb 24 Stunden
+  ├── ACCOUNTABLE_MEMBER ──► RoFTeamMember: Release Bot
+  │                              └── memberType = TECHNICAL
+  └── CONTRIBUTES_TO ──► PiF1t: gemeinsamer Serviceprozess
+                              └── ACCOUNTABLE_MEMBER ──► RoFTeamMember: Jana
+                                                               └── memberType = HUMAN
+```
+
+`SYNC` behandelt den Bot als gültigen Zwischenanker und stellt auf `PiF1o`-Ebene fehlende menschliche Befugnis fest. Die Route folgt deshalb dem aktuellen `CONTRIBUTES_TO`-Pfad zum `PiF1t`. Eine passende `PERMIT`-RaN nennt `PiF1t` in ihren Freigabeebenen und autorisiert Janas aktive Rolle. Erst ihr nachgewiesener `APPROVED_BY`-Beleg erfüllt die Anforderung. Ein unbekannter `memberType`, eine fehlende Accountability auf der benötigten nächsten Ebene oder ein mehrdeutiger Zweig erzeugt einen Modellfehler beziehungsweise `CONFLICT`; es entsteht keine automatische Freigabe.
+
 ## 5. Umwelt
 
 Anna und der Task verwenden interne sowie externe Umweltobjekte:
@@ -269,6 +284,52 @@ Die Condition-Klauseln verwenden ausschließlich `EXISTS`, `NOT_EXISTS`, `EQUALS
 | `PERMIT`   | `ALLOW`        | `NO_DECISION`    |
 
 Ein einzelnes `DENY` blockiert die Entscheidung, ist aber noch kein `RaNConflict`.
+
+### 7.1 Allgemeine `RuleExpression` des Profils 2.0
+
+Die Aktivierung eines Service-Tasks soll genau ein verantwortliches Team mit dem Namen „Kundenservice“ verlangen. Der über `GOVERNS` verbundene Task ist der Ausgangspunkt `TARGET`:
+
+```text
+RaN: Service-Tasks benötigen das verantwortliche Team Kundenservice
+├── effect = REQUIRE
+├── decisionKey = Task.status.ACTIVE
+├── governedTypes = [Task]
+├── condition = {
+│     profileVersion: "2.0",
+│     combiner: ALL,
+│     clauses: [{
+│       path: {
+│         origin: TARGET,
+│         steps: [{
+│           relationshipType: RESPONSIBLE_TEAM,
+│           direction: OUTGOING,
+│           entityType: RoFTeam
+│         }],
+│         property: name
+│       },
+│       operator: EQUALS,
+│       quantifier: EXACTLY_ONE,
+│       missingResult: FALSE,
+│       value: { valueType: STRING, value: "Kundenservice" }
+│     }]
+│   }
+└── GOVERNS ──► Task: Anfrage analysieren
+```
+
+`SYNC` folgt der Kante ausdrücklich in Richtung `OUTGOING` und prüft den erwarteten Endtyp `RoFTeam`. Fehlt Beziehung oder Eigenschaft, wird die Klausel wegen `missingResult = FALSE` falsch und `REQUIRE` verweigert die Aktivierung. Genau ein wahrer Pfad erfüllt `EXACTLY_ONE`. Zwei parallele identische Kanten werden roh als Mehrfachbeziehung erkannt und ergeben `UNEVALUABLE`; sie dürfen nicht durch `DISTINCT` zu einem Treffer zusammenfallen.
+
+### 7.2 `GOVERNS` an einem terminalen Ziel
+
+Der Task `Antwort versenden` sei bereits `COMPLETED` in Revision `4`, während die Zugriffsregel in Revision `7` steht. Wird zwischen beiden eine neue `GOVERNS`-Kante ergänzt, gehört dieses Delta bei einem terminalen Ziel ausschließlich zum Beziehungszustand des `RaN`:
+
+```text
+vorher:  RaN Revision 7                 Task Revision 4, COMPLETED
+                         neue GOVERNS-Kante
+nachher: RaN Revision 8 ── GOVERNS ──► Task Revision 4, COMPLETED
+         └── PiH der RaN-Revision 7     └── kein neues PiH
+```
+
+Der Task wird weder revisioniert noch wieder geöffnet. Das `RaN` wird genau einmal revisioniert und historisiert; die gespeicherte Kante und die erhöhte `graphEpoch` halten die Änderung dennoch vollständig nachvollziehbar. Dieselbe Eigentumsregel gilt für terminale Results und abgeschlossene Verifications.
 
 ## 8. RaNConflict und Auflösung
 
@@ -386,7 +447,41 @@ Vor dem Commit berechnet `SYNC` die wirksame `HistoryView` aus dem unveränderte
 
 Zwei aktive `HistoricalCorrections` desselben `PiH` dürfen parallel bestehen, wenn ihre `correctedFields` disjunkt sind, beispielsweise `/stateData/properties/name` und `/relationshipData/INCOMING:HAS_MEMBER:00000000-0000-0000-0000-000000000007/properties/validUntil`. Überschneiden sich die Felder, muss die neue Korrektur genau eine aktive Vorgängerkorrektur über `SUPERSEDES` vollständig ersetzen und alle weiterhin gültigen Werte übernehmen. Unklare oder mehrfache Überlappungen führen zu `CONFLICT`. Das ursprüngliche `PiH` und alle Korrekturen bleiben unveränderlich.
 
-Korrekturprofil 2.0 prüft Überschneidungen auf dekodierten JSON-Pointer-Segmenten: Eine ganze Beziehung und eine ihrer Properties überschneiden sich; `name` und `nameLong` nicht. Arrayindizes und Teilpfade innerhalb eines TypedValue sind unzulässig. `ADDITION` verlangt einen fehlenden Pfad; ein vorhandener `NULL`-Wert ist nicht fehlend. `previousValue` wird gegen die damalige wirksame Sicht geprüft. Später überlagern die absoluten `correctedValue`-Werte der nicht abgelösten Korrekturen das Original. Ältere Profile erhalten eigene Resolver; vorhandene PiH und Hashes bleiben unverändert.
+Korrekturprofil 2.0 prüft Überschneidungen auf dekodierten JSON-Pointer-Segmenten: Eine ganze Beziehung und eine ihrer Properties überschneiden sich; `name` und `nameLong` nicht. Arrayindizes und Teilpfade innerhalb eines TypedValue sind unzulässig. `ADDITION` verlangt einen fehlenden Pfad; ein vorhandener `NULL`-Wert ist nicht fehlend. `previousValue` wird gegen die damalige wirksame Sicht geprüft. Später überlagern die absoluten `correctedValue`-Werte der nicht abgelösten Korrekturen das Original. Ältere Profile erhalten eigene Resolver; vorhandene PiH und Hashes bleiben unverändert. Das additive Korrekturwertprofil `2.1` unterscheidet darüber hinaus einen fehlenden Pfad durch den ausschließlich in Korrekturwert-Maps zulässigen Marker `ABSENT` und erlaubt damit `ADDITION` sowie `REMOVAL` ohne `NULL` als Löschbefehl umzudeuten.
+
+### 11.1 Sonderfall: historische Angabe entfernen
+
+Ein `PiH` enthält fälschlich die optionale Beschreibung „vorläufiger Datensatz“. Das ursprüngliche Dokument wird nicht überschrieben. Stattdessen wird folgende Korrektur nach Profil `2.1` geprüft:
+
+```text
+HistoricalCorrection
+├── correctionType = REMOVAL
+├── valueSchemaVersion = "2.1"
+├── correctedFields = ["/stateData/properties/description"]
+├── previousValue = {
+│     "/stateData/properties/description":
+│       { valueType: STRING, value: "vorläufiger Datensatz" }
+│   }
+└── correctedValue = {
+      "/stateData/properties/description":
+        { valueType: ABSENT }
+    }
+```
+
+Bei `SUCCESS` fehlt `description` in der wirksamen `HistoryView`; das unveränderliche `PiH` enthält weiterhin die ursprünglich gespeicherte Angabe. `{ valueType: NULL }` wäre dagegen ein vorhandener Wert und würde nichts entfernen. Weil `description` optional ist, bleibt die rekonstruierte Sicht vollständig gültig.
+
+### 11.2 Sonderfall: unvollständiger Snapshot
+
+Beim Ablösen eines Tasks soll ein neues `PiH` mit `snapshotSchemaVersion = "2.1"` entstehen. Enthält dessen `stateData.properties` zwar `name` und `status`, aber nicht das für Tasks verpflichtende `taskKind`, ist der Kandidat unvollständig:
+
+```text
+Task-Snapshot 2.1
+├── name = "Antwort versenden"
+├── status = ACTIVE
+└── taskKind = MISSING  → ungültig
+```
+
+`SYNC` weist den gesamten Commit ab. Es speichert weder das unvollständige `PiH` noch einen Hash oder ein Fachdelta. Erst wenn alle gemeinsamen und typspezifischen Pflichtfelder sowie der vollständig zugeordnete Beziehungszustand enthalten sind, darf der Snapshot übernommen werden.
 
 ## 12. Vollständige Rückverfolgung
 

@@ -494,6 +494,10 @@ New historization uses `snapshotSchemaVersion = "2.1"`: `stateData.properties` c
 
 **Creation example:** A new Task starts at revision `1` without its own `PiH`. Explicitly assigning it to an existing active `PiF1o` changes that goal’s owned `DECOMPOSES_INTO` state, so the goal receives one revision increment and one `PiH` in the same request. The referenced creation role remains unchanged.
 
+**Example of a terminal `GOVERNS` target:** A `COMPLETED` Task is at revision `4`. If an existing `RaN` at revision `7` is connected to that Task through a new `GOVERNS` edge, a successful commit creates revision `8` of the `RaN` and a `PiH` of its revision `7`. The Task remains unchanged at revision `4` and receives no new `PiH`; in particular, it is not reopened. The new edge remains traceable through the revisioned relationship state of the `RaN` and the increased `graphEpoch`.
+
+**Example of snapshot completeness:** When a Task state is historized, a profile `2.1` snapshot that omits, for example, the common required property `status` or the type-specific required property `taskKind` is invalid. `SYNC` rejects the whole commit and stores neither an incomplete `PiH` nor its hash. Only a snapshot containing every property required for the superseded Task and its complete assigned relationship state may be committed.
+
 #### 2.2.9 Correction paths and canonical hash and correction-value profiles
 
 New snapshots use `snapshotSchemaVersion = "2.1"`. Historical corrections use either the unchanged correction-value profile `valueSchemaVersion = "2.0"` or, for explicit addition and removal, the additive profile `valueSchemaVersion = "2.1"`. These versions select the resolver and hash algorithm. Snapshot profile `2.1` retains canonical sorting and hashing from `2.0` but adds complete required-field validation. Unknown or incompatible profiles cause `CONFLICT`; there is no silent reinterpretation. Earlier `PiH`, corrections, and hashes remain unchanged. A legacy resolver must establish the earlier profile actually used; the preserved exchange schemas alone do not define such a resolver.
@@ -934,6 +938,19 @@ HistoricalCorrection
 
 The original `PiH` still shows the historical documentation saved first. For domain evaluation, it is read together with the non-superseded `HistoricalCorrection`. A later correction of the same path must supersede this correction completely; an addition to a different path may remain active alongside it. If this results in a necessary change to Anna's current state, that change is processed independently by a new `ChangeEvent` and `SyncEvent`.
 
+If a `PiH` instead falsely contains the optional description “provisional record,” correction-value profile `2.1` removes that statement explicitly:
+
+```text
+HistoricalCorrection
+  ├── correctionType: REMOVAL
+  ├── valueSchemaVersion: 2.1
+  ├── correctedFields: /stateData/properties/description
+  ├── previousValue: { valueType: STRING, value: "provisional record" }
+  └── correctedValue: { valueType: ABSENT }
+```
+
+After `SUCCESS`, `description` is absent from the effective `HistoryView`, while the original `PiH` remains unchanged. An existing `{ valueType: NULL }` value would not remove the property. The example deliberately uses an optional field so that the reconstructed view still satisfies the snapshot profile.
+
 ---
 
 ## 4. Core Influential Values ​​– CiV
@@ -1193,34 +1210,48 @@ A `RaNConflict` documents the rules involved, affected entities and the recogniz
 
 ### 6.5 Example
 
-A rule limits which roles are allowed to change a specific system:
+A general rule requires exactly one responsible team named “Customer Service” before a service Task can become active:
 
 ```text
-RaN = Only authorized roles may modify the production system.
-  effect = PROHIBIT
-  decisionKey = ERoFObject.action.MODIFY
+RaN = Service Tasks require the responsible Customer Service team.
+  effect = REQUIRE
+  decisionKey = Task.status.ACTIVE
   scopeType = ORGANIZATION
-  governedTypes = [RoFRole, RoleAssignment, ERoFObject]
-  condition = ALL(
-    path = executingRole.roleName,
-    operator = NOT_IN,
-    value = [Security, Administrator]
-  )
+  governedTypes = [Task]
+  condition = {
+    profileVersion: "2.0",
+    combiner: ALL,
+    clauses: [{
+      path: {
+        origin: TARGET,
+        steps: [{
+          relationshipType: RESPONSIBLE_TEAM,
+          direction: OUTGOING,
+          entityType: RoFTeam
+        }],
+        property: name
+      },
+      operator: EQUALS,
+      quantifier: EXACTLY_ONE,
+      missingResult: FALSE,
+      value: { valueType: STRING, value: "Customer Service" }
+    }]
+  }
   │
-  ├── PROTECTS ──► CiV: Security
-  ├── PROTECTS ──► PiF2: trusted and resilient organization
-  ├── GOVERNS ──► RoFRole
-  ├── GOVERNS ──► RoleAssignment
-  └── GOVERNS ──► ERoFObject: Produktivsystem
+  ├── PROTECTS ──► CiV: Reliability
+  ├── PROTECTS ──► PiF2: reliable service organization
+  └── GOVERNS ──► Task: Answer enquiry
 ```
 
-If the rule is changed, `SYNC` checks the affected role activations and environmental interactions. Only states that have actually changed are recorded as separate `PiH`.
+Evaluation starts at the Task connected through `GOVERNS`, follows `RESPONSIBLE_TEAM` explicitly in the outgoing direction to `RoFTeam`, and reads `name` there. If the relationship or terminal property is absent, `missingResult = FALSE` makes the `REQUIRE` rule deny the decision. Exactly one path result with the value “Customer Service” satisfies `EXACTLY_ONE`. A duplicate parallel edge is detected by its raw count, yields `UNEVALUABLE`, and must not appear as a single match through deduplication.
 
-If two additional rules apply to the same productive system, the following applies, for example:
+If the rule is changed, `SYNC` checks the affected Tasks, responsible teams, and activation decisions. Only states that have actually changed are recorded as separate `PiH`.
+
+If two additional rules apply to the same Task activation, the following applies, for example, to a Task owned by the “Sales” team:
 
 ```text
-RaN A: Changes only by Security role, priority = 80
-RaN B: Changes by all Developers,      priority = 50
+RaN A: Activation requires Customer Service, priority = 80, result = DENY
+RaN B: Activation with any active team,       priority = 50, result = ALLOW
 ```
 
 In the event of a contradiction, `RaN A` takes precedence; `RaN B` remains applicable outside of this contradiction. If both rules have `priority = 80`, `SYNC` creates an open `RaNConflict` and does not automatically make a change based on this conflict.
@@ -2213,6 +2244,8 @@ Existing terminal records and events receive no invented approvals. Missing hist
 Jana is accountable for the operational customer-portal goal; Ernst requests release of the Task “Publish portal.” A suitable RaN permits Jana's active role to approve at `PiF1o` level. Jana confirms the specific request. The new `ChangeEvent` retains Ernst through `REQUESTED_BY` and Jana through `APPROVED_BY`. If the prerequisite portal test is not yet completed, successful `SYNC` applies release with status `BLOCKED`, not publication or goal achievement.
 
 If Jana lacks explicit authority, routing asks the accountability of the associated `PiF1t`. Two current tactical branches require both sets of approvals. If Jana rejects as an authorized decision maker, the proposal remains rejected; the tactical level must not treat that refusal as mere lack of authority.
+
+**Special case—technical contact:** If the technical member “Release Bot” rather than Jana is connected to the `PiF1o` through `ACCOUNTABLE_MEMBER`, that assignment remains valid domain data but cannot provide human approval. `SYNC` does not skip the bot as an invalid node; it records missing human authority at that level and follows the current `CONTRIBUTES_TO` path to `PiF1t`. If Jana is uniquely assigned there as the human accountable member and authorized by a suitable `PERMIT` RaN, only her verified receipt can satisfy the requirement. An unknown `memberType`, a missing next accountability, or an ambiguous branch instead produces a model error or `CONFLICT`, never automatic approval.
 
 All ten core elements are affected: `CiV` retains human value decisions; `PiF2`, `PiF1s`, `PiF1t`, and `PiF1o` retain their state and contribution logic with traceable accountability; `RaN` defines authority and protection; `RoF` supplies verified actors; `ERoF` retains separate usage rights; `SYNC` validates and applies the decision; `PiH` arises only when an existing state is actually replaced. The WHY chain is preserved. The general RaN path grammar, historical removal corrections, terminal `GOVERNS` targets, DRAFT cardinalities, and complete required-field projection of new snapshots are now explicitly defined. The executable reference state still does not replace production identity, messaging, or database integration.
 
